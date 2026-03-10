@@ -1,0 +1,9 @@
+[Person]
+    name = "author"
+    worksFor = "link:Organization"
+
+[Organization]
+    name = "institute"
+
+[Dataset]
+    id = "datalink"
