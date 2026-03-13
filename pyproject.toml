@@ -4,4 +4,16 @@ version = "0.1.0"
 description = "This converter will help you create linked metadata as json-ld files from a flat input."
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "ipython>=9.11.0",
+    "nanoid>=2.0.0",
+    "openpyxl>=3.1.5",
+    "pandas>=3.0.1",
+    "pydantic>=2.12.5",
+    "pydantic-settings>=2.13.1",
+    "ruff>=0.15.5",
+]
+
+
+[tool.ruff]
+line-length = 88
