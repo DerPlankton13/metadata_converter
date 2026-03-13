@@ -1,9 +1,9 @@
 [Person]
-    name = "author"
-    worksFor = "link:Organization"
-
-[Organization]
-    name = "institute"
-
-[Dataset]
-    id = "datalink"
+email = "Email"
+gender = "Gender"
+nationality = "Nationality"
+givenName = "First Name"
+familyName = "Surname"
+funder = "[Beneficiary No]"
+identifier = "Personal identifier \ne.g ORCID (optional)"
+name = "Full Name"
