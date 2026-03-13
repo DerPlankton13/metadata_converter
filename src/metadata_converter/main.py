@@ -1,5 +1,6 @@
 import tomllib
-from typing import Any
+from pathlib import Path
+from typing import Any, Union
 
 import pandas as pd
 import pydantic
@@ -7,19 +8,26 @@ import schema_org_models
 from nanoid import generate
 from pydantic import ValidationError
 
+from src.metadata_converter.exporter import export_to_jsonld
+from src.metadata_converter.reader import CSVReader, ExcelReader
 from src.metadata_converter.schema_org_models import SchemaDotOrgBase
 
 
 def main():
-
-    data = pd.read_csv("dummy.csv", skipinitialspace=True).to_dict("index")
+    data = ExcelReader("ReportingContinuous_WP1.xlsx").execute()
     with open("mapping.toml", "rb") as file:
         header_mapping = tomllib.load(file)
 
+    schema_list = []
     # go through the data column by column
     for column in data.values():
         schemas = extract_schemas(column, header_mapping)
         print(schemas)
+        schema_list += list(schemas.values())
+    print(schema_list)
+    for schema in schema_list:
+        print(schema)
+        export_to_jsonld(schema, output_path=Path("output"))
 
 
 def extract_schemas(
@@ -46,9 +54,12 @@ def extract_schemas(
                 )
             except ValidationError as e:
                 print(
-                    f"Could not create a class of {schema_type}: ",
+                    f"Could not create a class of {schema_type}:",
                     e.errors()[0]["msg"],
                     e.errors()[0]["loc"],
+                    "but input was:",
+                    e.errors()[0]["input"],
+                    f"The following properties were provided: {schema_properties}",
                 )
                 continue
     return schemas
@@ -63,14 +74,14 @@ def extract_properties(
         if "link:" in header:
             type = header.split(":")[1]
             if type in schemas.keys():
-                schema_properties[property] = f'{{"@id": "{schemas[type].id}.json"}}'
+                schema_properties[property] = schemas[type]
             else:
                 return None
         else:
             schema_properties[property] = column[header]
 
         # ensures that there is always an id
-        if "id" not in schema_properties.keys():
+        if "identifier" not in schema_properties.keys():
             # todo: think about other ways to generate the id
             unique_id = generate()
             schema_properties["id"] = schema_type + f"_{unique_id}"
