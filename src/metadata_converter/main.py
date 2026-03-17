@@ -8,13 +8,13 @@ import schema_org_models
 from nanoid import generate
 from pydantic import ValidationError
 
-from src.metadata_converter.exporter import export_to_jsonld
-from src.metadata_converter.reader import CSVReader, ExcelReader
+from src.metadata_converter.load import load_to_jsonld
+from src.metadata_converter.extract import CSVExtractor, ExcelExtractor
 from src.metadata_converter.schema_org_models import SchemaDotOrgBase
 
 
 def main():
-    data = ExcelReader("ReportingContinuous_WP1.xlsx").execute()
+    data = ExcelExtractor("ReportingContinuous_WP1.xlsx").execute()
     with open("mapping.toml", "rb") as file:
         header_mapping = tomllib.load(file)
 
@@ -27,7 +27,7 @@ def main():
     print(schema_list)
     for schema in schema_list:
         print(schema)
-        export_to_jsonld(schema, output_path=Path("output"))
+        load_to_jsonld(schema, output_path=Path("output"))
 
 
 def extract_schemas(

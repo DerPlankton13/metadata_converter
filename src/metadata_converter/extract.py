@@ -7,7 +7,7 @@ import pandas as pd
 
 
 @dataclass
-class BaseReader(ABC):
+class BaseExtractor(ABC):
     input: Union[str, Path]
 
     @abstractmethod
@@ -15,12 +15,12 @@ class BaseReader(ABC):
         pass
 
 
-class CSVReader(BaseReader):
+class CSVExtractor(BaseExtractor):
     def execute(self) -> dict[str, Any]:
         return pd.read_csv(self.input, skipinitialspace=True).to_dict("index")
 
 
-class ExcelReader(BaseReader):
+class ExcelExtractor(BaseExtractor):
     def execute(self) -> dict[str, Any]:
         df = pd.read_excel(
             self.input,
