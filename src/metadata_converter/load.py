@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pandas as pd
+
 from src.metadata_converter.schema_org_models import SchemaDotOrgBase
 
 
@@ -16,7 +18,7 @@ def load_to_jsonld(schema: SchemaDotOrgBase, output_path: Path) -> None:
         "@id": schema_dict.pop("id"),
     }
     for key, value in schema_dict.items():
-        if value is not None and value != [] and value != {}:
+        if value != [] and value != {} and pd.notna(value):
             jsonld_dict[key] = value
 
     jsonld_str = json.dumps(jsonld_dict)
