@@ -1,0 +1,30 @@
+[input]
+file_path = "examples/ReportingContinuous_WP1.xlsx"
+exclude_headers = []
+[input.extractor]
+type = "excel"
+sheet_name = "Researchers"
+header = 0
+skiprows = [0, 1, 3, 4]
+na_values = "Please select"
+
+[output]
+output_path = "output"
+
+[schema_config]
+force_update = false
+allow_extra_fields = false
+strict = false
+
+
+
+[mapping]
+[mapping.Person]
+email = "Email"
+gender = "Gender"
+nationality = "Nationality"
+givenName = "First Name"
+familyName = "Surname"
+funder = "[Beneficiary No]"
+identifier = "Personal identifier e.g ORCID (optional)"
+name = "First Name + Surname"
