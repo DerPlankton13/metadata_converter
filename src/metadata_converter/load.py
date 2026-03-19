@@ -1,12 +1,10 @@
 import json
 from pathlib import Path
 
-import pandas as pd
-
-from src.metadata_converter.schema_org_models import SchemaDotOrgBase
+from metadata_converter.schema_org_registry import SchemaOrgBase
 
 
-def load_to_jsonld(schema: SchemaDotOrgBase, output_path: Path) -> None:
+def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:
     if type(output_path) is str:
         output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)

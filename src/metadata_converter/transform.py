@@ -4,8 +4,7 @@ import pandas as pd
 from nanoid import generate
 from pydantic import ValidationError
 
-from metadata_converter import schema_org_models
-from src.metadata_converter.schema_org_models import SchemaDotOrgBase
+from metadata_converter.schema_org_registry import SchemaOrgBase, SchemaRegistry
 
 
 def remove_newlines(df: pd.DataFrame) -> pd.DataFrame:
@@ -45,10 +44,9 @@ def combine_columns(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
     return df
 
 
-def extract_schemas(
-    df: pd.DataFrame, mapping: dict[str, Any]
-) -> list[SchemaDotOrgBase]:
+def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrgBase]:
 
+    registry = SchemaRegistry()
     schemas = []
     for _, row in df.iterrows():
         # go through all mappings defined in the toml
@@ -62,9 +60,7 @@ def extract_schemas(
                 unique_id = generate()
                 schema_properties["id"] = schema_type + f"_{unique_id}"
             try:
-                schemas.append(
-                    getattr(schema_org_models, schema_type)(**schema_properties)
-                )
+                schemas.append(registry.get(schema_type)(**schema_properties))
             except ValidationError as e:
                 print(
                     f"Could not create a class of {schema_type}:",
