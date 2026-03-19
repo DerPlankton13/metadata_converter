@@ -201,7 +201,9 @@ class SchemaOrgBase(BaseModel):
         alias="@context",
     )
     # The schema.org class name, e.g. "Person" or "Product".
-    type: Optional[str] = Field(default=None, alias="@type")
+    # Required — every generated subclass sets this to the class name via
+    # a field default injected by SchemaRegistry._build.
+    type: str = Field(alias="@type")
     # Optional IRI that uniquely identifies this node.
     id: Optional[str] = Field(default=None, alias="@id")
 
@@ -521,6 +523,10 @@ class SchemaRegistry:
             f["name"]: (_resolve_type(f["allowed_types"], self, self.strict), None)
             for f in self._class_fields.get(class_name, [])
         }
+
+        # Set the class name as the default for type so instances always
+        # carry the correct @type value without the caller having to supply it.
+        field_defs["type"] = (str, Field(default=class_name, alias="@type"))
 
         # --- Create the model ---
         model = create_model(
