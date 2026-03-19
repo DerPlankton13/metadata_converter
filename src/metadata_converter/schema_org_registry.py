@@ -87,7 +87,9 @@ def _local(iri: str) -> str:
     return iri.removeprefix(SCHEMA_PREFIX).removeprefix("schema:")
 
 
-def _resolve_type(allowed_types: list[str], registry: "SchemaRegistry") -> Any:
+def _resolve_type(
+    allowed_types: list[str], registry: "SchemaRegistry", strict: bool
+) -> Any:
     """
     Translate a list of schema.org allowed type names into a single Python type.
 
@@ -104,6 +106,11 @@ def _resolve_type(allowed_types: list[str], registry: "SchemaRegistry") -> Any:
     so they never reach the ``|`` union — the field falls back to ``Any``
     if all types resolve to ``None``.
 
+    When ``strict`` is ``False``, ``str`` is appended as a final fallback
+    type. This reflects the reality that schema.org publishers often use
+    plain strings for typed fields (e.g. ``"1815-12-10"`` instead of a
+    ``date`` object), so lenient validation accepts both.
+
     Parameters
     ----------
     allowed_types : list[str]
@@ -112,12 +119,15 @@ def _resolve_type(allowed_types: list[str], registry: "SchemaRegistry") -> Any:
     registry : SchemaRegistry
         The active registry, used to resolve schema.org class references
         recursively.
+    strict : bool
+        When ``True``, only the declared schema.org types are accepted.
+        When ``False``, ``str`` is added as an additional allowed type.
 
     Returns
     -------
     Any
         A Python type annotation such as ``Optional[str]``,
-        ``Optional[str | AnyUrl]``, or ``Optional[Person]``.
+        ``Optional[date | str]``, or ``Optional[Person | str]``.
         Returns ``Any`` when ``allowed_types`` is empty or all resolved
         types are circular-reference placeholders.
     """
@@ -138,6 +148,11 @@ def _resolve_type(allowed_types: list[str], registry: "SchemaRegistry") -> Any:
 
     if not parts:
         return Any
+
+    # In lenient mode, add str as a fallback unless it is already present.
+    # This lets publishers pass plain strings for any typed field.
+    if not strict and str not in parts:
+        parts.append(str)
 
     resolved = parts[0] if len(parts) == 1 else reduce(lambda a, b: a | b, parts)
     return Optional[resolved]
@@ -217,6 +232,13 @@ class SchemaRegistry:
         ``extra="forbid"``, which causes Pydantic to raise a
         ``ValidationError`` for any field not declared in the schema.
         Set to ``True`` to silently ignore unknown fields.
+    strict : bool, optional
+        When ``True``, field types are enforced exactly as declared in the
+        schema.org vocabulary — e.g. ``birthDate`` must be a ``date``.
+        When ``False`` (the default), a ``str`` fallback is added to every
+        field type, reflecting the fact that schema.org publishers often
+        use plain strings even for typed fields — e.g. ``"1815-12-10"``
+        instead of a ``date`` object.
     schema_url : str, optional
         URL of the schema.org JSON-LD file. Override to pin a specific
         release or to point at a local ``file://`` copy.
@@ -245,11 +267,13 @@ class SchemaRegistry:
     def __init__(
         self,
         allow_extra_fields: bool = False,
+        strict: bool = False,
         schema_url: str = SCHEMA_URL,
         cache_path: Optional[Path | str] = DEFAULT_CACHE_PATH,
         force_update: bool = False,
     ):
         self.allow_extra_fields = allow_extra_fields
+        self.strict = strict
         self.schema_url = schema_url
         self.cache_path = Path(cache_path) if cache_path is not None else None
         self.force_update = force_update
@@ -494,7 +518,7 @@ class SchemaRegistry:
         # Pydantic create_model expects: { field_name: (annotation, default) }
         # Every field is Optional with None default — schema.org has no minCount.
         field_defs: dict[str, Any] = {
-            f["name"]: (_resolve_type(f["allowed_types"], self), None)
+            f["name"]: (_resolve_type(f["allowed_types"], self, self.strict), None)
             for f in self._class_fields.get(class_name, [])
         }
 
