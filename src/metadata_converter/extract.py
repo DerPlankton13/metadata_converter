@@ -1,32 +1,30 @@
-from abc import ABC, abstractmethod
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Protocol, Union
+from typing import Callable
 
 import pandas as pd
 
+from metadata_converter.config import Config, ExtractorConfigBase
 
-@dataclass
-class BaseExtractor(ABC):
-    input: Union[str, Path]
-
-    @abstractmethod
-    def execute(self) -> pd.DataFrame:
-        pass
+ExtractorFn = Callable[[Path, ExtractorConfigBase], pd.DataFrame]
 
 
-class CSVExtractor(BaseExtractor):
-    def execute(self) -> pd.DataFrame:
-        return pd.read_csv(self.input, skipinitialspace=True)
+def extract_csv(file_path: Path, config: ExtractorConfigBase) -> pd.DataFrame:
+    return pd.read_csv(file_path, **config.model_dump(exclude={"type"}))
 
 
-class ExcelExtractor(BaseExtractor):
-    def execute(self) -> pd.DataFrame:
-        df = pd.read_excel(
-            self.input,
-            sheet_name="Researchers",
-            header=0,
-            skiprows=[0, 1, 3, 4],
-            na_values="Please select",
-        ).dropna(how="all")
-        return df
+def extract_excel(file_path: Path, config: ExtractorConfigBase) -> pd.DataFrame:
+    return pd.read_excel(file_path, **config.model_dump(exclude={"type"})).dropna(
+        how="all"
+    )
+
+
+EXTRACTOR_REGISTRY: dict[str, ExtractorFn] = {
+    "csv": extract_csv,
+    "excel": extract_excel,
+}
+
+
+def load_data(config: Config) -> pd.DataFrame:
+    input_cfg = config.input
+    extractor = EXTRACTOR_REGISTRY[input_cfg.extractor.type]
+    return extractor(input_cfg.file_path, input_cfg.extractor)
