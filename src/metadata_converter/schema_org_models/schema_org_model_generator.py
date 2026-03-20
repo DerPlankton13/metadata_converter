@@ -36,6 +36,7 @@ import urllib.request
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from functools import reduce
+from keyword import iskeyword
 from pathlib import Path
 from typing import Any, Optional
 
@@ -179,6 +180,40 @@ def _local(iri: str) -> str:
     return iri.removeprefix(SCHEMA_PREFIX).removeprefix("schema:")
 
 
+def _safe_name(name: str) -> str:
+    """
+    Return a valid Python identifier for a schema.org local name.
+
+    Applies the minimum change needed to make the name usable as a Python
+    class name or attribute:
+
+    - Names starting with a digit get a leading underscore (e.g.
+      ``"3DModel"`` → ``"_3DModel"``).
+    - Python reserved keywords get a trailing underscore (e.g.
+      ``"yield"`` → ``"yield_"``, following PEP 8 convention).
+    - Names that are already valid are returned unchanged.
+
+    When the safe name differs from the original, callers should store the
+    original as a Pydantic ``alias`` so serialisation uses the correct
+    schema.org name.
+
+    Parameters
+    ----------
+    name : str
+        A schema.org local name.
+
+    Returns
+    -------
+    str
+        A valid Python identifier.
+    """
+    if not name[0].isalpha() and name[0] != "_":
+        name = "_" + name
+    if iskeyword(name):
+        name = name + "_"
+    return name
+
+
 def parse_schema(
     data: dict,
 ) -> tuple[dict[str, dict], dict[str, dict], dict[str, list[dict]]]:
@@ -196,19 +231,23 @@ def parse_schema(
     tuple[dict, dict, dict]
         A ``(classes, props, class_fields)`` triple.
 
-        ``classes`` is keyed by local class name; each value contains:
+        ``classes`` is keyed by the safe Python class name; each value
+        contains:
 
-        - ``"parents"``       -- list of local names of direct superclasses
+        - ``"parents"``       -- list of safe Python names of direct superclasses
+        - ``"schema_name"``   -- original schema.org name (may differ from key)
         - ``"comment"``       -- the rdfs:comment string, or ""
 
-        ``props`` is keyed by local property name; each value contains:
+        ``props`` is keyed by the safe Python property name; each value
+        contains:
 
-        - ``"owner_classes"`` -- list of local class names from domainIncludes
+        - ``"owner_classes"`` -- list of safe class names from domainIncludes
         - ``"allowed_types"`` -- list of value type names from rangeIncludes
+        - ``"schema_name"``   -- original schema.org name (may differ from key)
         - ``"comment"``       -- the rdfs:comment string, or ""
 
-        ``class_fields`` maps each class name to the list of its property
-        dicts, each with ``"name"``, ``"allowed_types"``, and ``"comment"``.
+        ``class_fields`` maps each safe class name to the list of its
+        property dicts (same structure as ``props`` values, plus ``"name"``).
     """
     graph = data.get("@graph", [])
     classes: dict[str, dict] = {}
@@ -220,7 +259,8 @@ def parse_schema(
         if not node_id.startswith("schema:"):
             continue
 
-        name = _local(node_id)
+        schema_name = _local(node_id)
+        py_name = _safe_name(schema_name)
         types = node.get("@type", [])
         if isinstance(types, str):
             types = [types]
@@ -237,11 +277,15 @@ def parse_schema(
             if isinstance(subclass_of, dict):
                 subclass_of = [subclass_of]
             parents = [
-                _local(p["@id"])
+                _safe_name(_local(p["@id"]))
                 for p in subclass_of
                 if isinstance(p, dict) and p.get("@id", "").startswith("schema:")
             ]
-            classes[name] = {"parents": parents, "comment": comment}
+            classes[py_name] = {
+                "parents": parents,
+                "schema_name": schema_name,
+                "comment": comment,
+            }
 
         elif "rdf:Property" in types:
 
@@ -250,20 +294,24 @@ def parse_schema(
                 # Normalise single dict to list so the comprehension always works
                 if isinstance(val, dict):
                     val = [val]
-                return [_local(v["@id"]) for v in val if isinstance(v, dict)]
+                return [
+                    _safe_name(_local(v["@id"])) for v in val if isinstance(v, dict)
+                ]
 
             owner_classes = _ids("schema:domainIncludes")
             allowed_types = _ids("schema:rangeIncludes")
 
-            props[name] = {
+            props[py_name] = {
                 "owner_classes": owner_classes,
                 "allowed_types": allowed_types,
+                "schema_name": schema_name,
                 "comment": comment,
             }
             for owner_class in owner_classes:
                 class_fields[owner_class].append(
                     {
-                        "name": name,
+                        "name": py_name,
+                        "schema_name": schema_name,
                         "allowed_types": allowed_types,
                         "comment": comment,
                     }
@@ -377,11 +425,25 @@ def build_models(
         ]
         base = parents[0] if parents else SchemaOrgBase
 
-        field_defs: dict[str, Any] = {
-            f["name"]: (_resolve_type(f["allowed_types"], cache, strict), None)
-            for f in class_fields.get(class_name, [])
-        }
-        field_defs["type"] = (str, Field(default=class_name, alias="@type"))
+        field_defs: dict[str, Any] = {}
+        for f in class_fields.get(class_name, []):
+            py_type = _resolve_type(f["allowed_types"], cache, strict)
+            schema_name = f["schema_name"]
+            # If the property was renamed, add an alias so Pydantic uses
+            # the original schema.org name for serialisation.
+            if f["name"] != schema_name:
+                field_defs[f["name"]] = (
+                    py_type,
+                    Field(default=None, alias=schema_name),
+                )
+            else:
+                field_defs[f["name"]] = (py_type, None)
+
+        # The type field default is always the original schema.org class name.
+        field_defs["type"] = (
+            str,
+            Field(default=class_def["schema_name"], alias="@type"),
+        )
 
         model = create_model(
             class_name,
@@ -539,7 +601,7 @@ def render_module(
         "from __future__ import annotations",
         "",
         "from datetime import date, datetime, time, timedelta",
-        "from typing import Optional",
+        "from typing import Any, Optional",
         "",
         "from pydantic import AnyUrl, BaseModel, ConfigDict, Field",
         "",
