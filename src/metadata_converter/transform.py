@@ -5,7 +5,10 @@ from nanoid import generate
 from pydantic import ValidationError
 
 from metadata_converter.config import CleaningConfig, Config
-from metadata_converter.schema_org_registry import SchemaOrgBase, SchemaRegistry
+from metadata_converter.schema_org_models.schemaorg_models import (
+    SchemaOrgBase,
+    get_schema,
+)
 
 
 def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
@@ -64,21 +67,23 @@ def combine_columns(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
 
 def extract_schemas(df: pd.DataFrame, config: Config) -> list[SchemaOrgBase]:
 
-    registry = SchemaRegistry(**config.schema_config.model_dump(exclude_none=True))
     schemas = []
     for _, row in df.iterrows():
         # go through all mappings defined in the toml
         for schema_type, properties in config.mapping.items():
             schema_properties = {}
             for prop, header in properties.items():
-                schema_properties[prop] = row[header]
+                # only add valid values to the dict
+                if not pd.isna(row[header]):
+                    schema_properties[prop] = row[header]
             # ensures that there is always an id
-            if "id" not in schema_properties.keys() or schema_properties["id"] is pd.NA:
+            if "id" not in schema_properties.keys():
                 # todo: think about other ways to generate the id
                 unique_id = generate()
                 schema_properties["id"] = schema_type + f"_{unique_id}"
             try:
-                schemas.append(registry.get(schema_type)(**schema_properties))
+                schema = get_schema(schema_type)
+                schemas.append(schema(**schema_properties))
             except ValidationError as e:
                 print(
                     f"Could not create a class of {schema_type}:",
