@@ -32,13 +32,15 @@ Then in your application::
 import argparse
 import inspect
 import json
+import re
+import textwrap
 import urllib.request
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from functools import reduce
 from keyword import iskeyword
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional, get_args
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, create_model
 from pydantic.fields import FieldInfo
@@ -76,7 +78,7 @@ PRIMITIVE_TYPE_MAP: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 # Defined as real Python code so there is a single source of truth.
 # render_module() extracts the source with inspect.getsource() and writes
-# it verbatim into the generated file, substituting the extra_mode value.
+# it verbatim into the generated file.
 
 
 class SchemaOrgBase(BaseModel):
@@ -107,10 +109,8 @@ _GET_FUNCTION_SOURCE = """\
 # Dynamic lookup
 # ---------------------------------------------------------------------------
 
-import sys as _sys
 
-
-def get(type_name: str) -> type[SchemaOrgBase]:
+def get_schema(type_name: str) -> type[SchemaOrgBase]:
     \"\"\"
     Return the Pydantic model class for a schema.org type name.
 
@@ -136,14 +136,15 @@ def get(type_name: str) -> type[SchemaOrgBase]:
     --------
     ::
 
-        cls = get(config["schema_type"])
+        cls = get_schema(config["schema_type"])
         instance = cls(**data)
     \"\"\"
-    cls = getattr(_sys.modules[__name__], type_name, None)
+    cls = globals().get(type_name)
     if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
         raise KeyError(f"{type_name!r} is not a known schema.org type in this generated file.")
     return cls
 """
+
 TYPE_TO_SOURCE: dict[Any, str] = {
     str: "str",
     bool: "bool",
@@ -158,7 +159,7 @@ TYPE_TO_SOURCE: dict[Any, str] = {
 
 
 # ---------------------------------------------------------------------------
-# Step 2: parse classes and properties from the @graph
+# Parse classes and properties from the @graph
 # ---------------------------------------------------------------------------
 
 
@@ -214,12 +215,43 @@ def _safe_name(name: str) -> str:
     return name
 
 
-def parse_schema(
-    data: dict,
-) -> tuple[dict[str, dict], dict[str, dict], dict[str, list[dict]]]:
+def _clean_comment(comment: str) -> str:
     """
-    Walk the schema.org JSON-LD ``@graph`` and extract classes, properties,
-    and a class-to-fields index in a single pass.
+    Sanitise a raw schema.org rdfs:comment for use as a Python docstring.
+
+    Schema.org comments contain MediaWiki markup that is not valid in Python
+    source. This function removes or replaces the patterns that would cause
+    ``SyntaxWarning`` or ``SyntaxError`` in the generated file, and wraps
+    long lines to keep the generated source readable.
+
+    Parameters
+    ----------
+    comment : str
+        The raw comment string from the JSON-LD ``rdfs:comment`` field.
+
+    Returns
+    -------
+    str
+        A clean string safe to embed in a Python docstring, with lines
+        wrapped to at most 84 characters (leaving room for 4-space indentation
+        to stay within the conventional 88-character line limit).
+    """
+    # [[ClassName]] -> ClassName  (MediaWiki internal links)
+    comment = re.sub(r"\[\[([^\]]+)\]\]", r"\1", comment)
+    # Remove backslashes to avoid invalid escape sequence warnings
+    comment = comment.replace("\\", "")
+    # Replace triple quotes to avoid breaking the docstring delimiter
+    comment = comment.replace('"""', "'''")
+    # Wrap each paragraph individually, preserving existing newlines
+    paragraphs = comment.split("\n")
+    wrapped = [textwrap.fill(p, width=84) if p.strip() else "" for p in paragraphs]
+    return "\n".join(wrapped)
+
+
+def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
+    """
+    Walk the schema.org JSON-LD ``@graph`` and extract classes and a
+    class-to-fields index in a single pass.
 
     Parameters
     ----------
@@ -228,8 +260,8 @@ def parse_schema(
 
     Returns
     -------
-    tuple[dict, dict, dict]
-        A ``(classes, props, class_fields)`` triple.
+    tuple[dict, dict]
+        A ``(classes, class_fields)`` pair.
 
         ``classes`` is keyed by the safe Python class name; each value
         contains:
@@ -238,21 +270,22 @@ def parse_schema(
         - ``"schema_name"``   -- original schema.org name (may differ from key)
         - ``"comment"``       -- the rdfs:comment string, or ""
 
-        ``props`` is keyed by the safe Python property name; each value
-        contains:
-
-        - ``"owner_classes"`` -- list of safe class names from domainIncludes
-        - ``"allowed_types"`` -- list of value type names from rangeIncludes
-        - ``"schema_name"``   -- original schema.org name (may differ from key)
-        - ``"comment"``       -- the rdfs:comment string, or ""
-
         ``class_fields`` maps each safe class name to the list of its
-        property dicts (same structure as ``props`` values, plus ``"name"``).
+        property dicts, each with ``"name"``, ``"schema_name"``,
+        ``"allowed_types"``, and ``"comment"``.
     """
     graph = data.get("@graph", [])
     classes: dict[str, dict] = {}
-    props: dict[str, dict] = {}
     class_fields: dict[str, list[dict]] = defaultdict(list)
+
+    def _ids(node: dict, key: str) -> list[str]:
+        val = node.get(key, [])
+        # Normalise single dict to list so the comprehension always works
+        if isinstance(val, dict):
+            val = [val]
+        return [
+            _safe_name(_local(item["@id"])) for item in val if isinstance(item, dict)
+        ]
 
     for node in graph:
         node_id: str = node.get("@id", "")
@@ -261,25 +294,26 @@ def parse_schema(
 
         schema_name = _local(node_id)
         py_name = _safe_name(schema_name)
-        types = node.get("@type", [])
-        if isinstance(types, str):
-            types = [types]
+        rdf_types = node.get("@type", [])
+        if isinstance(rdf_types, str):
+            rdf_types = [rdf_types]
 
         comment_raw = node.get("rdfs:comment", "")
-        comment = (
+        comment = _clean_comment(
             comment_raw.get("@value", "")
             if isinstance(comment_raw, dict)
             else str(comment_raw)
         )
 
-        if "rdfs:Class" in types:
+        if "rdfs:Class" in rdf_types:
             subclass_of = node.get("rdfs:subClassOf", [])
             if isinstance(subclass_of, dict):
                 subclass_of = [subclass_of]
             parents = [
-                _safe_name(_local(p["@id"]))
-                for p in subclass_of
-                if isinstance(p, dict) and p.get("@id", "").startswith("schema:")
+                _safe_name(_local(parent_dict["@id"]))
+                for parent_dict in subclass_of
+                if isinstance(parent_dict, dict)
+                and parent_dict.get("@id", "").startswith("schema:")
             ]
             classes[py_name] = {
                 "parents": parents,
@@ -287,26 +321,10 @@ def parse_schema(
                 "comment": comment,
             }
 
-        elif "rdf:Property" in types:
+        elif "rdf:Property" in rdf_types:
+            owner_classes = _ids(node, "schema:domainIncludes")
+            allowed_types = _ids(node, "schema:rangeIncludes")
 
-            def _ids(key: str) -> list[str]:
-                val = node.get(key, [])
-                # Normalise single dict to list so the comprehension always works
-                if isinstance(val, dict):
-                    val = [val]
-                return [
-                    _safe_name(_local(v["@id"])) for v in val if isinstance(v, dict)
-                ]
-
-            owner_classes = _ids("schema:domainIncludes")
-            allowed_types = _ids("schema:rangeIncludes")
-
-            props[py_name] = {
-                "owner_classes": owner_classes,
-                "allowed_types": allowed_types,
-                "schema_name": schema_name,
-                "comment": comment,
-            }
             for owner_class in owner_classes:
                 class_fields[owner_class].append(
                     {
@@ -318,13 +336,17 @@ def parse_schema(
                 )
 
     # Remove class_fields entries for classes not in the schema
-    class_fields = {k: v for k, v in class_fields.items() if k in classes}
+    class_fields = {
+        class_name: fields
+        for class_name, fields in class_fields.items()
+        if class_name in classes
+    }
 
-    return classes, props, class_fields
+    return classes, class_fields
 
 
 # ---------------------------------------------------------------------------
-# Step 3: build Pydantic model classes in memory
+# Build Pydantic model classes in memory
 # ---------------------------------------------------------------------------
 
 
@@ -358,24 +380,24 @@ def _resolve_type(
     if not allowed_types:
         return Any
 
-    parts = []
-    for t in allowed_types:
-        if t in PRIMITIVE_TYPE_MAP:
-            parts.append(PRIMITIVE_TYPE_MAP[t])
+    python_types = []
+    for type_name in allowed_types:
+        if type_name in PRIMITIVE_TYPE_MAP:
+            python_types.append(PRIMITIVE_TYPE_MAP[type_name])
         else:
             # Another schema.org class. May be None if currently being built
             # due to a circular reference — skip it in that case.
-            resolved = model_cache.get(t)
+            resolved = model_cache.get(type_name)
             if resolved is not None:
-                parts.append(resolved)
+                python_types.append(resolved)
 
-    if not parts:
+    if not python_types:
         return Any
 
-    if not strict and str not in parts:
-        parts.append(str)
+    if not strict and str not in python_types:
+        python_types.append(str)
 
-    return Optional[reduce(lambda a, b: a | b, parts)]
+    return Optional[reduce(lambda a, b: a | b, python_types)]
 
 
 def build_models(
@@ -416,28 +438,27 @@ def build_models(
 
         class_def = classes[class_name]
 
-        parents = [
-            built
-            for p in class_def["parents"]
-            if p in classes
-            for built in [build(p)]
-            if built is not None
-        ]
+        parents = []
+        for parent_name in class_def["parents"]:
+            if parent_name in classes:
+                parent_model = build(parent_name)
+                if parent_model is not None:
+                    parents.append(parent_model)
         base = parents[0] if parents else SchemaOrgBase
 
         field_defs: dict[str, Any] = {}
-        for f in class_fields.get(class_name, []):
-            py_type = _resolve_type(f["allowed_types"], cache, strict)
-            schema_name = f["schema_name"]
+        for field in class_fields.get(class_name, []):
+            py_type = _resolve_type(field["allowed_types"], cache, strict)
+            schema_name = field["schema_name"]
             # If the property was renamed, add an alias so Pydantic uses
             # the original schema.org name for serialisation.
-            if f["name"] != schema_name:
-                field_defs[f["name"]] = (
+            if field["name"] != schema_name:
+                field_defs[field["name"]] = (
                     py_type,
                     Field(default=None, alias=schema_name),
                 )
             else:
-                field_defs[f["name"]] = (py_type, None)
+                field_defs[field["name"]] = (py_type, None)
 
         # The type field default is always the original schema.org class name.
         field_defs["type"] = (
@@ -454,14 +475,16 @@ def build_models(
         cache[class_name] = model
         return model
 
-    for name in classes:
-        build(name)
+    for class_name in classes:
+        build(class_name)
 
-    return {k: v for k, v in cache.items() if v is not None}
+    return {
+        class_name: model for class_name, model in cache.items() if model is not None
+    }
 
 
 # ---------------------------------------------------------------------------
-# Step 4: render the generated Python module
+# Render the generated Python module
 # ---------------------------------------------------------------------------
 
 
@@ -480,8 +503,6 @@ def _type_to_source(tp: Any) -> str:
     str
         Source code representation, e.g. ``"Optional[date | str]"``.
     """
-    from typing import get_args, get_origin
-
     if tp is type(None):
         return "None"
     if tp in TYPE_TO_SOURCE:
@@ -489,14 +510,14 @@ def _type_to_source(tp: Any) -> str:
 
     args = get_args(tp)
     if args:
-        non_none = [a for a in args if a is not type(None)]
-        has_none = len(non_none) < len(args)
-        inner = (
-            _type_to_source(non_none[0])
-            if len(non_none) == 1
-            else " | ".join(_type_to_source(a) for a in non_none)
+        type_args = [type_arg for type_arg in args if type_arg is not type(None)]
+        is_optional = len(type_args) < len(args)
+        inner_source = (
+            _type_to_source(type_args[0])
+            if len(type_args) == 1
+            else " | ".join(_type_to_source(type_arg) for type_arg in type_args)
         )
-        return f"Optional[{inner}]" if has_none else inner
+        return f"Optional[{inner_source}]" if is_optional else inner_source
 
     if hasattr(tp, "__name__"):
         return tp.__name__
@@ -522,18 +543,18 @@ def _render_field(name: str, field_info: FieldInfo, annotation: Any) -> str:
     str
         A source line such as ``'birthDate: Optional[date | str] = Field(default=None)'``.
     """
-    type_str = _type_to_source(annotation)
+    annotation_source = _type_to_source(annotation)
 
-    parts = []
+    field_args = []
     if field_info.default not in (None, ...):
-        parts.append(f"default={field_info.default!r}")
+        field_args.append(f"default={field_info.default!r}")
     else:
-        parts.append("default=None")
+        field_args.append("default=None")
 
     if field_info.alias:
-        parts.append(f'alias="{field_info.alias}"')
+        field_args.append(f'alias="{field_info.alias}"')
 
-    return f"{name}: {type_str} = Field({', '.join(parts)})"
+    return f"{name}: {annotation_source} = Field({', '.join(field_args)})"
 
 
 def _topological_sort(models: dict[str, type[BaseModel]]) -> list[str]:
@@ -553,16 +574,16 @@ def _topological_sort(models: dict[str, type[BaseModel]]) -> list[str]:
     visited: set[str] = set()
     order: list[str] = []
 
-    def visit(name: str) -> None:
-        if name in visited or name not in models:
+    def visit(class_name: str) -> None:
+        if class_name in visited or class_name not in models:
             return
-        visited.add(name)
-        for base in models[name].__bases__:
-            visit(base.__name__)
-        order.append(name)
+        visited.add(class_name)
+        for base_cls in models[class_name].__bases__:
+            visit(base_cls.__name__)
+        order.append(class_name)
 
-    for name in sorted(models):
-        visit(name)
+    for class_name in sorted(models):
+        visit(class_name)
 
     return order
 
@@ -587,7 +608,7 @@ def render_module(
         The full source of the generated Python module.
     """
     order = _topological_sort(models)
-    all_names = set(order)
+    generated_class_names = set(order)
 
     lines = [
         '"""',
@@ -614,35 +635,44 @@ def render_module(
         cls = models[class_name]
 
         parent = next(
-            (b.__name__ for b in cls.__bases__ if b.__name__ in all_names),
+            (
+                base_cls.__name__
+                for base_cls in cls.__bases__
+                if base_cls.__name__ in generated_class_names
+            ),
             "SchemaOrgBase",
         )
 
         lines.append(f"class {class_name}({parent}):")
 
-        doc = (cls.__doc__ or f"schema.org/{class_name}").replace('"""', "'''")
-        lines.append(f'    """{doc}"""')
+        doc = cls.__doc__ or f"schema.org/{class_name}"
+        # Indent continuation lines so the docstring is valid Python
+        indented_doc = doc.replace("\n", "\n    ")
+        lines.append(f'    """{indented_doc}"""')
         lines.append("")
 
-        parent_fields = set(cls.__bases__[0].model_fields)
+        parent_cls = cls.__bases__[0]
         own_fields = {
             name: cls.model_fields[name]
             for name in cls.model_fields
-            if name not in parent_fields
+            if name not in parent_cls.model_fields
         }
 
-        if not own_fields:
-            lines.append("    pass")
-        else:
-            for field_name, field_info in own_fields.items():
-                rendered = _render_field(field_name, field_info, field_info.annotation)
-                lines.append(f"    {rendered}")
+        # Always emit type explicitly — we know the correct schema.org name
+        # (which may differ from the Python class name for renamed classes
+        # like _3DModel) and every class must declare its own @type default.
+        schema_name = cls.model_fields["type"].default
+        lines.append(f'    type: str = Field(default="{schema_name}", alias="@type")')
+
+        for field_name, field_info in own_fields.items():
+            rendered = _render_field(field_name, field_info, field_info.annotation)
+            lines.append(f"    {rendered}")
 
         lines.append("")
 
     lines.append("")
     lines.append("# Resolve forward references between models")
-    lines.extend(f"{name}.model_rebuild()" for name in order)
+    lines.extend(f"{class_name}.model_rebuild()" for class_name in order)
     lines.append("")
     lines.append("")
     lines.append(_GET_FUNCTION_SOURCE)
@@ -671,21 +701,21 @@ def generate(
     out : Path, optional
         Destination path for the generated Python module.
     """
-    # Step 1: download
+    # Download
     print(f"Downloading schema.org from {SCHEMA_URL} ...")
     with urllib.request.urlopen(SCHEMA_URL) as resp:
         data = json.loads(resp.read().decode("utf-8"))
 
-    # Step 2: parse
+    # Parse
     print("Parsing schema.org vocabulary ...")
-    classes, props, class_fields = parse_schema(data)
-    print(f"  Found {len(classes)} classes and {len(props)} properties")
+    classes, class_fields = parse_schema(data)
+    print(f"  Found {len(classes)} classes")
 
-    # Step 3: build
+    # Build
     print(f"Building {len(classes)} Pydantic model classes ...")
     models = build_models(classes, class_fields, strict)
 
-    # Step 4: render and write
+    # Render and write
     print("Rendering source ...")
     source = render_module(models, strict)
     out.write_text(source, encoding="utf-8")
