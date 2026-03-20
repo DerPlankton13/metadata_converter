@@ -39,6 +39,7 @@ class SchemaOrgBase(BaseModel):
 class Thing(SchemaOrgBase):
     """The most generic type of item."""
 
+    type: str = Field(default="Thing", alias="@type")
     potentialAction: Any = Field(default=None)
     image: Optional[AnyUrl | str] = Field(default=None)
     sameAs: Optional[AnyUrl | str] = Field(default=None)
@@ -54,13 +55,15 @@ class Thing(SchemaOrgBase):
     mainEntityOfPage: Optional[AnyUrl | str] = Field(default=None)
 
 class Intangible(Thing):
-    """A utility class that serves as the umbrella for a number of 'intangible' things such as quantities, structured values, etc."""
+    """A utility class that serves as the umbrella for a number of 'intangible' things such
+    as quantities, structured values, etc."""
 
-    pass
+    type: str = Field(default="Intangible", alias="@type")
 
 class BroadcastChannel(Intangible):
     """A unique instance of a BroadcastService on a CableOrSatelliteService lineup."""
 
+    type: str = Field(default="BroadcastChannel", alias="@type")
     broadcastChannelId: Optional[str] = Field(default=None)
     broadcastServiceTier: Optional[str] = Field(default=None)
     broadcastFrequency: Optional[str] = Field(default=None)
@@ -71,16 +74,18 @@ class BroadcastChannel(Intangible):
 class RadioChannel(BroadcastChannel):
     """A unique instance of a radio BroadcastService on a CableOrSatelliteService lineup."""
 
-    pass
+    type: str = Field(default="RadioChannel", alias="@type")
 
 class AMRadioChannel(RadioChannel):
     """A radio channel that uses AM."""
 
-    pass
+    type: str = Field(default="AMRadioChannel", alias="@type")
 
 class CreativeWork(Thing):
-    """The most generic kind of creative work, including books, movies, photographs, software programs, etc."""
+    """The most generic kind of creative work, including books, movies, photographs,
+    software programs, etc."""
 
+    type: str = Field(default="CreativeWork", alias="@type")
     educationalUse: Optional[str] = Field(default=None)
     sdPublisher: Optional[Organization | str] = Field(default=None)
     text: Optional[str] = Field(default=None)
@@ -199,8 +204,12 @@ class CreativeWork(Thing):
     educationalLevel: Optional[AnyUrl | str] = Field(default=None)
 
 class Article(CreativeWork):
-    """An article, such as a news article or piece of investigative report. Newspapers and magazines have articles of many different types and this is intended to cover them all.\n\nSee also [blog post](https://blog.schema.org/2014/09/02/schema-org-support-for-bibliographic-relationships-and-periodicals/)."""
+    """An article, such as a news article or piece of investigative report. Newspapers and
+    magazines have articles of many different types and this is intended to cover them
+    all.nnSee also [blog post](https://blog.schema.org/2014/09/02/schema-org-support-
+    for-bibliographic-relationships-and-periodicals/)."""
 
+    type: str = Field(default="Article", alias="@type")
     articleSection: Optional[str] = Field(default=None)
     articleBody: Optional[str] = Field(default=None)
     backstory: Optional[CreativeWork | str] = Field(default=None)
@@ -210,14 +219,17 @@ class Article(CreativeWork):
     pageStart: Optional[int | str] = Field(default=None)
 
 class TechArticle(Article):
-    """A technical article - Example: How-to (task) topics, step-by-step, procedural troubleshooting, specifications, etc."""
+    """A technical article - Example: How-to (task) topics, step-by-step, procedural
+    troubleshooting, specifications, etc."""
 
+    type: str = Field(default="TechArticle", alias="@type")
     dependencies: Optional[str] = Field(default=None)
     proficiencyLevel: Optional[str] = Field(default=None)
 
 class APIReference(TechArticle):
     """Reference documentation for application programming interfaces (APIs)."""
 
+    type: str = Field(default="APIReference", alias="@type")
     programmingModel: Optional[str] = Field(default=None)
     targetPlatform: Optional[str] = Field(default=None)
     assemblyVersion: Optional[str] = Field(default=None)
@@ -225,8 +237,13 @@ class APIReference(TechArticle):
     executableLibraryName: Optional[str] = Field(default=None)
 
 class WebPage(CreativeWork):
-    """A web page. Every web page is implicitly assumed to be declared to be of type WebPage, so the various properties about that webpage, such as <code>breadcrumb</code> may be used. We recommend explicit declaration if these properties are specified, but if they are found outside of an itemscope, they will be assumed to be about the page."""
+    """A web page. Every web page is implicitly assumed to be declared to be of type
+    WebPage, so the various properties about that webpage, such as
+    <code>breadcrumb</code> may be used. We recommend explicit declaration if these
+    properties are specified, but if they are found outside of an itemscope, they will
+    be assumed to be about the page."""
 
+    type: str = Field(default="WebPage", alias="@type")
     mainContentOfPage: Any = Field(default=None)
     speakable: Optional[AnyUrl | str] = Field(default=None)
     reviewedBy: Optional[Organization | str] = Field(default=None)
@@ -241,11 +258,17 @@ class WebPage(CreativeWork):
 class AboutPage(WebPage):
     """Web page type: About page."""
 
-    pass
+    type: str = Field(default="AboutPage", alias="@type")
 
 class Action(Thing):
-    """An action performed by a direct agent and indirect participants upon a direct object. Optionally happens at a location with the help of an inanimate instrument. The execution of the action may produce a result. Specific action sub-type documentation specifies the exact expectation of each argument/role.\n\nSee also [blog post](https://blog.schema.org/2014/04/16/announcing-schema-org-actions/) and [Actions overview document](https://schema.org/docs/actions.html)."""
+    """An action performed by a direct agent and indirect participants upon a direct
+    object. Optionally happens at a location with the help of an inanimate instrument.
+    The execution of the action may produce a result. Specific action sub-type
+    documentation specifies the exact expectation of each argument/role.nnSee also [blog
+    post](https://blog.schema.org/2014/04/16/announcing-schema-org-actions/) and
+    [Actions overview document](https://schema.org/docs/actions.html)."""
 
+    type: str = Field(default="Action", alias="@type")
     target: Optional[AnyUrl | str] = Field(default=None)
     endTime: Optional[datetime | time | str] = Field(default=None)
     result: Optional[Thing | str] = Field(default=None)
@@ -263,21 +286,23 @@ class Action(Thing):
 class OrganizeAction(Action):
     """The act of manipulating/administering/supervising/controlling one or more objects."""
 
-    pass
+    type: str = Field(default="OrganizeAction", alias="@type")
 
 class AllocateAction(OrganizeAction):
     """The act of organizing tasks/objects/events by associating resources to it."""
 
-    pass
+    type: str = Field(default="AllocateAction", alias="@type")
 
 class AcceptAction(AllocateAction):
-    """The act of committing to/adopting an object.\n\nRelated actions:\n\n* [[RejectAction]]: The antonym of AcceptAction."""
+    """The act of committing to/adopting an object.nnRelated actions:nn* RejectAction: The
+    antonym of AcceptAction."""
 
-    pass
+    type: str = Field(default="AcceptAction", alias="@type")
 
 class Place(Thing):
     """Entities that have a somewhat fixed, physical extension."""
 
+    type: str = Field(default="Place", alias="@type")
     events: Any = Field(default=None)
     containsPlace: Any = Field(default=None)
     telephone: Optional[str] = Field(default=None)
@@ -327,12 +352,17 @@ class Place(Thing):
     openingHoursSpecification: Any = Field(default=None)
 
 class Accommodation(Place):
-    """An accommodation is a place that can accommodate human beings, e.g. a hotel room, a camping pitch, or a meeting room. Many accommodations are for overnight stays, but this is not a mandatory requirement.
-For more specific types of accommodations not defined in schema.org, one can use [[additionalType]] with external vocabularies.
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    """An accommodation is a place that can accommodate human beings, e.g. a hotel room, a
+    camping pitch, or a meeting room. Many accommodations are for overnight stays, but
+    this is not a mandatory requirement.
+    For more specific types of accommodations not defined in schema.org, one can use
+    additionalType with external vocabularies.
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
+    type: str = Field(default="Accommodation", alias="@type")
     yearBuilt: Optional[str | float] = Field(default=None)
     accommodationFloorPlan: Any = Field(default=None)
     permittedUsage: Optional[str] = Field(default=None)
@@ -350,8 +380,11 @@ See also the <a href="/docs/hotels.html">dedicated document on the use of schema
     numberOfBedrooms: Optional[QuantitativeValue | float | str] = Field(default=None)
 
 class LocalBusiness(Place):
-    """A particular physical business or branch of an organization. Examples of LocalBusiness include a restaurant, a particular branch of a restaurant chain, a branch of a bank, a medical practice, a club, a bowling alley, etc."""
+    """A particular physical business or branch of an organization. Examples of
+    LocalBusiness include a restaurant, a particular branch of a restaurant chain, a
+    branch of a bank, a medical practice, a club, a bowling alley, etc."""
 
+    type: str = Field(default="LocalBusiness", alias="@type")
     branchOf: Optional[Organization | str] = Field(default=None)
     currenciesAccepted: Optional[str] = Field(default=None)
     paymentAccepted: Optional[str] = Field(default=None)
@@ -362,22 +395,26 @@ class LocalBusiness(Place):
 class FinancialService(LocalBusiness):
     """Financial services business."""
 
+    type: str = Field(default="FinancialService", alias="@type")
     feesAndCommissionsSpecification: Optional[AnyUrl | str] = Field(default=None)
 
 class AccountingService(FinancialService):
-    """Accountancy business.\n\nAs a [[LocalBusiness]] it can be described as a [[provider]] of one or more [[Service]]\(s).
-      """
+    """Accountancy business.nnAs a LocalBusiness it can be described as a provider of one
+    or more Service(s).
+    """
 
-    pass
+    type: str = Field(default="AccountingService", alias="@type")
 
 class AchieveAction(Action):
-    """The act of accomplishing something via previous efforts. It is an instantaneous action rather than an ongoing process."""
+    """The act of accomplishing something via previous efforts. It is an instantaneous
+    action rather than an ongoing process."""
 
-    pass
+    type: str = Field(default="AchieveAction", alias="@type")
 
 class ActionAccessSpecification(Intangible):
     """A set of requirements that must be fulfilled in order to perform an Action."""
 
+    type: str = Field(default="ActionAccessSpecification", alias="@type")
     expectsAcceptanceOf: Optional[Offer | str] = Field(default=None)
     category: Optional[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode] = Field(default=None)
     eligibleRegion: Optional[Place | str | GeoShape] = Field(default=None)
@@ -389,67 +426,83 @@ class ActionAccessSpecification(Intangible):
 class Enumeration(Intangible):
     """Lists or enumerations—for example, a list of cuisines or music genres, etc."""
 
+    type: str = Field(default="Enumeration", alias="@type")
     supersededBy: Any = Field(default=None)
 
 class StatusEnumeration(Enumeration):
     """Lists or enumerations dealing with status types."""
 
-    pass
+    type: str = Field(default="StatusEnumeration", alias="@type")
 
 class ActionStatusType(StatusEnumeration):
     """The status of an Action."""
 
-    pass
+    type: str = Field(default="ActionStatusType", alias="@type")
 
 class ControlAction(Action):
     """An agent controls a device or application."""
 
-    pass
+    type: str = Field(default="ControlAction", alias="@type")
 
 class ActivateAction(ControlAction):
-    """The act of starting or activating a device or application (e.g. starting a timer or turning on a flashlight)."""
+    """The act of starting or activating a device or application (e.g. starting a timer or
+    turning on a flashlight)."""
 
-    pass
+    type: str = Field(default="ActivateAction", alias="@type")
 
 class UpdateAction(Action):
     """The act of managing by changing/editing the state of the object."""
 
+    type: str = Field(default="UpdateAction", alias="@type")
     targetCollection: Optional[Thing | str] = Field(default=None)
     collection: Optional[Thing | str] = Field(default=None)
 
 class AddAction(UpdateAction):
     """The act of editing by adding an object to a collection."""
 
-    pass
+    type: str = Field(default="AddAction", alias="@type")
 
 class AdministrativeArea(Place):
     """A geographical region, typically under the jurisdiction of a particular government."""
 
-    pass
+    type: str = Field(default="AdministrativeArea", alias="@type")
 
 class EntertainmentBusiness(LocalBusiness):
     """A business providing entertainment."""
 
-    pass
+    type: str = Field(default="EntertainmentBusiness", alias="@type")
 
 class AdultEntertainment(EntertainmentBusiness):
     """An adult entertainment establishment."""
 
-    pass
+    type: str = Field(default="AdultEntertainment", alias="@type")
 
 class AdultOrientedEnumeration(Enumeration):
-    """Enumeration of considerations that make a product relevant or potentially restricted for adults only."""
+    """Enumeration of considerations that make a product relevant or potentially restricted
+    for adults only."""
 
-    pass
+    type: str = Field(default="AdultOrientedEnumeration", alias="@type")
 
 class AdvertiserContentArticle(Article):
-    """An [[Article]] that an external entity has paid to place or to produce to its specifications. Includes [advertorials](https://en.wikipedia.org/wiki/Advertorial), sponsored content, native advertising and other paid content."""
+    """An Article that an external entity has paid to place or to produce to its
+    specifications. Includes [advertorials](https://en.wikipedia.org/wiki/Advertorial),
+    sponsored content, native advertising and other paid content."""
 
-    pass
+    type: str = Field(default="AdvertiserContentArticle", alias="@type")
 
 class Offer(Intangible):
-    """An offer to transfer some rights to an item or to provide a service — for example, an offer to sell tickets to an event, to rent the DVD of a movie, to stream a TV show over the internet, to repair a motorcycle, or to loan a book.\n\nNote: As the [[businessFunction]] property, which identifies the form of offer (e.g. sell, lease, repair, dispose), defaults to http://purl.org/goodrelations/v1#Sell; an Offer without a defined businessFunction value can be assumed to be an offer to sell.\n\nFor [GTIN](http://www.gs1.org/barcodes/technical/idkeys/gtin)-related fields, see [Check Digit calculator](http://www.gs1.org/barcodes/support/check_digit_calculator) and [validation guide](http://www.gs1us.org/resources/standards/gtin-validation-guide) from [GS1](http://www.gs1.org/)."""
+    """An offer to transfer some rights to an item or to provide a service — for example,
+    an offer to sell tickets to an event, to rent the DVD of a movie, to stream a TV
+    show over the internet, to repair a motorcycle, or to loan a book.nnNote: As the
+    businessFunction property, which identifies the form of offer (e.g. sell, lease,
+    repair, dispose), defaults to http://purl.org/goodrelations/v1#Sell; an Offer
+    without a defined businessFunction value can be assumed to be an offer to sell.nnFor
+    [GTIN](http://www.gs1.org/barcodes/technical/idkeys/gtin)-related fields, see [Check
+    Digit calculator](http://www.gs1.org/barcodes/support/check_digit_calculator) and
+    [validation guide](http://www.gs1us.org/resources/standards/gtin-validation-guide)
+    from [GS1](http://www.gs1.org/)."""
 
+    type: str = Field(default="Offer", alias="@type")
     offeredBy: Optional[Organization | str] = Field(default=None)
     validForMemberTier: Any = Field(default=None)
     shippingDetails: Any = Field(default=None)
@@ -506,8 +559,13 @@ class Offer(Intangible):
     includesObject: Any = Field(default=None)
 
 class AggregateOffer(Offer):
-    """When a single product is associated with multiple offers (for example, the same pair of shoes is offered by different merchants), then AggregateOffer can be used.\n\nNote: AggregateOffers are normally expected to associate multiple offers that all share the same defined [[businessFunction]] value, or default to http://purl.org/goodrelations/v1#Sell if businessFunction is not explicitly defined."""
+    """When a single product is associated with multiple offers (for example, the same pair
+    of shoes is offered by different merchants), then AggregateOffer can be used.nnNote:
+    AggregateOffers are normally expected to associate multiple offers that all share
+    the same defined businessFunction value, or default to
+    http://purl.org/goodrelations/v1#Sell if businessFunction is not explicitly defined."""
 
+    type: str = Field(default="AggregateOffer", alias="@type")
     offerCount: Optional[int | str] = Field(default=None)
     lowPrice: Optional[str | float] = Field(default=None)
     offers: Optional[Offer | Demand | str] = Field(default=None)
@@ -516,6 +574,7 @@ class AggregateOffer(Offer):
 class Rating(Intangible):
     """A rating is an evaluation on a numeric scale, such as 1 to 5 stars."""
 
+    type: str = Field(default="Rating", alias="@type")
     worstRating: Optional[str | float] = Field(default=None)
     author: Optional[Organization | str] = Field(default=None)
     reviewAspect: Optional[StructuredValue | str] = Field(default=None)
@@ -526,6 +585,7 @@ class Rating(Intangible):
 class AggregateRating(Rating):
     """The average rating based on multiple ratings or reviews."""
 
+    type: str = Field(default="AggregateRating", alias="@type")
     ratingCount: Optional[int | str] = Field(default=None)
     itemReviewed: Optional[Thing | str] = Field(default=None)
     reviewCount: Optional[int | str] = Field(default=None)
@@ -533,21 +593,24 @@ class AggregateRating(Rating):
 class AssessAction(Action):
     """The act of forming one's opinion, reaction or sentiment."""
 
-    pass
+    type: str = Field(default="AssessAction", alias="@type")
 
 class ReactAction(AssessAction):
-    """The act of responding instinctively and emotionally to an object, expressing a sentiment."""
+    """The act of responding instinctively and emotionally to an object, expressing a
+    sentiment."""
 
-    pass
+    type: str = Field(default="ReactAction", alias="@type")
 
 class AgreeAction(ReactAction):
-    """The act of expressing a consistency of opinion with the object. An agent agrees to/about an object (a proposition, topic or theme) with participants."""
+    """The act of expressing a consistency of opinion with the object. An agent agrees
+    to/about an object (a proposition, topic or theme) with participants."""
 
-    pass
+    type: str = Field(default="AgreeAction", alias="@type")
 
 class Organization(Thing):
     """An organization such as a school, NGO, corporation, club, etc."""
 
+    type: str = Field(default="Organization", alias="@type")
     companyRegistration: Any = Field(default=None)
     events: Any = Field(default=None)
     dissolutionDate: Optional[date | str] = Field(default=None)
@@ -628,24 +691,30 @@ class Organization(Thing):
 class Airline(Organization):
     """An organization that provides flights for passengers."""
 
+    type: str = Field(default="Airline", alias="@type")
     boardingPolicy: Any = Field(default=None)
     iataCode: Optional[str] = Field(default=None)
 
 class CivicStructure(Place):
     """A public structure, such as a town hall or concert hall."""
 
+    type: str = Field(default="CivicStructure", alias="@type")
     openingHours: Optional[str] = Field(default=None)
 
 class Airport(CivicStructure):
     """An airport."""
 
+    type: str = Field(default="Airport", alias="@type")
     icaoCode: Optional[str] = Field(default=None)
     iataCode: Optional[str] = Field(default=None)
 
 class AlignmentObject(Intangible):
-    """An intangible item that describes an alignment between a learning resource and a node in an educational framework.
-Should not be used where the nature of the alignment can be described using a simple property, for example to express that a resource [[teaches]] or [[assesses]] a competency."""
+    """An intangible item that describes an alignment between a learning resource and a
+    node in an educational framework.
+    Should not be used where the nature of the alignment can be described using a simple
+    property, for example to express that a resource teaches or assesses a competency."""
 
+    type: str = Field(default="AlignmentObject", alias="@type")
     targetName: Optional[str] = Field(default=None)
     educationalFramework: Optional[str] = Field(default=None)
     alignmentType: Optional[str] = Field(default=None)
@@ -653,21 +722,25 @@ Should not be used where the nature of the alignment can be described using a si
     targetUrl: Optional[AnyUrl | str] = Field(default=None)
 
 class AmpStory(CreativeWork):
-    """A creative work with a visual storytelling format intended to be viewed online, particularly on mobile devices."""
+    """A creative work with a visual storytelling format intended to be viewed online,
+    particularly on mobile devices."""
 
-    pass
+    type: str = Field(default="AmpStory", alias="@type")
 
 class AmusementPark(EntertainmentBusiness):
     """An amusement park."""
 
-    pass
+    type: str = Field(default="AmusementPark", alias="@type")
 
 class NewsArticle(Article):
-    """A NewsArticle is an article whose content reports news, or provides background context and supporting materials for understanding the news.
+    """A NewsArticle is an article whose content reports news, or provides background
+    context and supporting materials for understanding the news.
+    
+    A more detailed overview of [schema.org News markup](/docs/news.html) is also
+    available.
+    """
 
-A more detailed overview of [schema.org News markup](/docs/news.html) is also available.
-"""
-
+    type: str = Field(default="NewsArticle", alias="@type")
     printColumn: Optional[str] = Field(default=None)
     printEdition: Optional[str] = Field(default=None)
     printPage: Optional[str] = Field(default=None)
@@ -675,13 +748,16 @@ A more detailed overview of [schema.org News markup](/docs/news.html) is also av
     printSection: Optional[str] = Field(default=None)
 
 class AnalysisNewsArticle(NewsArticle):
-    """An AnalysisNewsArticle is a [[NewsArticle]] that, while based on factual reporting, incorporates the expertise of the author/producer, offering interpretations and conclusions."""
+    """An AnalysisNewsArticle is a NewsArticle that, while based on factual reporting,
+    incorporates the expertise of the author/producer, offering interpretations and
+    conclusions."""
 
-    pass
+    type: str = Field(default="AnalysisNewsArticle", alias="@type")
 
 class MedicalEntity(Thing):
     """The most generic type of entity related to health and the practice of medicine."""
 
+    type: str = Field(default="MedicalEntity", alias="@type")
     medicineSystem: Any = Field(default=None)
     relevantSpecialty: Any = Field(default=None)
     funding: Any = Field(default=None)
@@ -692,8 +768,10 @@ class MedicalEntity(Thing):
     guideline: Any = Field(default=None)
 
 class AnatomicalStructure(MedicalEntity):
-    """Any part of the human body, typically a component of an anatomical system. Organs, tissues, and cells are all anatomical structures."""
+    """Any part of the human body, typically a component of an anatomical system. Organs,
+    tissues, and cells are all anatomical structures."""
 
+    type: str = Field(default="AnatomicalStructure", alias="@type")
     subStructure: Any = Field(default=None)
     connectedTo: Any = Field(default=None)
     bodyLocation: Optional[str] = Field(default=None)
@@ -704,8 +782,13 @@ class AnatomicalStructure(MedicalEntity):
     partOfSystem: Any = Field(default=None)
 
 class AnatomicalSystem(MedicalEntity):
-    """An anatomical system is a group of anatomical structures that work together to perform a certain task. Anatomical systems, such as organ systems, are one organizing principle of anatomy, and can include circulatory, digestive, endocrine, integumentary, immune, lymphatic, muscular, nervous, reproductive, respiratory, skeletal, urinary, vestibular, and other systems."""
+    """An anatomical system is a group of anatomical structures that work together to
+    perform a certain task. Anatomical systems, such as organ systems, are one
+    organizing principle of anatomy, and can include circulatory, digestive, endocrine,
+    integumentary, immune, lymphatic, muscular, nervous, reproductive, respiratory,
+    skeletal, urinary, vestibular, and other systems."""
 
+    type: str = Field(default="AnatomicalSystem", alias="@type")
     associatedPathophysiology: Optional[str] = Field(default=None)
     relatedStructure: Optional[AnatomicalStructure | str] = Field(default=None)
     relatedTherapy: Any = Field(default=None)
@@ -715,11 +798,14 @@ class AnatomicalSystem(MedicalEntity):
 class AnimalShelter(LocalBusiness):
     """Animal shelter."""
 
-    pass
+    type: str = Field(default="AnimalShelter", alias="@type")
 
 class Comment(CreativeWork):
-    """A comment on an item - for example, a comment on a blog post. The comment's content is expressed via the [[text]] property, and its topic via [[about]], properties shared with all CreativeWorks."""
+    """A comment on an item - for example, a comment on a blog post. The comment's content
+    is expressed via the text property, and its topic via about, properties shared with
+    all CreativeWorks."""
 
+    type: str = Field(default="Comment", alias="@type")
     sharedContent: Optional[CreativeWork | str] = Field(default=None)
     upvoteCount: Optional[int | str] = Field(default=None)
     downvoteCount: Optional[int | str] = Field(default=None)
@@ -728,22 +814,28 @@ class Comment(CreativeWork):
 class Answer(Comment):
     """An answer offered to a question; perhaps correct, perhaps opinionated or wrong."""
 
+    type: str = Field(default="Answer", alias="@type")
     answerExplanation: Optional[Comment | str] = Field(default=None)
 
 class Apartment(Accommodation):
-    """An apartment (in American English) or flat (in British English) is a self-contained housing unit (a type of residential real estate) that occupies only part of a building (source: Wikipedia, the free encyclopedia, see <a href="http://en.wikipedia.org/wiki/Apartment">http://en.wikipedia.org/wiki/Apartment</a>)."""
+    """An apartment (in American English) or flat (in British English) is a self-contained
+    housing unit (a type of residential real estate) that occupies only part of a
+    building (source: Wikipedia, the free encyclopedia, see <a href="http://en.wikipedia
+    .org/wiki/Apartment">http://en.wikipedia.org/wiki/Apartment</a>)."""
 
-    pass
+    type: str = Field(default="Apartment", alias="@type")
 
 class Residence(Place):
     """The place where a person lives."""
 
+    type: str = Field(default="Residence", alias="@type")
     accommodationFloorPlan: Any = Field(default=None)
     floorLevel: Optional[str] = Field(default=None)
 
 class ApartmentComplex(Residence):
     """Residence type: Apartment complex."""
 
+    type: str = Field(default="ApartmentComplex", alias="@type")
     petsAllowed: Optional[bool | str] = Field(default=None)
     numberOfAvailableAccommodationUnits: Optional[QuantitativeValue | str] = Field(default=None)
     numberOfBedrooms: Optional[QuantitativeValue | float | str] = Field(default=None)
@@ -752,123 +844,156 @@ class ApartmentComplex(Residence):
 class InsertAction(AddAction):
     """The act of adding at a specific location in an ordered collection."""
 
+    type: str = Field(default="InsertAction", alias="@type")
     toLocation: Optional[Place | str] = Field(default=None)
 
 class AppendAction(InsertAction):
     """The act of inserting at the end if an ordered collection."""
 
-    pass
+    type: str = Field(default="AppendAction", alias="@type")
 
 class ApplyAction(OrganizeAction):
-    """The act of registering to an organization/service without the guarantee to receive it.\n\nRelated actions:\n\n* [[RegisterAction]]: Unlike RegisterAction, ApplyAction has no guarantees that the application will be accepted."""
+    """The act of registering to an organization/service without the guarantee to receive
+    it.nnRelated actions:nn* RegisterAction: Unlike RegisterAction, ApplyAction has no
+    guarantees that the application will be accepted."""
 
-    pass
+    type: str = Field(default="ApplyAction", alias="@type")
 
 class MedicalIndication(MedicalEntity):
-    """A condition or factor that indicates use of a medical therapy, including signs, symptoms, risk factors, anatomical states, etc."""
+    """A condition or factor that indicates use of a medical therapy, including signs,
+    symptoms, risk factors, anatomical states, etc."""
 
-    pass
+    type: str = Field(default="MedicalIndication", alias="@type")
 
 class ApprovedIndication(MedicalIndication):
-    """An indication for a medical therapy that has been formally specified or approved by a regulatory body that regulates use of the therapy; for example, the US FDA approves indications for most drugs in the US."""
+    """An indication for a medical therapy that has been formally specified or approved by
+    a regulatory body that regulates use of the therapy; for example, the US FDA
+    approves indications for most drugs in the US."""
 
-    pass
+    type: str = Field(default="ApprovedIndication", alias="@type")
 
 class Aquarium(CivicStructure):
     """Aquarium."""
 
-    pass
+    type: str = Field(default="Aquarium", alias="@type")
 
 class ArchiveComponent(CreativeWork):
-    """An intangible type to be applied to any archive content, carrying with it a set of properties required to describe archival items and collections."""
+    """An intangible type to be applied to any archive content, carrying with it a set of
+    properties required to describe archival items and collections."""
 
+    type: str = Field(default="ArchiveComponent", alias="@type")
     holdingArchive: Any = Field(default=None)
     itemLocation: Optional[Place | str] = Field(default=None)
 
 class ArchiveOrganization(LocalBusiness):
-    """An organization with archival holdings. An organization which keeps and preserves archival material and typically makes it accessible to the public."""
+    """An organization with archival holdings. An organization which keeps and preserves
+    archival material and typically makes it accessible to the public."""
 
+    type: str = Field(default="ArchiveOrganization", alias="@type")
     archiveHeld: Optional[ArchiveComponent | str] = Field(default=None)
 
 class MoveAction(Action):
-    """The act of an agent relocating to a place.\n\nRelated actions:\n\n* [[TransferAction]]: Unlike TransferAction, the subject of the move is a living Person or Organization rather than an inanimate object."""
+    """The act of an agent relocating to a place.nnRelated actions:nn* TransferAction:
+    Unlike TransferAction, the subject of the move is a living Person or Organization
+    rather than an inanimate object."""
 
+    type: str = Field(default="MoveAction", alias="@type")
     toLocation: Optional[Place | str] = Field(default=None)
     fromLocation: Optional[Place | str] = Field(default=None)
 
 class ArriveAction(MoveAction):
-    """The act of arriving at a place. An agent arrives at a destination from a fromLocation, optionally with participants."""
+    """The act of arriving at a place. An agent arrives at a destination from a
+    fromLocation, optionally with participants."""
 
-    pass
+    type: str = Field(default="ArriveAction", alias="@type")
 
 class ArtGallery(EntertainmentBusiness):
     """An art gallery."""
 
-    pass
+    type: str = Field(default="ArtGallery", alias="@type")
 
 class Vessel(AnatomicalStructure):
-    """A component of the human body circulatory system comprised of an intricate network of hollow tubes that transport blood throughout the entire body."""
+    """A component of the human body circulatory system comprised of an intricate network
+    of hollow tubes that transport blood throughout the entire body."""
 
-    pass
+    type: str = Field(default="Vessel", alias="@type")
 
 class Artery(Vessel):
     """A type of blood vessel that specifically carries blood away from the heart."""
 
+    type: str = Field(default="Artery", alias="@type")
     arterialBranch: Optional[AnatomicalStructure | str] = Field(default=None)
     supplyTo: Optional[AnatomicalStructure | str] = Field(default=None)
 
 class InteractAction(Action):
     """The act of interacting with another person or organization."""
 
-    pass
+    type: str = Field(default="InteractAction", alias="@type")
 
 class CommunicateAction(InteractAction):
-    """The act of conveying information to another person via a communication medium (instrument) such as speech, email, or telephone conversation."""
+    """The act of conveying information to another person via a communication medium
+    (instrument) such as speech, email, or telephone conversation."""
 
+    type: str = Field(default="CommunicateAction", alias="@type")
     language: Optional[str | Language] = Field(default=None)
     about: Optional[Thing | str] = Field(default=None)
     recipient: Optional[Organization | Audience | str] = Field(default=None)
     inLanguage: Optional[str | Language] = Field(default=None)
 
 class AskAction(CommunicateAction):
-    """The act of posing a question / favor to someone.\n\nRelated actions:\n\n* [[ReplyAction]]: Appears generally as a response to AskAction."""
+    """The act of posing a question / favor to someone.nnRelated actions:nn* ReplyAction:
+    Appears generally as a response to AskAction."""
 
+    type: str = Field(default="AskAction", alias="@type")
     question: Optional[Question | str] = Field(default=None)
 
 class AskPublicNewsArticle(NewsArticle):
-    """A [[NewsArticle]] expressing an open call by a [[NewsMediaOrganization]] asking the public for input, insights, clarifications, anecdotes, documentation, etc., on an issue, for reporting purposes."""
+    """A NewsArticle expressing an open call by a NewsMediaOrganization asking the public
+    for input, insights, clarifications, anecdotes, documentation, etc., on an issue,
+    for reporting purposes."""
 
-    pass
+    type: str = Field(default="AskPublicNewsArticle", alias="@type")
 
 class AssignAction(AllocateAction):
-    """The act of allocating an action/event/task to some destination (someone or something)."""
+    """The act of allocating an action/event/task to some destination (someone or
+    something)."""
 
-    pass
+    type: str = Field(default="AssignAction", alias="@type")
 
 class Atlas(CreativeWork):
-    """A collection or bound volume of maps, charts, plates or tables, physical or in media form illustrating any subject."""
+    """A collection or bound volume of maps, charts, plates or tables, physical or in media
+    form illustrating any subject."""
 
-    pass
+    type: str = Field(default="Atlas", alias="@type")
 
 class LegalService(LocalBusiness):
-    """A LegalService is a business that provides legally-oriented services, advice and representation, e.g. law firms.\n\nAs a [[LocalBusiness]] it can be described as a [[provider]] of one or more [[Service]]\(s)."""
+    """A LegalService is a business that provides legally-oriented services, advice and
+    representation, e.g. law firms.nnAs a LocalBusiness it can be described as a
+    provider of one or more Service(s)."""
 
-    pass
+    type: str = Field(default="LegalService", alias="@type")
 
 class Attorney(LegalService):
-    """Professional service: Attorney. \n\nThis type is deprecated - [[LegalService]] is more inclusive and less ambiguous."""
+    """Professional service: Attorney. nnThis type is deprecated - LegalService is more
+    inclusive and less ambiguous."""
 
-    pass
+    type: str = Field(default="Attorney", alias="@type")
 
 class Audience(Intangible):
     """Intended audience for an item, i.e. the group for whom the item was created."""
 
+    type: str = Field(default="Audience", alias="@type")
     audienceType: Optional[str] = Field(default=None)
     geographicArea: Optional[AdministrativeArea | str] = Field(default=None)
 
 class MediaObject(CreativeWork):
-    """A media object, such as an image, video, audio, or text object embedded in a web page or a downloadable dataset i.e. DataDownload. Note that a creative work may have many media objects associated with it on the same web page. For example, a page about a single song (MusicRecording) may have a music video (VideoObject), and a high and low bandwidth audio stream (2 AudioObject's)."""
+    """A media object, such as an image, video, audio, or text object embedded in a web
+    page or a downloadable dataset i.e. DataDownload. Note that a creative work may have
+    many media objects associated with it on the same web page. For example, a page
+    about a single song (MusicRecording) may have a music video (VideoObject), and a
+    high and low bandwidth audio stream (2 AudioObject's)."""
 
+    type: str = Field(default="MediaObject", alias="@type")
     regionsAllowed: Optional[Place | str] = Field(default=None)
     associatedArticle: Any = Field(default=None)
     encodesCreativeWork: Optional[CreativeWork | str] = Field(default=None)
@@ -891,83 +1016,97 @@ class MediaObject(CreativeWork):
 class AudioObject(MediaObject):
     """An audio file."""
 
+    type: str = Field(default="AudioObject", alias="@type")
     embeddedTextCaption: Optional[str] = Field(default=None)
     caption: Optional[str | MediaObject] = Field(default=None)
     transcript: Optional[str] = Field(default=None)
 
 class AudioObjectSnapshot(AudioObject):
-    """A specific and exact (byte-for-byte) version of an [[AudioObject]]. Two byte-for-byte identical files, for the purposes of this type, considered identical. If they have different embedded metadata the files will differ. Different external facts about the files, e.g. creator or dateCreated that aren't represented in their actual content, do not affect this notion of identity."""
+    """A specific and exact (byte-for-byte) version of an AudioObject. Two byte-for-byte
+    identical files, for the purposes of this type, considered identical. If they have
+    different embedded metadata the files will differ. Different external facts about
+    the files, e.g. creator or dateCreated that aren't represented in their actual
+    content, do not affect this notion of identity."""
 
-    pass
+    type: str = Field(default="AudioObjectSnapshot", alias="@type")
 
 class Audiobook(AudioObject):
     """An audiobook."""
 
+    type: str = Field(default="Audiobook", alias="@type")
     readBy: Any = Field(default=None)
 
 class AuthenticateAction(ControlAction):
     """The action of authenticating into a device or application."""
 
-    pass
+    type: str = Field(default="AuthenticateAction", alias="@type")
 
 class AuthorizeAction(AllocateAction):
     """The act of granting permission to an object."""
 
+    type: str = Field(default="AuthorizeAction", alias="@type")
     recipient: Optional[Organization | Person | ContactPoint | Audience | str] = Field(default=None)
 
 class AutomotiveBusiness(LocalBusiness):
     """Car repair, sales, or parts."""
 
-    pass
+    type: str = Field(default="AutomotiveBusiness", alias="@type")
 
 class AutoBodyShop(AutomotiveBusiness):
     """Auto body shop."""
 
-    pass
+    type: str = Field(default="AutoBodyShop", alias="@type")
 
 class AutoDealer(AutomotiveBusiness):
     """An car dealership."""
 
-    pass
+    type: str = Field(default="AutoDealer", alias="@type")
 
 class Store(LocalBusiness):
     """A retail good store."""
 
-    pass
+    type: str = Field(default="Store", alias="@type")
 
 class AutoPartsStore(Store):
     """An auto parts store."""
 
-    pass
+    type: str = Field(default="AutoPartsStore", alias="@type")
 
 class AutoRental(AutomotiveBusiness):
     """A car rental business."""
 
-    pass
+    type: str = Field(default="AutoRental", alias="@type")
 
 class AutoRepair(AutomotiveBusiness):
     """Car repair business."""
 
-    pass
+    type: str = Field(default="AutoRepair", alias="@type")
 
 class AutoWash(AutomotiveBusiness):
     """A car wash business."""
 
-    pass
+    type: str = Field(default="AutoWash", alias="@type")
 
 class AutomatedTeller(FinancialService):
     """ATM/cash machine."""
 
-    pass
+    type: str = Field(default="AutomatedTeller", alias="@type")
 
 class BackgroundNewsArticle(NewsArticle):
-    """A [[NewsArticle]] providing historical context, definition and detail on a specific topic (aka "explainer" or "backgrounder"). For example, an in-depth article or frequently-asked-questions ([FAQ](https://en.wikipedia.org/wiki/FAQ)) document on topics such as Climate Change or the European Union. Other kinds of background material from a non-news setting are often described using [[Book]] or [[Article]], in particular [[ScholarlyArticle]]. See also [[NewsArticle]] for related vocabulary from a learning/education perspective."""
+    """A NewsArticle providing historical context, definition and detail on a specific
+    topic (aka "explainer" or "backgrounder"). For example, an in-depth article or
+    frequently-asked-questions ([FAQ](https://en.wikipedia.org/wiki/FAQ)) document on
+    topics such as Climate Change or the European Union. Other kinds of background
+    material from a non-news setting are often described using Book or Article, in
+    particular ScholarlyArticle. See also NewsArticle for related vocabulary from a
+    learning/education perspective."""
 
-    pass
+    type: str = Field(default="BackgroundNewsArticle", alias="@type")
 
 class FoodEstablishment(LocalBusiness):
     """A food-related business."""
 
+    type: str = Field(default="FoodEstablishment", alias="@type")
     servesCuisine: Optional[str] = Field(default=None)
     hasMenu: Optional[AnyUrl | str] = Field(default=None)
     starRating: Any = Field(default=None)
@@ -977,11 +1116,12 @@ class FoodEstablishment(LocalBusiness):
 class Bakery(FoodEstablishment):
     """A bakery."""
 
-    pass
+    type: str = Field(default="Bakery", alias="@type")
 
 class Service(Intangible):
     """A service provided by an organization, e.g. delivery service, print services, etc."""
 
+    type: str = Field(default="Service", alias="@type")
     hoursAvailable: Any = Field(default=None)
     availableChannel: Any = Field(default=None)
     isSimilarTo: Any = Field(default=None)
@@ -1009,15 +1149,20 @@ class Service(Intangible):
     serviceType: Optional[str] = Field(default=None)
 
 class FinancialProduct(Service):
-    """A product provided to consumers and businesses by financial institutions such as banks, insurance companies, brokerage firms, consumer finance companies, and investment companies which comprise the financial services industry."""
+    """A product provided to consumers and businesses by financial institutions such as
+    banks, insurance companies, brokerage firms, consumer finance companies, and
+    investment companies which comprise the financial services industry."""
 
+    type: str = Field(default="FinancialProduct", alias="@type")
     interestRate: Optional[QuantitativeValue | float | str] = Field(default=None)
     annualPercentageRate: Optional[QuantitativeValue | float | str] = Field(default=None)
     feesAndCommissionsSpecification: Optional[AnyUrl | str] = Field(default=None)
 
 class BankAccount(FinancialProduct):
-    """A product or service offered by a bank whereby one may deposit, withdraw or transfer money and in some cases be paid interest."""
+    """A product or service offered by a bank whereby one may deposit, withdraw or transfer
+    money and in some cases be paid interest."""
 
+    type: str = Field(default="BankAccount", alias="@type")
     accountMinimumInflow: Optional[MonetaryAmount | str] = Field(default=None)
     accountOverdraftLimit: Optional[MonetaryAmount | str] = Field(default=None)
     bankAccountType: Optional[AnyUrl | str] = Field(default=None)
@@ -1025,16 +1170,17 @@ class BankAccount(FinancialProduct):
 class BankOrCreditUnion(FinancialService):
     """Bank or credit union."""
 
-    pass
+    type: str = Field(default="BankOrCreditUnion", alias="@type")
 
 class BarOrPub(FoodEstablishment):
     """A bar or pub."""
 
-    pass
+    type: str = Field(default="BarOrPub", alias="@type")
 
 class ImageObject(MediaObject):
     """An image file."""
 
+    type: str = Field(default="ImageObject", alias="@type")
     embeddedTextCaption: Optional[str] = Field(default=None)
     caption: Optional[str | MediaObject] = Field(default=None)
     exifData: Optional[str] = Field(default=None)
@@ -1043,26 +1189,27 @@ class ImageObject(MediaObject):
 class Barcode(ImageObject):
     """An image of a visual machine-readable code such as a barcode or QR code."""
 
-    pass
+    type: str = Field(default="Barcode", alias="@type")
 
 class Beach(CivicStructure):
     """Beach."""
 
-    pass
+    type: str = Field(default="Beach", alias="@type")
 
 class HealthAndBeautyBusiness(LocalBusiness):
     """Health and beauty."""
 
-    pass
+    type: str = Field(default="HealthAndBeautyBusiness", alias="@type")
 
 class BeautySalon(HealthAndBeautyBusiness):
     """Beauty salon."""
 
-    pass
+    type: str = Field(default="BeautySalon", alias="@type")
 
 class LodgingBusiness(LocalBusiness):
     """A lodging business, such as a motel, hotel, or inn."""
 
+    type: str = Field(default="LodgingBusiness", alias="@type")
     availableLanguage: Optional[str | Language] = Field(default=None)
     numberOfRooms: Optional[str | float] = Field(default=None)
     starRating: Any = Field(default=None)
@@ -1073,21 +1220,28 @@ class LodgingBusiness(LocalBusiness):
 
 class BedAndBreakfast(LodgingBusiness):
     """Bed and breakfast.
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
-    pass
+    type: str = Field(default="BedAndBreakfast", alias="@type")
 
 class BedDetails(Intangible):
-    """An entity holding detailed information about the available bed types, e.g. the quantity of twin beds for a hotel room. For the single case of just one bed of a certain type, you can use bed directly with a text. See also [[BedType]] (under development)."""
+    """An entity holding detailed information about the available bed types, e.g. the
+    quantity of twin beds for a hotel room. For the single case of just one bed of a
+    certain type, you can use bed directly with a text. See also BedType (under
+    development)."""
 
+    type: str = Field(default="BedDetails", alias="@type")
     numberOfBeds: Optional[str | float] = Field(default=None)
     typeOfBed: Optional[BedType | str] = Field(default=None)
 
 class QualitativeValue(Enumeration):
-    """A predefined value for a product characteristic, e.g. the power cord plug type 'US' or the garment sizes 'S', 'M', 'L', and 'XL'."""
+    """A predefined value for a product characteristic, e.g. the power cord plug type 'US'
+    or the garment sizes 'S', 'M', 'L', and 'XL'."""
 
+    type: str = Field(default="QualitativeValue", alias="@type")
     lesser: Any = Field(default=None)
     additionalProperty: Any = Field(default=None)
     valueReference: Optional[StructuredValue | str | MeasurementTypeEnumeration | QuantitativeValue | Enumeration] = Field(default=None)
@@ -1098,23 +1252,28 @@ class QualitativeValue(Enumeration):
     equal: Any = Field(default=None)
 
 class BedType(QualitativeValue):
-    """A type of bed. This is used for indicating the bed or beds available in an accommodation."""
+    """A type of bed. This is used for indicating the bed or beds available in an
+    accommodation."""
 
-    pass
+    type: str = Field(default="BedType", alias="@type")
 
 class BefriendAction(InteractAction):
-    """The act of forming a personal connection with someone (object) mutually/bidirectionally/symmetrically.\n\nRelated actions:\n\n* [[FollowAction]]: Unlike FollowAction, BefriendAction implies that the connection is reciprocal."""
+    """The act of forming a personal connection with someone (object)
+    mutually/bidirectionally/symmetrically.nnRelated actions:nn* FollowAction: Unlike
+    FollowAction, BefriendAction implies that the connection is reciprocal."""
 
-    pass
+    type: str = Field(default="BefriendAction", alias="@type")
 
 class BikeStore(Store):
     """A bike store."""
 
-    pass
+    type: str = Field(default="BikeStore", alias="@type")
 
 class BioChemEntity(Thing):
-    """Any biological, chemical, or biochemical thing. For example: a protein; a gene; a chemical; a synthetic chemical."""
+    """Any biological, chemical, or biochemical thing. For example: a protein; a gene; a
+    chemical; a synthetic chemical."""
 
+    type: str = Field(default="BioChemEntity", alias="@type")
     hasRepresentation: Optional[AnyUrl | str] = Field(default=None)
     hasMolecularFunction: Optional[AnyUrl | str] = Field(default=None)
     bioChemInteraction: Any = Field(default=None)
@@ -1130,25 +1289,31 @@ class BioChemEntity(Thing):
     associatedDisease: Optional[MedicalCondition | AnyUrl | str] = Field(default=None)
 
 class Blog(CreativeWork):
-    """A [blog](https://en.wikipedia.org/wiki/Blog), sometimes known as a "weblog". Note that the individual posts ([[BlogPosting]]s) in a [[Blog]] are often colloquially referred to by the same term."""
+    """A [blog](https://en.wikipedia.org/wiki/Blog), sometimes known as a "weblog". Note
+    that the individual posts (BlogPostings) in a Blog are often colloquially referred
+    to by the same term."""
 
+    type: str = Field(default="Blog", alias="@type")
     blogPost: Any = Field(default=None)
     blogPosts: Any = Field(default=None)
     issn: Optional[str] = Field(default=None)
 
 class SocialMediaPosting(Article):
-    """A post to a social media platform, including blog posts, tweets, Facebook posts, etc."""
+    """A post to a social media platform, including blog posts, tweets, Facebook posts,
+    etc."""
 
+    type: str = Field(default="SocialMediaPosting", alias="@type")
     sharedContent: Optional[CreativeWork | str] = Field(default=None)
 
 class BlogPosting(SocialMediaPosting):
     """A blog post."""
 
-    pass
+    type: str = Field(default="BlogPosting", alias="@type")
 
 class MedicalTest(MedicalEntity):
     """Any medical test, typically performed for diagnostic purposes."""
 
+    type: str = Field(default="MedicalTest", alias="@type")
     usedToDiagnose: Any = Field(default=None)
     signDetected: Any = Field(default=None)
     usesDevice: Any = Field(default=None)
@@ -1158,16 +1323,20 @@ class MedicalTest(MedicalEntity):
 class BloodTest(MedicalTest):
     """A medical test performed on a sample of a patient's blood."""
 
-    pass
+    type: str = Field(default="BloodTest", alias="@type")
 
 class BoardingPolicyType(Enumeration):
     """A type of boarding policy used by an airline."""
 
-    pass
+    type: str = Field(default="BoardingPolicyType", alias="@type")
 
 class Reservation(Intangible):
-    """Describes a reservation for travel, dining or an event. Some reservations require tickets. \n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations. For offers of tickets, restaurant reservations, flights, or rental cars, use [[Offer]]."""
+    """Describes a reservation for travel, dining or an event. Some reservations require
+    tickets. nnNote: This type is for information about actual reservations, e.g. in
+    confirmation emails or HTML pages with individual confirmations of reservations. For
+    offers of tickets, restaurant reservations, flights, or rental cars, use Offer."""
 
+    type: str = Field(default="Reservation", alias="@type")
     reservedTicket: Any = Field(default=None)
     totalPrice: Optional[str | float] = Field(default=None)
     bookingTime: Optional[str | datetime] = Field(default=None)
@@ -1184,19 +1353,22 @@ class Reservation(Intangible):
 
 class BoatReservation(Reservation):
     """A reservation for boat travel.
+    
+    Note: This type is for information about actual reservations, e.g. in confirmation
+    emails or HTML pages with individual confirmations of reservations. For offers of
+    tickets, use Offer."""
 
-Note: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations. For offers of tickets, use [[Offer]]."""
-
-    pass
+    type: str = Field(default="BoatReservation", alias="@type")
 
 class BoatTerminal(CivicStructure):
     """A terminal for boats, ships, and other water vessels."""
 
-    pass
+    type: str = Field(default="BoatTerminal", alias="@type")
 
 class Trip(Intangible):
     """A trip or journey. An itinerary of visits to one or more places."""
 
+    type: str = Field(default="Trip", alias="@type")
     subTrip: Any = Field(default=None)
     itinerary: Optional[Place | ItemList | str] = Field(default=None)
     arrivalTime: Optional[datetime | time | str] = Field(default=None)
@@ -1209,37 +1381,44 @@ class Trip(Intangible):
 class BoatTrip(Trip):
     """A trip on a commercial ferry line."""
 
+    type: str = Field(default="BoatTrip", alias="@type")
     arrivalBoatTerminal: Any = Field(default=None)
     departureBoatTerminal: Any = Field(default=None)
 
 class MeasurementTypeEnumeration(Enumeration):
-    """Enumeration of common measurement types (or dimensions), for example "chest" for a person, "inseam" for pants, "gauge" for screws, or "wheel" for bicycles."""
+    """Enumeration of common measurement types (or dimensions), for example "chest" for a
+    person, "inseam" for pants, "gauge" for screws, or "wheel" for bicycles."""
 
-    pass
+    type: str = Field(default="MeasurementTypeEnumeration", alias="@type")
 
 class BodyMeasurementTypeEnumeration(MeasurementTypeEnumeration):
-    """Enumerates types (or dimensions) of a person's body measurements, for example for fitting of clothes."""
+    """Enumerates types (or dimensions) of a person's body measurements, for example for
+    fitting of clothes."""
 
-    pass
+    type: str = Field(default="BodyMeasurementTypeEnumeration", alias="@type")
 
 class Landform(Place):
-    """A landform or physical feature.  Landform elements include mountains, plains, lakes, rivers, seascape and oceanic waterbody interface features such as bays, peninsulas, seas and so forth, including sub-aqueous terrain features such as submersed mountain ranges, volcanoes, and the great ocean basins."""
+    """A landform or physical feature.  Landform elements include mountains, plains, lakes,
+    rivers, seascape and oceanic waterbody interface features such as bays, peninsulas,
+    seas and so forth, including sub-aqueous terrain features such as submersed mountain
+    ranges, volcanoes, and the great ocean basins."""
 
-    pass
+    type: str = Field(default="Landform", alias="@type")
 
 class BodyOfWater(Landform):
     """A body of water, such as a sea, ocean, or lake."""
 
-    pass
+    type: str = Field(default="BodyOfWater", alias="@type")
 
 class Bone(AnatomicalStructure):
     """Rigid connective tissue that comprises up the skeletal structure of the human body."""
 
-    pass
+    type: str = Field(default="Bone", alias="@type")
 
 class Book(CreativeWork):
     """A book."""
 
+    type: str = Field(default="Book", alias="@type")
     abridged: Optional[bool | str] = Field(default=None)
     bookFormat: Any = Field(default=None)
     bookEdition: Optional[str] = Field(default=None)
@@ -1250,17 +1429,31 @@ class Book(CreativeWork):
 class BookFormatType(Enumeration):
     """The publication format of the book."""
 
-    pass
+    type: str = Field(default="BookFormatType", alias="@type")
 
 class Series(Intangible):
-    """A Series in schema.org is a group of related items, typically but not necessarily of the same kind. See also [[CreativeWorkSeries]], [[EventSeries]]."""
+    """A Series in schema.org is a group of related items, typically but not necessarily of
+    the same kind. See also CreativeWorkSeries, EventSeries."""
 
-    pass
+    type: str = Field(default="Series", alias="@type")
 
 class CreativeWorkSeries(Series):
-    """A CreativeWorkSeries in schema.org is a group of related items, typically but not necessarily of the same kind. CreativeWorkSeries are usually organized into some order, often chronological. Unlike [[ItemList]] which is a general purpose data structure for lists of things, the emphasis with CreativeWorkSeries is on published materials (written e.g. books and periodicals, or media such as TV, radio and games).\n\nSpecific subtypes are available for describing [[TVSeries]], [[RadioSeries]], [[MovieSeries]], [[BookSeries]], [[Periodical]] and [[VideoGameSeries]]. In each case, the [[hasPart]] / [[isPartOf]] properties can be used to relate the CreativeWorkSeries to its parts. The general CreativeWorkSeries type serves largely just to organize these more specific and practical subtypes.\n\nIt is common for properties applicable to an item from the series to be usefully applied to the containing group. Schema.org attempts to anticipate some of these cases, but publishers should be free to apply properties of the series parts to the series as a whole wherever they seem appropriate.
+    """A CreativeWorkSeries in schema.org is a group of related items, typically but not
+    necessarily of the same kind. CreativeWorkSeries are usually organized into some
+    order, often chronological. Unlike ItemList which is a general purpose data
+    structure for lists of things, the emphasis with CreativeWorkSeries is on published
+    materials (written e.g. books and periodicals, or media such as TV, radio and
+    games).nnSpecific subtypes are available for describing TVSeries, RadioSeries,
+    MovieSeries, BookSeries, Periodical and VideoGameSeries. In each case, the hasPart /
+    isPartOf properties can be used to relate the CreativeWorkSeries to its parts. The
+    general CreativeWorkSeries type serves largely just to organize these more specific
+    and practical subtypes.nnIt is common for properties applicable to an item from the
+    series to be usefully applied to the containing group. Schema.org attempts to
+    anticipate some of these cases, but publishers should be free to apply properties of
+    the series parts to the series as a whole wherever they seem appropriate.
     """
 
+    type: str = Field(default="CreativeWorkSeries", alias="@type")
     endDate: Optional[datetime | date | str] = Field(default=None)
     startDate: Optional[datetime | date | str] = Field(default=None)
     issn: Optional[str] = Field(default=None)
@@ -1268,84 +1461,106 @@ class CreativeWorkSeries(Series):
 class BookSeries(CreativeWorkSeries):
     """A series of books. Included books can be indicated with the hasPart property."""
 
-    pass
+    type: str = Field(default="BookSeries", alias="@type")
 
 class BookStore(Store):
     """A bookstore."""
 
-    pass
+    type: str = Field(default="BookStore", alias="@type")
 
 class BookmarkAction(OrganizeAction):
     """An agent bookmarks/flags/labels/tags/marks an object."""
 
-    pass
+    type: str = Field(default="BookmarkAction", alias="@type")
 
 class Boolean(SchemaOrgBase):
     """Boolean: True or False."""
 
-    pass
+    type: str = Field(default="Boolean", alias="@type")
 
 class TransferAction(Action):
-    """The act of transferring/moving (abstract or concrete) animate or inanimate objects from one place to another."""
+    """The act of transferring/moving (abstract or concrete) animate or inanimate objects
+    from one place to another."""
 
+    type: str = Field(default="TransferAction", alias="@type")
     toLocation: Optional[Place | str] = Field(default=None)
     fromLocation: Optional[Place | str] = Field(default=None)
 
 class BorrowAction(TransferAction):
-    """The act of obtaining an object under an agreement to return it at a later date. Reciprocal of LendAction.\n\nRelated actions:\n\n* [[LendAction]]: Reciprocal of BorrowAction."""
+    """The act of obtaining an object under an agreement to return it at a later date.
+    Reciprocal of LendAction.nnRelated actions:nn* LendAction: Reciprocal of
+    BorrowAction."""
 
+    type: str = Field(default="BorrowAction", alias="@type")
     lender: Optional[Organization | Person | str] = Field(default=None)
 
 class SportsActivityLocation(LocalBusiness):
     """A sports location, such as a playing field."""
 
-    pass
+    type: str = Field(default="SportsActivityLocation", alias="@type")
 
 class BowlingAlley(SportsActivityLocation):
     """A bowling alley."""
 
-    pass
+    type: str = Field(default="BowlingAlley", alias="@type")
 
 class BrainStructure(AnatomicalStructure):
-    """Any anatomical structure which pertains to the soft nervous tissue functioning as the coordinating center of sensation and intellectual and nervous activity."""
+    """Any anatomical structure which pertains to the soft nervous tissue functioning as
+    the coordinating center of sensation and intellectual and nervous activity."""
 
-    pass
+    type: str = Field(default="BrainStructure", alias="@type")
 
 class Brand(Intangible):
-    """A brand is a name used by an organization or business person for labeling a product, product group, or similar."""
+    """A brand is a name used by an organization or business person for labeling a product,
+    product group, or similar."""
 
+    type: str = Field(default="Brand", alias="@type")
     logo: Optional[AnyUrl | str] = Field(default=None)
     review: Any = Field(default=None)
     aggregateRating: Any = Field(default=None)
     slogan: Optional[str] = Field(default=None)
 
 class ItemList(Intangible):
-    """A list of items of any sort&#x2014;for example, Top 10 Movies About Weathermen, or Top 100 Party Songs. Not to be confused with HTML lists, which are often used only for formatting."""
+    """A list of items of any sort&#x2014;for example, Top 10 Movies About Weathermen, or
+    Top 100 Party Songs. Not to be confused with HTML lists, which are often used only
+    for formatting."""
 
+    type: str = Field(default="ItemList", alias="@type")
     numberOfItems: Optional[int | str] = Field(default=None)
     aggregateElement: Optional[Thing | str] = Field(default=None)
     itemListElement: Optional[str | Thing | ListItem] = Field(default=None)
     itemListOrder: Optional[str] = Field(default=None)
 
 class BreadcrumbList(ItemList):
-    """A BreadcrumbList is an ItemList consisting of a chain of linked Web pages, typically described using at least their URL and their name, and typically ending with the current page.\n\nThe [[position]] property is used to reconstruct the order of the items in a BreadcrumbList. The convention is that a breadcrumb list has an [[itemListOrder]] of [[ItemListOrderAscending]] (lower values listed first), and that the first items in this list correspond to the "top" or beginning of the breadcrumb trail, e.g. with a site or section homepage. The specific values of 'position' are not assigned meaning for a BreadcrumbList, but they should be integers, e.g. beginning with '1' for the first item in the list.
-      """
+    """A BreadcrumbList is an ItemList consisting of a chain of linked Web pages, typically
+    described using at least their URL and their name, and typically ending with the
+    current page.nnThe position property is used to reconstruct the order of the items
+    in a BreadcrumbList. The convention is that a breadcrumb list has an itemListOrder
+    of ItemListOrderAscending (lower values listed first), and that the first items in
+    this list correspond to the "top" or beginning of the breadcrumb trail, e.g. with a
+    site or section homepage. The specific values of 'position' are not assigned meaning
+    for a BreadcrumbList, but they should be integers, e.g. beginning with '1' for the
+    first item in the list.
+    """
 
-    pass
+    type: str = Field(default="BreadcrumbList", alias="@type")
 
 class Brewery(FoodEstablishment):
     """Brewery."""
 
-    pass
+    type: str = Field(default="Brewery", alias="@type")
 
 class Bridge(CivicStructure):
     """A bridge."""
 
-    pass
+    type: str = Field(default="Bridge", alias="@type")
 
 class Event(Thing):
-    """An event happening at a certain time and location, such as a concert, lecture, or festival. Ticketing information may be added via the [[offers]] property. Repeated events may be structured as separate Event objects."""
+    """An event happening at a certain time and location, such as a concert, lecture, or
+    festival. Ticketing information may be added via the offers property. Repeated
+    events may be structured as separate Event objects."""
 
+    type: str = Field(default="Event", alias="@type")
     sponsor: Optional[Organization | str] = Field(default=None)
     contributor: Optional[Organization | str] = Field(default=None)
     typicalAgeRange: Optional[str] = Field(default=None)
@@ -1391,8 +1606,11 @@ class Event(Thing):
     translator: Optional[Organization | str] = Field(default=None)
 
 class PublicationEvent(Event):
-    """A PublicationEvent corresponds indifferently to the event of publication for a CreativeWork of any type, e.g. a broadcast event, an on-demand event, a book/journal publication via a variety of delivery media."""
+    """A PublicationEvent corresponds indifferently to the event of publication for a
+    CreativeWork of any type, e.g. a broadcast event, an on-demand event, a book/journal
+    publication via a variety of delivery media."""
 
+    type: str = Field(default="PublicationEvent", alias="@type")
     publishedOn: Any = Field(default=None)
     free: Optional[bool | str] = Field(default=None)
     publishedBy: Optional[Organization | str] = Field(default=None)
@@ -1400,6 +1618,7 @@ class PublicationEvent(Event):
 class BroadcastEvent(PublicationEvent):
     """An over the air or online broadcast event."""
 
+    type: str = Field(default="BroadcastEvent", alias="@type")
     broadcastOfEvent: Optional[Event | str] = Field(default=None)
     subtitleLanguage: Optional[str | Language] = Field(default=None)
     videoFormat: Optional[str] = Field(default=None)
@@ -1408,13 +1627,16 @@ class BroadcastEvent(PublicationEvent):
 class BroadcastFrequencySpecification(Intangible):
     """The frequency in MHz and the modulation used for a particular BroadcastService."""
 
+    type: str = Field(default="BroadcastFrequencySpecification", alias="@type")
     broadcastFrequencyValue: Optional[QuantitativeValue | float | str] = Field(default=None)
     broadcastSubChannel: Optional[str] = Field(default=None)
     broadcastSignalModulation: Optional[QualitativeValue | str] = Field(default=None)
 
 class BroadcastService(Service):
-    """A delivery service through which content is provided via broadcast over the air or online."""
+    """A delivery service through which content is provided via broadcast over the air or
+    online."""
 
+    type: str = Field(default="BroadcastService", alias="@type")
     hasBroadcastChannel: Optional[BroadcastChannel | str] = Field(default=None)
     callSign: Optional[str] = Field(default=None)
     broadcastAffiliateOf: Optional[Organization | str] = Field(default=None)
@@ -1428,28 +1650,33 @@ class BroadcastService(Service):
     broadcastTimezone: Optional[str] = Field(default=None)
 
 class InvestmentOrDeposit(FinancialProduct):
-    """A type of financial product that typically requires the client to transfer funds to a financial service in return for potential beneficial financial return."""
+    """A type of financial product that typically requires the client to transfer funds to
+    a financial service in return for potential beneficial financial return."""
 
+    type: str = Field(default="InvestmentOrDeposit", alias="@type")
     amount: Optional[MonetaryAmount | float | str] = Field(default=None)
 
 class BrokerageAccount(InvestmentOrDeposit):
-    """An account that allows an investor to deposit funds and place investment orders with a licensed broker or brokerage firm."""
+    """An account that allows an investor to deposit funds and place investment orders with
+    a licensed broker or brokerage firm."""
 
-    pass
+    type: str = Field(default="BrokerageAccount", alias="@type")
 
 class PlaceOfWorship(CivicStructure):
     """Place of worship, such as a church, synagogue, or mosque."""
 
-    pass
+    type: str = Field(default="PlaceOfWorship", alias="@type")
 
 class BuddhistTemple(PlaceOfWorship):
     """A Buddhist temple."""
 
-    pass
+    type: str = Field(default="BuddhistTemple", alias="@type")
 
 class Product(Thing):
-    """Any offered product or service. For example: a pair of shoes; a concert ticket; the rental of a car; a haircut; or an episode of a TV show streamed online."""
+    """Any offered product or service. For example: a pair of shoes; a concert ticket; the
+    rental of a car; a haircut; or an episode of a TV show streamed online."""
 
+    type: str = Field(default="Product", alias="@type")
     isConsumableFor: Any = Field(default=None)
     isSimilarTo: Optional[Service | str] = Field(default=None)
     category: Optional[str | AnyUrl | Thing] = Field(default=None)
@@ -1511,8 +1738,10 @@ class Product(Thing):
     isAccessoryOrSparePartFor: Any = Field(default=None)
 
 class Vehicle(Product):
-    """A vehicle is a device that is designed or used to transport people or cargo over land, water, air, or through space."""
+    """A vehicle is a device that is designed or used to transport people or cargo over
+    land, water, air, or through space."""
 
+    type: str = Field(default="Vehicle", alias="@type")
     speed: Optional[QuantitativeValue | str] = Field(default=None)
     callSign: Optional[str] = Field(default=None)
     numberOfForwardGears: Optional[QuantitativeValue | float | str] = Field(default=None)
@@ -1552,83 +1781,117 @@ class Vehicle(Product):
     vehicleModelDate: Optional[date | str] = Field(default=None)
 
 class BusOrCoach(Vehicle):
-    """A bus (also omnibus or autobus) is a road vehicle designed to carry passengers. Coaches are luxury buses, usually in service for long distance travel."""
+    """A bus (also omnibus or autobus) is a road vehicle designed to carry passengers.
+    Coaches are luxury buses, usually in service for long distance travel."""
 
+    type: str = Field(default="BusOrCoach", alias="@type")
     roofLoad: Optional[QuantitativeValue | str] = Field(default=None)
     acrissCode: Optional[str] = Field(default=None)
 
 class BusReservation(Reservation):
-    """A reservation for bus travel. \n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations. For offers of tickets, use [[Offer]]."""
+    """A reservation for bus travel. nnNote: This type is for information about actual
+    reservations, e.g. in confirmation emails or HTML pages with individual
+    confirmations of reservations. For offers of tickets, use Offer."""
 
-    pass
+    type: str = Field(default="BusReservation", alias="@type")
 
 class BusStation(CivicStructure):
     """A bus station."""
 
-    pass
+    type: str = Field(default="BusStation", alias="@type")
 
 class BusStop(CivicStructure):
     """A bus stop."""
 
-    pass
+    type: str = Field(default="BusStop", alias="@type")
 
 class BusTrip(Trip):
     """A trip on a commercial bus line."""
 
+    type: str = Field(default="BusTrip", alias="@type")
     busNumber: Optional[str] = Field(default=None)
     departureBusStop: Optional[BusStation | BusStop | str] = Field(default=None)
     busName: Optional[str] = Field(default=None)
     arrivalBusStop: Optional[BusStation | BusStop | str] = Field(default=None)
 
 class BusinessAudience(Audience):
-    """A set of characteristics belonging to businesses, e.g. who compose an item's target audience."""
+    """A set of characteristics belonging to businesses, e.g. who compose an item's target
+    audience."""
 
+    type: str = Field(default="BusinessAudience", alias="@type")
     yearsInOperation: Optional[QuantitativeValue | str] = Field(default=None)
     yearlyRevenue: Optional[QuantitativeValue | str] = Field(default=None)
     numberOfEmployees: Optional[QuantitativeValue | str] = Field(default=None)
 
 class BusinessEntityType(Enumeration):
-    """A business entity type is a conceptual entity representing the legal form, the size, the main line of business, the position in the value chain, or any combination thereof, of an organization or business person.\n\nCommonly used values:\n\n* http://purl.org/goodrelations/v1#Business\n* http://purl.org/goodrelations/v1#Enduser\n* http://purl.org/goodrelations/v1#PublicInstitution\n* http://purl.org/goodrelations/v1#Reseller
+    """A business entity type is a conceptual entity representing the legal form, the size,
+    the main line of business, the position in the value chain, or any combination
+    thereof, of an organization or business person.nnCommonly used values:nn*
+    http://purl.org/goodrelations/v1#Businessn*
+    http://purl.org/goodrelations/v1#Endusern*
+    http://purl.org/goodrelations/v1#PublicInstitutionn*
+    http://purl.org/goodrelations/v1#Reseller
     """
 
-    pass
+    type: str = Field(default="BusinessEntityType", alias="@type")
 
 class BusinessEvent(Event):
     """Event type: Business event."""
 
-    pass
+    type: str = Field(default="BusinessEvent", alias="@type")
 
 class BusinessFunction(Enumeration):
-    """The business function specifies the type of activity or access (i.e., the bundle of rights) offered by the organization or business person through the offer. Typical are sell, rental or lease, maintenance or repair, manufacture / produce, recycle / dispose, engineering / construction, or installation. Proprietary specifications of access rights are also instances of this class.\n\nCommonly used values:\n\n* http://purl.org/goodrelations/v1#ConstructionInstallation\n* http://purl.org/goodrelations/v1#Dispose\n* http://purl.org/goodrelations/v1#LeaseOut\n* http://purl.org/goodrelations/v1#Maintain\n* http://purl.org/goodrelations/v1#ProvideService\n* http://purl.org/goodrelations/v1#Repair\n* http://purl.org/goodrelations/v1#Sell\n* http://purl.org/goodrelations/v1#Buy
-        """
+    """The business function specifies the type of activity or access (i.e., the bundle of
+    rights) offered by the organization or business person through the offer. Typical
+    are sell, rental or lease, maintenance or repair, manufacture / produce, recycle /
+    dispose, engineering / construction, or installation. Proprietary specifications of
+    access rights are also instances of this class.nnCommonly used values:nn*
+    http://purl.org/goodrelations/v1#ConstructionInstallationn*
+    http://purl.org/goodrelations/v1#Disposen*
+    http://purl.org/goodrelations/v1#LeaseOutn*
+    http://purl.org/goodrelations/v1#Maintainn*
+    http://purl.org/goodrelations/v1#ProvideServicen*
+    http://purl.org/goodrelations/v1#Repairn* http://purl.org/goodrelations/v1#Selln*
+    http://purl.org/goodrelations/v1#Buy
+    """
 
-    pass
+    type: str = Field(default="BusinessFunction", alias="@type")
 
 class TradeAction(Action):
-    """The act of participating in an exchange of goods and services for monetary compensation. An agent trades an object, product or service with a participant in exchange for a one time or periodic payment."""
+    """The act of participating in an exchange of goods and services for monetary
+    compensation. An agent trades an object, product or service with a participant in
+    exchange for a one time or periodic payment."""
 
+    type: str = Field(default="TradeAction", alias="@type")
     priceSpecification: Any = Field(default=None)
     priceCurrency: Optional[str] = Field(default=None)
     price: Optional[str | float] = Field(default=None)
 
 class BuyAction(TradeAction):
-    """The act of giving money to a seller in exchange for goods or services rendered. An agent buys an object, product, or service from a seller for a price. Reciprocal of SellAction."""
+    """The act of giving money to a seller in exchange for goods or services rendered. An
+    agent buys an object, product, or service from a seller for a price. Reciprocal of
+    SellAction."""
 
+    type: str = Field(default="BuyAction", alias="@type")
     warrantyPromise: Any = Field(default=None)
     vendor: Optional[Organization | Person | str] = Field(default=None)
     seller: Optional[Organization | Person | str] = Field(default=None)
 
 class StructuredValue(Intangible):
-    """Structured values are used when the value of a property has a more complex structure than simply being a textual value or a reference to another thing."""
+    """Structured values are used when the value of a property has a more complex structure
+    than simply being a textual value or a reference to another thing."""
 
-    pass
+    type: str = Field(default="StructuredValue", alias="@type")
 
 class CDCPMDRecord(StructuredValue):
-    """A CDCPMDRecord is a data structure representing a record in a CDC tabular data format
-      used for hospital data reporting. See [documentation](/docs/cdc-covid.html) for details, and the linked CDC materials for authoritative
-      definitions used as the source here.
-      """
+    """A CDCPMDRecord is a data structure representing a record in a CDC tabular data
+    format
+          used for hospital data reporting. See [documentation](/docs/cdc-covid.html)
+    for details, and the linked CDC materials for authoritative
+          definitions used as the source here.
+    """
 
+    type: str = Field(default="CDCPMDRecord", alias="@type")
     cvdNumVentUse: Optional[str | float] = Field(default=None)
     cvdNumBedsOcc: Optional[str | float] = Field(default=None)
     datePosted: Optional[datetime | date | str] = Field(default=None)
@@ -1648,67 +1911,95 @@ class CDCPMDRecord(StructuredValue):
     cvdNumVent: Optional[str | float] = Field(default=None)
 
 class CableOrSatelliteService(Service):
-    """A service which provides access to media programming like TV or radio. Access may be via cable or satellite."""
+    """A service which provides access to media programming like TV or radio. Access may be
+    via cable or satellite."""
 
-    pass
+    type: str = Field(default="CableOrSatelliteService", alias="@type")
 
 class CafeOrCoffeeShop(FoodEstablishment):
     """A cafe or coffee shop."""
 
-    pass
+    type: str = Field(default="CafeOrCoffeeShop", alias="@type")
 
 class Campground(LodgingBusiness):
-    """A camping site, campsite, or [[Campground]] is a place used for overnight stay in the outdoors, typically containing individual [[CampingPitch]] locations. \n\n
-In British English a campsite is an area, usually divided into a number of pitches, where people can camp overnight using tents or camper vans or caravans; this British English use of the word is synonymous with the American English expression campground. In American English the term campsite generally means an area where an individual, family, group, or military unit can pitch a tent or park a camper; a campground may contain many campsites (source: Wikipedia, see [https://en.wikipedia.org/wiki/Campsite](https://en.wikipedia.org/wiki/Campsite)).\n\n
+    """A camping site, campsite, or Campground is a place used for overnight stay in the
+    outdoors, typically containing individual CampingPitch locations. nn
+    In British English a campsite is an area, usually divided into a number of pitches,
+    where people can camp overnight using tents or camper vans or caravans; this British
+    English use of the word is synonymous with the American English expression
+    campground. In American English the term campsite generally means an area where an
+    individual, family, group, or military unit can pitch a tent or park a camper; a
+    campground may contain many campsites (source: Wikipedia, see
+    [https://en.wikipedia.org/wiki/Campsite](https://en.wikipedia.org/wiki/Campsite)).nn
+    
+    See also the dedicated [document on the use of schema.org for marking up hotels and
+    other forms of accommodations](/docs/hotels.html).
+    """
 
-See also the dedicated [document on the use of schema.org for marking up hotels and other forms of accommodations](/docs/hotels.html).
-"""
-
-    pass
+    type: str = Field(default="Campground", alias="@type")
 
 class CampingPitch(Accommodation):
-    """A [[CampingPitch]] is an individual place for overnight stay in the outdoors, typically being part of a larger camping site, or [[Campground]].\n\n
-In British English a campsite, or campground, is an area, usually divided into a number of pitches, where people can camp overnight using tents or camper vans or caravans; this British English use of the word is synonymous with the American English expression campground. In American English the term campsite generally means an area where an individual, family, group, or military unit can pitch a tent or park a camper; a campground may contain many campsites.
-(Source: Wikipedia, see [https://en.wikipedia.org/wiki/Campsite](https://en.wikipedia.org/wiki/Campsite).)\n\n
-See also the dedicated [document on the use of schema.org for marking up hotels and other forms of accommodations](/docs/hotels.html).
-"""
+    """A CampingPitch is an individual place for overnight stay in the outdoors, typically
+    being part of a larger camping site, or Campground.nn
+    In British English a campsite, or campground, is an area, usually divided into a
+    number of pitches, where people can camp overnight using tents or camper vans or
+    caravans; this British English use of the word is synonymous with the American
+    English expression campground. In American English the term campsite generally means
+    an area where an individual, family, group, or military unit can pitch a tent or
+    park a camper; a campground may contain many campsites.
+    (Source: Wikipedia, see
+    [https://en.wikipedia.org/wiki/Campsite](https://en.wikipedia.org/wiki/Campsite).)nn
+    See also the dedicated [document on the use of schema.org for marking up hotels and
+    other forms of accommodations](/docs/hotels.html).
+    """
 
-    pass
+    type: str = Field(default="CampingPitch", alias="@type")
 
 class Canal(BodyOfWater):
     """A canal, like the Panama Canal."""
 
-    pass
+    type: str = Field(default="Canal", alias="@type")
 
 class PlanAction(OrganizeAction):
-    """The act of planning the execution of an event/task/action/reservation/plan to a future date."""
+    """The act of planning the execution of an event/task/action/reservation/plan to a
+    future date."""
 
+    type: str = Field(default="PlanAction", alias="@type")
     scheduledTime: Optional[datetime | date | str] = Field(default=None)
 
 class CancelAction(PlanAction):
-    """The act of asserting that a future event/action is no longer going to happen.\n\nRelated actions:\n\n* [[ConfirmAction]]: The antonym of CancelAction."""
+    """The act of asserting that a future event/action is no longer going to
+    happen.nnRelated actions:nn* ConfirmAction: The antonym of CancelAction."""
 
-    pass
+    type: str = Field(default="CancelAction", alias="@type")
 
 class Car(Vehicle):
     """A car is a wheeled, self-powered motor vehicle used for transportation."""
 
+    type: str = Field(default="Car", alias="@type")
     roofLoad: Optional[QuantitativeValue | str] = Field(default=None)
     acrissCode: Optional[str] = Field(default=None)
 
 class CarUsageType(Enumeration):
-    """A value indicating a special usage of a car, e.g. commercial rental, driving school, or as a taxi."""
+    """A value indicating a special usage of a car, e.g. commercial rental, driving school,
+    or as a taxi."""
 
-    pass
+    type: str = Field(default="CarUsageType", alias="@type")
 
 class Casino(EntertainmentBusiness):
     """A casino."""
 
-    pass
+    type: str = Field(default="Casino", alias="@type")
 
 class DefinedTerm(Intangible):
-    """A word, name, acronym, phrase, etc. with a formal definition. Often used in the context of category or subject classification, glossaries or dictionaries, product or creative work types, etc. Use the name property for the term being defined, use termCode if the term has an alpha-numeric code allocated, use description to provide the definition of the term. Use the about property to specify what the term is about."""
+    """A word, name, acronym, phrase, etc. with a formal definition. Often used in the
+    context of category or subject classification, glossaries or dictionaries, product
+    or creative work types, etc. Use the name property for the term being defined, use
+    termCode if the term has an alpha-numeric code allocated, use description to provide
+    the definition of the term. Use the about property to specify what the term is
+    about."""
 
+    type: str = Field(default="DefinedTerm", alias="@type")
     about: Optional[Thing | str] = Field(default=None)
     inDefinedTermSet: Optional[AnyUrl | str] = Field(default=None)
     termCode: Optional[str] = Field(default=None)
@@ -1716,37 +2007,53 @@ class DefinedTerm(Intangible):
 class CategoryCode(DefinedTerm):
     """A Category Code."""
 
+    type: str = Field(default="CategoryCode", alias="@type")
     codeValue: Optional[str] = Field(default=None)
     inCodeSet: Optional[AnyUrl | str] = Field(default=None)
 
 class DefinedTermSet(CreativeWork):
-    """A set of defined terms, for example a set of categories or a classification scheme, a glossary, dictionary or enumeration. Use the about property to specify what the term set is about."""
+    """A set of defined terms, for example a set of categories or a classification scheme,
+    a glossary, dictionary or enumeration. Use the about property to specify what the
+    term set is about."""
 
+    type: str = Field(default="DefinedTermSet", alias="@type")
     hasDefinedTerm: Optional[str | DefinedTerm] = Field(default=None)
 
 class CategoryCodeSet(DefinedTermSet):
     """A set of Category Code values."""
 
+    type: str = Field(default="CategoryCodeSet", alias="@type")
     hasCategoryCode: Optional[CategoryCode | str] = Field(default=None)
 
 class Church(PlaceOfWorship):
     """A church."""
 
-    pass
+    type: str = Field(default="Church", alias="@type")
 
 class CatholicChurch(Church):
     """A Catholic church."""
 
-    pass
+    type: str = Field(default="CatholicChurch", alias="@type")
 
 class Cemetery(CivicStructure):
     """A graveyard."""
 
-    pass
+    type: str = Field(default="Cemetery", alias="@type")
 
 class Certification(CreativeWork):
-    """A Certification is an official and authoritative statement about a subject, for example a product, service, person, or organization. A certification is typically issued by an indendent certification body, for example a professional organization or government. It formally attests certain characteristics about the subject, for example Organizations can be ISO certified, Food products can be certified Organic or Vegan, a Person can be a certified professional, a Place can be certified for food processing. There are certifications for many domains: regulatory, organizational, recycling, food, efficiency, educational, ecological, etc. A certification is a form of credential, as are accreditations and licenses. Mapped from the [gs1:CertificationDetails](https://www.gs1.org/voc/CertificationDetails) class in the GS1 Web Vocabulary."""
+    """A Certification is an official and authoritative statement about a subject, for
+    example a product, service, person, or organization. A certification is typically
+    issued by an indendent certification body, for example a professional organization
+    or government. It formally attests certain characteristics about the subject, for
+    example Organizations can be ISO certified, Food products can be certified Organic
+    or Vegan, a Person can be a certified professional, a Place can be certified for
+    food processing. There are certifications for many domains: regulatory,
+    organizational, recycling, food, efficiency, educational, ecological, etc. A
+    certification is a form of credential, as are accreditations and licenses. Mapped
+    from the [gs1:CertificationDetails](https://www.gs1.org/voc/CertificationDetails)
+    class in the GS1 Web Vocabulary."""
 
+    type: str = Field(default="Certification", alias="@type")
     logo: Optional[AnyUrl | str] = Field(default=None)
     certificationIdentification: Optional[str] = Field(default=None)
     auditDate: Optional[datetime | date | str] = Field(default=None)
@@ -1760,43 +2067,63 @@ class Certification(CreativeWork):
 class CertificationStatusEnumeration(Enumeration):
     """Enumerates the different statuses of a Certification (Active and Inactive)."""
 
-    pass
+    type: str = Field(default="CertificationStatusEnumeration", alias="@type")
 
 class Chapter(CreativeWork):
-    """One of the sections into which a book is divided. A chapter usually has a section number or a name."""
+    """One of the sections into which a book is divided. A chapter usually has a section
+    number or a name."""
 
+    type: str = Field(default="Chapter", alias="@type")
     pagination: Optional[str] = Field(default=None)
     pageEnd: Optional[int | str] = Field(default=None)
     pageStart: Optional[int | str] = Field(default=None)
 
 class FindAction(Action):
-    """The act of finding an object.\n\nRelated actions:\n\n* [[SearchAction]]: FindAction is generally lead by a SearchAction, but not necessarily."""
+    """The act of finding an object.nnRelated actions:nn* SearchAction: FindAction is
+    generally lead by a SearchAction, but not necessarily."""
 
-    pass
+    type: str = Field(default="FindAction", alias="@type")
 
 class CheckAction(FindAction):
-    """An agent inspects, determines, investigates, inquires, or examines an object's accuracy, quality, condition, or state."""
+    """An agent inspects, determines, investigates, inquires, or examines an object's
+    accuracy, quality, condition, or state."""
 
-    pass
+    type: str = Field(default="CheckAction", alias="@type")
 
 class CheckInAction(CommunicateAction):
-    """The act of an agent communicating (service provider, social media, etc) their arrival by registering/confirming for a previously reserved service (e.g. flight check-in) or at a place (e.g. hotel), possibly resulting in a result (boarding pass, etc).\n\nRelated actions:\n\n* [[CheckOutAction]]: The antonym of CheckInAction.\n* [[ArriveAction]]: Unlike ArriveAction, CheckInAction implies that the agent is informing/confirming the start of a previously reserved service.\n* [[ConfirmAction]]: Unlike ConfirmAction, CheckInAction implies that the agent is informing/confirming the *start* of a previously reserved service rather than its validity/existence."""
+    """The act of an agent communicating (service provider, social media, etc) their
+    arrival by registering/confirming for a previously reserved service (e.g. flight
+    check-in) or at a place (e.g. hotel), possibly resulting in a result (boarding pass,
+    etc).nnRelated actions:nn* CheckOutAction: The antonym of CheckInAction.n*
+    ArriveAction: Unlike ArriveAction, CheckInAction implies that the agent is
+    informing/confirming the start of a previously reserved service.n* ConfirmAction:
+    Unlike ConfirmAction, CheckInAction implies that the agent is informing/confirming
+    the *start* of a previously reserved service rather than its validity/existence."""
 
-    pass
+    type: str = Field(default="CheckInAction", alias="@type")
 
 class CheckOutAction(CommunicateAction):
-    """The act of an agent communicating (service provider, social media, etc) their departure of a previously reserved service (e.g. flight check-in) or place (e.g. hotel).\n\nRelated actions:\n\n* [[CheckInAction]]: The antonym of CheckOutAction.\n* [[DepartAction]]: Unlike DepartAction, CheckOutAction implies that the agent is informing/confirming the end of a previously reserved service.\n* [[CancelAction]]: Unlike CancelAction, CheckOutAction implies that the agent is informing/confirming the end of a previously reserved service."""
+    """The act of an agent communicating (service provider, social media, etc) their
+    departure of a previously reserved service (e.g. flight check-in) or place (e.g.
+    hotel).nnRelated actions:nn* CheckInAction: The antonym of CheckOutAction.n*
+    DepartAction: Unlike DepartAction, CheckOutAction implies that the agent is
+    informing/confirming the end of a previously reserved service.n* CancelAction:
+    Unlike CancelAction, CheckOutAction implies that the agent is informing/confirming
+    the end of a previously reserved service."""
 
-    pass
+    type: str = Field(default="CheckOutAction", alias="@type")
 
 class CheckoutPage(WebPage):
     """Web page type: Checkout page."""
 
-    pass
+    type: str = Field(default="CheckoutPage", alias="@type")
 
 class ChemicalSubstance(BioChemEntity):
-    """A chemical substance is 'a portion of matter of constant composition, composed of molecular entities of the same type or of different types' (source: [ChEBI:59999](https://www.ebi.ac.uk/chebi/searchId.do?chebiId=59999))."""
+    """A chemical substance is 'a portion of matter of constant composition, composed of
+    molecular entities of the same type or of different types' (source:
+    [ChEBI:59999](https://www.ebi.ac.uk/chebi/searchId.do?chebiId=59999))."""
 
+    type: str = Field(default="ChemicalSubstance", alias="@type")
     potentialUse: Any = Field(default=None)
     chemicalRole: Any = Field(default=None)
     chemicalComposition: Optional[str] = Field(default=None)
@@ -1804,42 +2131,53 @@ class ChemicalSubstance(BioChemEntity):
 class ChildCare(LocalBusiness):
     """A Childcare center."""
 
-    pass
+    type: str = Field(default="ChildCare", alias="@type")
 
 class ChildrensEvent(Event):
     """Event type: Children's event."""
 
-    pass
+    type: str = Field(default="ChildrensEvent", alias="@type")
 
 class ChooseAction(AssessAction):
-    """The act of expressing a preference from a set of options or a large or unbounded set of choices/options."""
+    """The act of expressing a preference from a set of options or a large or unbounded set
+    of choices/options."""
 
+    type: str = Field(default="ChooseAction", alias="@type")
     option: Optional[Thing | str] = Field(default=None)
     actionOption: Optional[Thing | str] = Field(default=None)
 
 class City(AdministrativeArea):
     """A city or town."""
 
-    pass
+    type: str = Field(default="City", alias="@type")
 
 class GovernmentBuilding(CivicStructure):
     """A government building."""
 
-    pass
+    type: str = Field(default="GovernmentBuilding", alias="@type")
 
 class CityHall(GovernmentBuilding):
     """A city hall."""
 
-    pass
+    type: str = Field(default="CityHall", alias="@type")
 
 class Claim(CreativeWork):
-    """A [[Claim]] in Schema.org represents a specific, factually-oriented claim that could be the [[itemReviewed]] in a [[ClaimReview]]. The content of a claim can be summarized with the [[text]] property. Variations on well known claims can have their common identity indicated via [[sameAs]] links, and summarized with a [[name]]. Ideally, a [[Claim]] description includes enough contextual information to minimize the risk of ambiguity or inclarity. In practice, many claims are better understood in the context in which they appear or the interpretations provided by claim reviews.
+    """A Claim in Schema.org represents a specific, factually-oriented claim that could be
+    the itemReviewed in a ClaimReview. The content of a claim can be summarized with the
+    text property. Variations on well known claims can have their common identity
+    indicated via sameAs links, and summarized with a name. Ideally, a Claim description
+    includes enough contextual information to minimize the risk of ambiguity or
+    inclarity. In practice, many claims are better understood in the context in which
+    they appear or the interpretations provided by claim reviews.
+    
+      Beyond ClaimReview, the Claim type can be associated with related creative works -
+    for example a ScholarlyArticle or Question might be about some Claim.
+    
+      At this time, Schema.org does not define any types of relationship between claims.
+    This is a natural area for future exploration.
+    """
 
-  Beyond [[ClaimReview]], the Claim type can be associated with related creative works - for example a [[ScholarlyArticle]] or [[Question]] might be [[about]] some [[Claim]].
-
-  At this time, Schema.org does not define any types of relationship between claims. This is a natural area for future exploration.
-  """
-
+    type: str = Field(default="Claim", alias="@type")
     claimInterpreter: Optional[Organization | Person | str] = Field(default=None)
     firstAppearance: Optional[CreativeWork | str] = Field(default=None)
     appearance: Optional[CreativeWork | str] = Field(default=None)
@@ -1847,6 +2185,7 @@ class Claim(CreativeWork):
 class Review(CreativeWork):
     """A review of an item - for example, of a restaurant, movie, or store."""
 
+    type: str = Field(default="Review", alias="@type")
     reviewBody: Optional[str] = Field(default=None)
     reviewAspect: Optional[StructuredValue | str] = Field(default=None)
     associatedClaimReview: Any = Field(default=None)
@@ -1858,18 +2197,22 @@ class Review(CreativeWork):
     associatedMediaReview: Any = Field(default=None)
 
 class ClaimReview(Review):
-    """A fact-checking review of claims made (or reported) in some creative work (referenced via itemReviewed)."""
+    """A fact-checking review of claims made (or reported) in some creative work
+    (referenced via itemReviewed)."""
 
+    type: str = Field(default="ClaimReview", alias="@type")
     claimReviewed: Optional[str] = Field(default=None)
 
 class Class(Intangible):
     """A class, also often called a 'Type'; equivalent to rdfs:Class."""
 
+    type: str = Field(default="Class", alias="@type")
     supersededBy: Optional[Enumeration | str] = Field(default=None)
 
 class Clip(CreativeWork):
     """A short TV or radio program or a segment/part of a program."""
 
+    type: str = Field(default="Clip", alias="@type")
     startOffset: Optional[str | float] = Field(default=None)
     partOfSeason: Optional[CreativeWorkSeason | str] = Field(default=None)
     actor: Optional[Person | PerformingGroup | str] = Field(default=None)
@@ -1885,48 +2228,54 @@ class Clip(CreativeWork):
 class ClothingStore(Store):
     """A clothing store."""
 
-    pass
+    type: str = Field(default="ClothingStore", alias="@type")
 
 class Code(CreativeWork):
-    """Computer programming source code. Example: Full (compile ready) solutions, code snippet samples, scripts, templates."""
+    """Computer programming source code. Example: Full (compile ready) solutions, code
+    snippet samples, scripts, templates."""
 
-    pass
+    type: str = Field(default="Code", alias="@type")
 
 class Collection(CreativeWork):
     """A collection of items, e.g. creative works or products."""
 
+    type: str = Field(default="Collection", alias="@type")
     collectionSize: Optional[int | str] = Field(default=None)
 
 class CollectionPage(WebPage):
     """Web page type: Collection page."""
 
-    pass
+    type: str = Field(default="CollectionPage", alias="@type")
 
 class EducationalOrganization(CivicStructure):
     """An educational organization."""
 
+    type: str = Field(default="EducationalOrganization", alias="@type")
     alumni: Any = Field(default=None)
 
 class CollegeOrUniversity(EducationalOrganization):
     """A college, university, or other third-level educational institution."""
 
-    pass
+    type: str = Field(default="CollegeOrUniversity", alias="@type")
 
 class ComedyClub(EntertainmentBusiness):
     """A comedy club."""
 
-    pass
+    type: str = Field(default="ComedyClub", alias="@type")
 
 class ComedyEvent(Event):
     """Event type: Comedy event."""
 
-    pass
+    type: str = Field(default="ComedyEvent", alias="@type")
 
 class ComicStory(CreativeWork):
     """The term "story" is any indivisible, re-printable
-    	unit of a comic, including the interior stories, covers, and backmatter. Most
-    	comics have at least two stories: a cover (ComicCoverArt) and an interior story."""
+            unit of a comic, including the interior stories, covers, and backmatter.
+    Most
+            comics have at least two stories: a cover (ComicCoverArt) and an interior
+    story."""
 
+    type: str = Field(default="ComicStory", alias="@type")
     inker: Optional[Person | str] = Field(default=None)
     penciler: Optional[Person | str] = Field(default=None)
     artist: Optional[Person | str] = Field(default=None)
@@ -1936,11 +2285,15 @@ class ComicStory(CreativeWork):
 class ComicCoverArt(ComicStory):
     """The artwork on the cover of a comic."""
 
-    pass
+    type: str = Field(default="ComicCoverArt", alias="@type")
 
 class PublicationIssue(CreativeWork):
-    """A part of a successively published publication such as a periodical or publication volume, often numbered, usually containing a grouping of works such as articles.\n\nSee also [blog post](https://blog-schema.org/2014/09/02/schema-org-support-for-bibliographic-relationships-and-periodicals/)."""
+    """A part of a successively published publication such as a periodical or publication
+    volume, often numbered, usually containing a grouping of works such as
+    articles.nnSee also [blog post](https://blog-schema.org/2014/09/02/schema-org-
+    support-for-bibliographic-relationships-and-periodicals/)."""
 
+    type: str = Field(default="PublicationIssue", alias="@type")
     pagination: Optional[str] = Field(default=None)
     issueNumber: Optional[int | str] = Field(default=None)
     pageEnd: Optional[int | str] = Field(default=None)
@@ -1948,12 +2301,13 @@ class PublicationIssue(CreativeWork):
 
 class ComicIssue(PublicationIssue):
     """Individual comic issues are serially published as
-    	part of a larger series. For the sake of consistency, even one-shot issues
-    	belong to a series comprised of a single issue. All comic issues can be
-    	uniquely identified by: the combination of the name and volume number of the
-    	series to which the issue belongs; the issue number; and the variant
-    	description of the issue (if any)."""
+            part of a larger series. For the sake of consistency, even one-shot issues
+            belong to a series comprised of a single issue. All comic issues can be
+            uniquely identified by: the combination of the name and volume number of the
+            series to which the issue belongs; the issue number; and the variant
+            description of the issue (if any)."""
 
+    type: str = Field(default="ComicIssue", alias="@type")
     inker: Optional[Person | str] = Field(default=None)
     penciler: Optional[Person | str] = Field(default=None)
     artist: Optional[Person | str] = Field(default=None)
@@ -1962,25 +2316,31 @@ class ComicIssue(PublicationIssue):
     variantCover: Optional[str] = Field(default=None)
 
 class Periodical(CreativeWorkSeries):
-    """A publication in any medium issued in successive parts bearing numerical or chronological designations and intended to continue indefinitely, such as a magazine, scholarly journal, or newspaper.\n\nSee also [blog post](https://blog.schema.org/2014/09/02/schema-org-support-for-bibliographic-relationships-and-periodicals/)."""
+    """A publication in any medium issued in successive parts bearing numerical or
+    chronological designations and intended to continue indefinitely, such as a
+    magazine, scholarly journal, or newspaper.nnSee also [blog
+    post](https://blog.schema.org/2014/09/02/schema-org-support-for-bibliographic-
+    relationships-and-periodicals/)."""
 
-    pass
+    type: str = Field(default="Periodical", alias="@type")
 
 class ComicSeries(Periodical):
     """A sequential publication of comic stories under a
-    	unifying title, for example "The Amazing Spider-Man" or "Groo the
-    	Wanderer"."""
+            unifying title, for example "The Amazing Spider-Man" or "Groo the
+            Wanderer"."""
 
-    pass
+    type: str = Field(default="ComicSeries", alias="@type")
 
 class CommentAction(CommunicateAction):
     """The act of generating a comment about a subject."""
 
+    type: str = Field(default="CommentAction", alias="@type")
     resultComment: Optional[Comment | str] = Field(default=None)
 
 class Dataset(CreativeWork):
     """A body of structured information describing some topic(s) of interest."""
 
+    type: str = Field(default="Dataset", alias="@type")
     distribution: Any = Field(default=None)
     measurementTechnique: Optional[AnyUrl | str] = Field(default=None)
     measurementMethod: Optional[AnyUrl | str] = Field(default=None)
@@ -1994,18 +2354,29 @@ class Dataset(CreativeWork):
 class DataFeed(Dataset):
     """A single feed providing structured information about one or more entities or topics."""
 
+    type: str = Field(default="DataFeed", alias="@type")
     dataFeedElement: Optional[Thing | str] = Field(default=None)
 
 class CompleteDataFeed(DataFeed):
-    """A [[CompleteDataFeed]] is a [[DataFeed]] whose standard representation includes content for every item currently in the feed.
+    """A CompleteDataFeed is a DataFeed whose standard representation includes content for
+    every item currently in the feed.
+    
+    This is the equivalent of Atom's element as defined in Feed Paging and Archiving
+    [RFC 5005](https://tools.ietf.org/html/rfc5005), for example (and as defined for
+    Atom), when using data from a feed that represents a collection of items that varies
+    over time (e.g. "Top Twenty Records") there is no need to have newer entries mixed
+    in alongside older, obsolete entries. By marking this feed as a CompleteDataFeed,
+    old entries can be safely discarded when the feed is refreshed, since we can assume
+    the feed has provided descriptions for all current items."""
 
-This is the equivalent of Atom's element as defined in Feed Paging and Archiving [RFC 5005](https://tools.ietf.org/html/rfc5005), for example (and as defined for Atom), when using data from a feed that represents a collection of items that varies over time (e.g. "Top Twenty Records") there is no need to have newer entries mixed in alongside older, obsolete entries. By marking this feed as a CompleteDataFeed, old entries can be safely discarded when the feed is refreshed, since we can assume the feed has provided descriptions for all current items."""
-
-    pass
+    type: str = Field(default="CompleteDataFeed", alias="@type")
 
 class PriceSpecification(StructuredValue):
-    """A structured value representing a price or price range. Typically, only the subclasses of this type are used for markup. It is recommended to use [[MonetaryAmount]] to describe independent amounts of money such as a salary, credit card limits, etc."""
+    """A structured value representing a price or price range. Typically, only the
+    subclasses of this type are used for markup. It is recommended to use MonetaryAmount
+    to describe independent amounts of money such as a salary, credit card limits, etc."""
 
+    type: str = Field(default="PriceSpecification", alias="@type")
     minPrice: Optional[str | float] = Field(default=None)
     valueAddedTaxIncluded: Optional[bool | str] = Field(default=None)
     validForMemberTier: Any = Field(default=None)
@@ -2019,62 +2390,79 @@ class PriceSpecification(StructuredValue):
     eligibleQuantity: Optional[QuantitativeValue | str] = Field(default=None)
 
 class CompoundPriceSpecification(PriceSpecification):
-    """A compound price specification is one that bundles multiple prices that all apply in combination for different dimensions of consumption. Use the name property of the attached unit price specification for indicating the dimension of a price component (e.g. "electricity" or "final cleaning")."""
+    """A compound price specification is one that bundles multiple prices that all apply in
+    combination for different dimensions of consumption. Use the name property of the
+    attached unit price specification for indicating the dimension of a price component
+    (e.g. "electricity" or "final cleaning")."""
 
+    type: str = Field(default="CompoundPriceSpecification", alias="@type")
     priceComponent: Optional[PriceSpecification | str] = Field(default=None)
     priceType: Optional[str] = Field(default=None)
 
 class ComputerLanguage(Intangible):
-    """This type covers computer programming languages such as Scheme and Lisp, as well as other language-like computer representations. Natural languages are best represented with the [[Language]] type."""
+    """This type covers computer programming languages such as Scheme and Lisp, as well as
+    other language-like computer representations. Natural languages are best represented
+    with the Language type."""
 
-    pass
+    type: str = Field(default="ComputerLanguage", alias="@type")
 
 class ComputerStore(Store):
     """A computer store."""
 
-    pass
+    type: str = Field(default="ComputerStore", alias="@type")
 
 class ConferenceEvent(Event):
     """Event type: Conference event."""
 
-    pass
+    type: str = Field(default="ConferenceEvent", alias="@type")
 
 class InformAction(CommunicateAction):
-    """The act of notifying someone of information pertinent to them, with no expectation of a response."""
+    """The act of notifying someone of information pertinent to them, with no expectation
+    of a response."""
 
+    type: str = Field(default="InformAction", alias="@type")
     event: Optional[Event | str] = Field(default=None)
 
 class ConfirmAction(InformAction):
-    """The act of notifying someone that a future event/action is going to happen as expected.\n\nRelated actions:\n\n* [[CancelAction]]: The antonym of ConfirmAction."""
+    """The act of notifying someone that a future event/action is going to happen as
+    expected.nnRelated actions:nn* CancelAction: The antonym of ConfirmAction."""
 
-    pass
+    type: str = Field(default="ConfirmAction", alias="@type")
 
 class Consortium(Organization):
-    """A Consortium is a membership [[Organization]] whose members are typically Organizations."""
+    """A Consortium is a membership Organization whose members are typically Organizations."""
 
-    pass
+    type: str = Field(default="Consortium", alias="@type")
 
 class ConstraintNode(Intangible):
-    """The ConstraintNode type is provided to support usecases in which a node in a structured data graph is described with properties which appear to describe a single entity, but are being used in a situation where they serve a more abstract purpose. A [[ConstraintNode]] can be described using [[constraintProperty]] and [[numConstraints]]. These constraint properties can serve a
-    variety of purposes, and their values may sometimes be understood to indicate sets of possible values rather than single, exact and specific values."""
+    """The ConstraintNode type is provided to support usecases in which a node in a
+    structured data graph is described with properties which appear to describe a single
+    entity, but are being used in a situation where they serve a more abstract purpose.
+    A ConstraintNode can be described using constraintProperty and numConstraints. These
+    constraint properties can serve a
+        variety of purposes, and their values may sometimes be understood to indicate
+    sets of possible values rather than single, exact and specific values."""
 
+    type: str = Field(default="ConstraintNode", alias="@type")
     constraintProperty: Optional[AnyUrl | str] = Field(default=None)
     numConstraints: Optional[int | str] = Field(default=None)
 
 class ConsumeAction(Action):
     """The act of ingesting information/resources/food."""
 
+    type: str = Field(default="ConsumeAction", alias="@type")
     actionAccessibilityRequirement: Any = Field(default=None)
     expectsAcceptanceOf: Any = Field(default=None)
 
 class ContactPage(WebPage):
     """Web page type: Contact page."""
 
-    pass
+    type: str = Field(default="ContactPage", alias="@type")
 
 class ContactPoint(StructuredValue):
     """A contact point&#x2014;for example, a Customer Complaints department."""
 
+    type: str = Field(default="ContactPoint", alias="@type")
     telephone: Optional[str] = Field(default=None)
     hoursAvailable: Any = Field(default=None)
     availableLanguage: Optional[str | Language] = Field(default=None)
@@ -2089,31 +2477,35 @@ class ContactPoint(StructuredValue):
 class ContactPointOption(Enumeration):
     """Enumerated options related to a ContactPoint."""
 
-    pass
+    type: str = Field(default="ContactPointOption", alias="@type")
 
 class Continent(Landform):
     """One of the continents (for example, Europe or Africa)."""
 
-    pass
+    type: str = Field(default="Continent", alias="@type")
 
 class ConvenienceStore(Store):
     """A convenience store."""
 
-    pass
+    type: str = Field(default="ConvenienceStore", alias="@type")
 
 class Conversation(CreativeWork):
-    """One or more messages between organizations or people on a particular topic. Individual messages can be linked to the conversation with isPartOf or hasPart properties."""
+    """One or more messages between organizations or people on a particular topic.
+    Individual messages can be linked to the conversation with isPartOf or hasPart
+    properties."""
 
-    pass
+    type: str = Field(default="Conversation", alias="@type")
 
 class CreateAction(Action):
-    """The act of deliberately creating/producing/generating/building a result out of the agent."""
+    """The act of deliberately creating/producing/generating/building a result out of the
+    agent."""
 
-    pass
+    type: str = Field(default="CreateAction", alias="@type")
 
 class CookAction(CreateAction):
     """The act of producing/preparing food."""
 
+    type: str = Field(default="CookAction", alias="@type")
     foodEvent: Optional[FoodEvent | str] = Field(default=None)
     foodEstablishment: Optional[FoodEstablishment | Place | str] = Field(default=None)
     recipe: Any = Field(default=None)
@@ -2121,35 +2513,47 @@ class CookAction(CreateAction):
 class Cooperative(Organization):
     """An organization that is a joint project of multiple organizations or persons."""
 
-    pass
+    type: str = Field(default="Cooperative", alias="@type")
 
 class Corporation(Organization):
     """Organization: A business corporation."""
 
+    type: str = Field(default="Corporation", alias="@type")
     tickerSymbol: Optional[str] = Field(default=None)
 
 class CorrectionComment(Comment):
-    """A [[comment]] that corrects [[CreativeWork]]."""
+    """A comment that corrects CreativeWork."""
 
-    pass
+    type: str = Field(default="CorrectionComment", alias="@type")
 
 class Country(AdministrativeArea):
     """A country."""
 
-    pass
+    type: str = Field(default="Country", alias="@type")
 
 class LearningResource(CreativeWork):
-    """The LearningResource type can be used to indicate [[CreativeWork]]s (whether physical or digital) that have a particular and explicit orientation towards learning, education, skill acquisition, and other educational purposes.
+    """The LearningResource type can be used to indicate CreativeWorks (whether physical or
+    digital) that have a particular and explicit orientation towards learning,
+    education, skill acquisition, and other educational purposes.
+    
+    LearningResource is expected to be used as an addition to a primary type such as
+    Book, VideoObject, Product etc.
+    
+    EducationEvent serves a similar purpose for event-like things (e.g. a Trip). A
+    LearningResource may be created as a result of an EducationEvent, for example by
+    recording one."""
 
-[[LearningResource]] is expected to be used as an addition to a primary type such as [[Book]], [[VideoObject]], [[Product]] etc.
-
-[[EducationEvent]] serves a similar purpose for event-like things (e.g. a [[Trip]]). A [[LearningResource]] may be created as a result of an [[EducationEvent]], for example by recording one."""
-
+    type: str = Field(default="LearningResource", alias="@type")
     competencyRequired: Optional[AnyUrl | str] = Field(default=None)
 
 class Course(LearningResource):
-    """A description of an educational course which may be offered as distinct instances which take place at different times or take place at different locations, or be offered through different media or modes of study. An educational course is a sequence of one or more educational events and/or creative works which aims to build knowledge, competence or ability of learners."""
+    """A description of an educational course which may be offered as distinct instances
+    which take place at different times or take place at different locations, or be
+    offered through different media or modes of study. An educational course is a
+    sequence of one or more educational events and/or creative works which aims to build
+    knowledge, competence or ability of learners."""
 
+    type: str = Field(default="Course", alias="@type")
     totalHistoricalEnrollment: Optional[int | str] = Field(default=None)
     availableLanguage: Optional[str | Language] = Field(default=None)
     coursePrerequisites: Optional[str] = Field(default=None)
@@ -2162,8 +2566,11 @@ class Course(LearningResource):
     financialAidEligible: Optional[str] = Field(default=None)
 
 class CourseInstance(Event):
-    """An instance of a [[Course]] which is distinct from other instances because it is offered at a different time or location or through different media or modes of study or to a specific section of students."""
+    """An instance of a Course which is distinct from other instances because it is offered
+    at a different time or location or through different media or modes of study or to a
+    specific section of students."""
 
+    type: str = Field(default="CourseInstance", alias="@type")
     courseSchedule: Optional[Schedule | str] = Field(default=None)
     courseWorkload: Optional[str] = Field(default=None)
     courseMode: Optional[AnyUrl | str] = Field(default=None)
@@ -2172,11 +2579,12 @@ class CourseInstance(Event):
 class Courthouse(GovernmentBuilding):
     """A courthouse."""
 
-    pass
+    type: str = Field(default="Courthouse", alias="@type")
 
 class VisualArtwork(CreativeWork):
     """A work of art that is primarily visual in character."""
 
+    type: str = Field(default="VisualArtwork", alias="@type")
     inker: Any = Field(default=None)
     penciler: Any = Field(default=None)
     artMedium: Optional[AnyUrl | str] = Field(default=None)
@@ -2195,31 +2603,40 @@ class VisualArtwork(CreativeWork):
 class CoverArt(VisualArtwork):
     """The artwork on the outer surface of a CreativeWork."""
 
-    pass
+    type: str = Field(default="CoverArt", alias="@type")
 
 class MedicalBusiness(LocalBusiness):
-    """A particular physical or virtual business of an organization for medical purposes. Examples of MedicalBusiness include different businesses run by health professionals."""
+    """A particular physical or virtual business of an organization for medical purposes.
+    Examples of MedicalBusiness include different businesses run by health
+    professionals."""
 
-    pass
+    type: str = Field(default="MedicalBusiness", alias="@type")
 
 class MedicalClinic(MedicalBusiness):
-    """A facility, often associated with a hospital or medical school, that is devoted to the specific diagnosis and/or healthcare. Previously limited to outpatients but with evolution it may be open to inpatients as well."""
+    """A facility, often associated with a hospital or medical school, that is devoted to
+    the specific diagnosis and/or healthcare. Previously limited to outpatients but with
+    evolution it may be open to inpatients as well."""
 
+    type: str = Field(default="MedicalClinic", alias="@type")
     availableService: Optional[MedicalProcedure | MedicalTest | MedicalTherapy | str] = Field(default=None)
     medicalSpecialty: Optional[MedicalSpecialty | str] = Field(default=None)
 
 class CovidTestingFacility(MedicalClinic):
-    """A CovidTestingFacility is a [[MedicalClinic]] where testing for the COVID-19 Coronavirus
-      disease is available. If the facility is being made available from an established [[Pharmacy]], [[Hotel]], or other
-      non-medical organization, multiple types can be listed. This makes it easier to re-use existing schema.org information
-      about that place, e.g. contact info, address, opening hours. Note that in an emergency, such information may not always be reliable.
-      """
+    """A CovidTestingFacility is a MedicalClinic where testing for the COVID-19 Coronavirus
+          disease is available. If the facility is being made available from an
+    established Pharmacy, Hotel, or other
+          non-medical organization, multiple types can be listed. This makes it easier
+    to re-use existing schema.org information
+          about that place, e.g. contact info, address, opening hours. Note that in an
+    emergency, such information may not always be reliable.
+    """
 
-    pass
+    type: str = Field(default="CovidTestingFacility", alias="@type")
 
 class CreativeWorkSeason(CreativeWork):
     """A media season, e.g. TV, radio, video game etc."""
 
+    type: str = Field(default="CreativeWorkSeason", alias="@type")
     episodes: Any = Field(default=None)
     actor: Any = Field(default=None)
     partOfSeries: Optional[CreativeWorkSeries | str] = Field(default=None)
@@ -2233,109 +2650,148 @@ class CreativeWorkSeason(CreativeWork):
     trailer: Any = Field(default=None)
 
 class Credential(CreativeWork):
-    """A credential is a certificate that is used to verify the identity of a person or entity."""
+    """A credential is a certificate that is used to verify the identity of a person or
+    entity."""
 
+    type: str = Field(default="Credential", alias="@type")
     validFor: Optional[timedelta | str] = Field(default=None)
     credentialCategory: Optional[AnyUrl | str] = Field(default=None)
     validIn: Any = Field(default=None)
     recognizedBy: Optional[Organization | str] = Field(default=None)
 
 class PaymentMethod(Intangible):
-    """A payment method is a standardized procedure for transferring the monetary amount for a purchase. Payment methods are characterized by the legal and technical structures used, and by the organization or group carrying out the transaction. The following legacy values should be accepted: \n\n* http://purl.org/goodrelations/v1#ByBankTransferInAdvance\n* http://purl.org/goodrelations/v1#ByInvoice\n* http://purl.org/goodrelations/v1#Cash\n* http://purl.org/goodrelations/v1#CheckInAdvance\n* http://purl.org/goodrelations/v1#COD\n* http://purl.org/goodrelations/v1#DirectDebit\n* http://purl.org/goodrelations/v1#GoogleCheckout\n* http://purl.org/goodrelations/v1#PayPal\n* http://purl.org/goodrelations/v1#PaySwarm\n\nStructured values, or [UNCE payment means](https://vocabulary.uncefact.org/PaymentMeans) are recommended or for newer annotations."""
+    """A payment method is a standardized procedure for transferring the monetary amount
+    for a purchase. Payment methods are characterized by the legal and technical
+    structures used, and by the organization or group carrying out the transaction. The
+    following legacy values should be accepted: nn*
+    http://purl.org/goodrelations/v1#ByBankTransferInAdvancen*
+    http://purl.org/goodrelations/v1#ByInvoicen* http://purl.org/goodrelations/v1#Cashn*
+    http://purl.org/goodrelations/v1#CheckInAdvancen*
+    http://purl.org/goodrelations/v1#CODn*
+    http://purl.org/goodrelations/v1#DirectDebitn*
+    http://purl.org/goodrelations/v1#GoogleCheckoutn*
+    http://purl.org/goodrelations/v1#PayPaln*
+    http://purl.org/goodrelations/v1#PaySwarmnnStructured values, or [UNCE payment
+    means](https://vocabulary.uncefact.org/PaymentMeans) are recommended or for newer
+    annotations."""
 
+    type: str = Field(default="PaymentMethod", alias="@type")
     paymentMethodType: Any = Field(default=None)
 
 class PaymentCard(PaymentMethod):
-    """A payment method using a credit, debit, store or other card to associate the payment with an account."""
+    """A payment method using a credit, debit, store or other card to associate the payment
+    with an account."""
 
+    type: str = Field(default="PaymentCard", alias="@type")
     floorLimit: Optional[MonetaryAmount | str] = Field(default=None)
     monthlyMinimumRepaymentAmount: Optional[MonetaryAmount | float | str] = Field(default=None)
     cashBack: Optional[float | bool | str] = Field(default=None)
     contactlessPayment: Optional[bool | str] = Field(default=None)
 
 class CreditCard(PaymentCard):
-    """A card payment method of a particular brand or name.  Used to mark up a particular payment method and/or the financial product/service that supplies the card account.\n\nCommonly used values:\n\n* http://purl.org/goodrelations/v1#AmericanExpress\n* http://purl.org/goodrelations/v1#DinersClub\n* http://purl.org/goodrelations/v1#Discover\n* http://purl.org/goodrelations/v1#JCB\n* http://purl.org/goodrelations/v1#MasterCard\n* http://purl.org/goodrelations/v1#VISA
-       """
+    """A card payment method of a particular brand or name.  Used to mark up a particular
+    payment method and/or the financial product/service that supplies the card
+    account.nnCommonly used values:nn*
+    http://purl.org/goodrelations/v1#AmericanExpressn*
+    http://purl.org/goodrelations/v1#DinersClubn*
+    http://purl.org/goodrelations/v1#Discovern* http://purl.org/goodrelations/v1#JCBn*
+    http://purl.org/goodrelations/v1#MasterCardn* http://purl.org/goodrelations/v1#VISA
+    """
 
-    pass
+    type: str = Field(default="CreditCard", alias="@type")
 
 class Crematorium(CivicStructure):
     """A crematorium."""
 
-    pass
+    type: str = Field(default="Crematorium", alias="@type")
 
 class CriticReview(Review):
-    """A [[CriticReview]] is a more specialized form of Review written or published by a source that is recognized for its reviewing activities. These can include online columns, travel and food guides, TV and radio shows, blogs and other independent Web sites. [[CriticReview]]s are typically more in-depth and professionally written. For simpler, casually written user/visitor/viewer/customer reviews, it is more appropriate to use the [[UserReview]] type. Review aggregator sites such as Metacritic already separate out the site's user reviews from selected critic reviews that originate from third-party sources."""
+    """A CriticReview is a more specialized form of Review written or published by a source
+    that is recognized for its reviewing activities. These can include online columns,
+    travel and food guides, TV and radio shows, blogs and other independent Web sites.
+    CriticReviews are typically more in-depth and professionally written. For simpler,
+    casually written user/visitor/viewer/customer reviews, it is more appropriate to use
+    the UserReview type. Review aggregator sites such as Metacritic already separate out
+    the site's user reviews from selected critic reviews that originate from third-party
+    sources."""
 
-    pass
+    type: str = Field(default="CriticReview", alias="@type")
 
 class Text(SchemaOrgBase):
     """Data type: Text."""
 
-    pass
+    type: str = Field(default="Text", alias="@type")
 
 class CssSelectorType(Text):
     """Text representing a CSS selector."""
 
-    pass
+    type: str = Field(default="CssSelectorType", alias="@type")
 
 class CurrencyConversionService(FinancialProduct):
     """A service to convert funds from one currency to another currency."""
 
-    pass
+    type: str = Field(default="CurrencyConversionService", alias="@type")
 
 class MedicalIntangible(MedicalEntity):
-    """A utility class that serves as the umbrella for a number of 'intangible' things in the medical space."""
+    """A utility class that serves as the umbrella for a number of 'intangible' things in
+    the medical space."""
 
-    pass
+    type: str = Field(default="MedicalIntangible", alias="@type")
 
 class DDxElement(MedicalIntangible):
-    """An alternative, closely-related condition typically considered later in the differential diagnosis process along with the signs that are used to distinguish it."""
+    """An alternative, closely-related condition typically considered later in the
+    differential diagnosis process along with the signs that are used to distinguish it."""
 
+    type: str = Field(default="DDxElement", alias="@type")
     diagnosis: Optional[MedicalCondition | str] = Field(default=None)
     distinguishingSign: Optional[MedicalSignOrSymptom | str] = Field(default=None)
 
 class NonprofitType(Enumeration):
-    """NonprofitType enumerates several kinds of official non-profit types of which a non-profit organization can be."""
+    """NonprofitType enumerates several kinds of official non-profit types of which a non-
+    profit organization can be."""
 
-    pass
+    type: str = Field(default="NonprofitType", alias="@type")
 
 class DENonprofitType(NonprofitType):
-    """DENonprofitType: Non-profit organization type originating from Germany in accordance with article 52 of the German fiscal code (Abgabenverordnung or AO)."""
+    """DENonprofitType: Non-profit organization type originating from Germany in accordance
+    with article 52 of the German fiscal code (Abgabenverordnung or AO)."""
 
-    pass
+    type: str = Field(default="DENonprofitType", alias="@type")
 
 class DanceEvent(Event):
     """Event type: A social dance."""
 
-    pass
+    type: str = Field(default="DanceEvent", alias="@type")
 
 class PerformingGroup(Organization):
     """A performance group, such as a band, an orchestra, or a circus."""
 
-    pass
+    type: str = Field(default="PerformingGroup", alias="@type")
 
 class DanceGroup(PerformingGroup):
     """A dance group&#x2014;for example, the Alvin Ailey Dance Theater or Riverdance."""
 
-    pass
+    type: str = Field(default="DanceGroup", alias="@type")
 
 class DataCatalog(CreativeWork):
     """A collection of datasets."""
 
+    type: str = Field(default="DataCatalog", alias="@type")
     measurementTechnique: Optional[str | AnyUrl | MeasurementMethodEnum | DefinedTerm] = Field(default=None)
     measurementMethod: Optional[str | AnyUrl | MeasurementMethodEnum | DefinedTerm] = Field(default=None)
     dataset: Optional[Dataset | str] = Field(default=None)
 
 class DataDownload(MediaObject):
-    """All or part of a [[Dataset]] in downloadable form. """
+    """All or part of a Dataset in downloadable form."""
 
+    type: str = Field(default="DataDownload", alias="@type")
     measurementTechnique: Optional[str | AnyUrl | MeasurementMethodEnum | DefinedTerm] = Field(default=None)
     measurementMethod: Optional[str | AnyUrl | MeasurementMethodEnum | DefinedTerm] = Field(default=None)
 
 class DataFeedItem(Intangible):
     """A single item within a larger data feed."""
 
+    type: str = Field(default="DataFeedItem", alias="@type")
     item: Optional[Thing | str] = Field(default=None)
     dateCreated: Optional[date | datetime | str] = Field(default=None)
     dateModified: Optional[date | datetime | str] = Field(default=None)
@@ -2344,65 +2800,78 @@ class DataFeedItem(Intangible):
 class DataType(SchemaOrgBase):
     """The basic data types such as Integers, Strings, etc."""
 
-    pass
+    type: str = Field(default="DataType", alias="@type")
 
 class Date(SchemaOrgBase):
     """A date value in [ISO 8601 date format](http://en.wikipedia.org/wiki/ISO_8601)."""
 
-    pass
+    type: str = Field(default="Date", alias="@type")
 
 class DateTime(SchemaOrgBase):
-    """A combination of date and time of day in the form [-]CCYY-MM-DDThh:mm:ss[Z|(+|-)hh:mm] (see Chapter 5.4 of ISO 8601)."""
+    """A combination of date and time of day in the form [-]CCYY-MM-
+    DDThh:mm:ss[Z|(+|-)hh:mm] (see Chapter 5.4 of ISO 8601)."""
 
-    pass
+    type: str = Field(default="DateTime", alias="@type")
 
 class DatedMoneySpecification(StructuredValue):
-    """A DatedMoneySpecification represents monetary values with optional start and end dates. For example, this could represent an employee's salary over a specific period of time. __Note:__ This type has been superseded by [[MonetaryAmount]], use of that type is recommended."""
+    """A DatedMoneySpecification represents monetary values with optional start and end
+    dates. For example, this could represent an employee's salary over a specific period
+    of time. __Note:__ This type has been superseded by MonetaryAmount, use of that type
+    is recommended."""
 
+    type: str = Field(default="DatedMoneySpecification", alias="@type")
     endDate: Optional[datetime | date | str] = Field(default=None)
     startDate: Optional[datetime | date | str] = Field(default=None)
     amount: Optional[str | float] = Field(default=None)
     currency: Optional[str] = Field(default=None)
 
 class DayOfWeek(Enumeration):
-    """The day of the week, e.g. used to specify to which day the opening hours of an OpeningHoursSpecification refer.
+    """The day of the week, e.g. used to specify to which day the opening hours of an
+    OpeningHoursSpecification refer.
+    
+    Originally, URLs from [GoodRelations](http://purl.org/goodrelations/v1) were used
+    (for Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday plus a special
+    entry for PublicHolidays); these have now been integrated directly into schema.org.
+    """
 
-Originally, URLs from [GoodRelations](http://purl.org/goodrelations/v1) were used (for [[Monday]], [[Tuesday]], [[Wednesday]], [[Thursday]], [[Friday]], [[Saturday]], [[Sunday]] plus a special entry for [[PublicHolidays]]); these have now been integrated directly into schema.org.
-      """
-
-    pass
+    type: str = Field(default="DayOfWeek", alias="@type")
 
 class DaySpa(HealthAndBeautyBusiness):
     """A day spa."""
 
-    pass
+    type: str = Field(default="DaySpa", alias="@type")
 
 class DeactivateAction(ControlAction):
-    """The act of stopping or deactivating a device or application (e.g. stopping a timer or turning off a flashlight)."""
+    """The act of stopping or deactivating a device or application (e.g. stopping a timer
+    or turning off a flashlight)."""
 
-    pass
+    type: str = Field(default="DeactivateAction", alias="@type")
 
 class DefenceEstablishment(GovernmentBuilding):
     """A defence establishment, such as an army or navy base."""
 
-    pass
+    type: str = Field(default="DefenceEstablishment", alias="@type")
 
 class DefinedRegion(Place):
-    """A DefinedRegion is a geographic area defined by potentially arbitrary (rather than political, administrative or natural geographical) criteria. Properties are provided for defining a region by reference to sets of postal codes.
+    """A DefinedRegion is a geographic area defined by potentially arbitrary (rather than
+    political, administrative or natural geographical) criteria. Properties are provided
+    for defining a region by reference to sets of postal codes.
+    
+    Examples: a delivery destination when shopping. Region where regional pricing is
+    configured.
+    
+    Requirement 1:
+    Country: US
+    States: "NY", "CA"
+    
+    Requirement 2:
+    Country: US
+    PostalCode Set: { [94000-94585], [97000, 97999], [13000, 13599]}
+    { [12345, 12345], [78945, 78945], }
+    Region = state, canton, prefecture, autonomous community...
+    """
 
-Examples: a delivery destination when shopping. Region where regional pricing is configured.
-
-Requirement 1:
-Country: US
-States: "NY", "CA"
-
-Requirement 2:
-Country: US
-PostalCode Set: { [94000-94585], [97000, 97999], [13000, 13599]}
-{ [12345, 12345], [78945, 78945], }
-Region = state, canton, prefecture, autonomous community...
-"""
-
+    type: str = Field(default="DefinedRegion", alias="@type")
     addressRegion: Optional[str | AdministrativeArea] = Field(default=None)
     postalCodePrefix: Optional[str] = Field(default=None)
     postalCode: Optional[str] = Field(default=None)
@@ -2412,11 +2881,12 @@ Region = state, canton, prefecture, autonomous community...
 class DeleteAction(UpdateAction):
     """The act of editing a recipient by removing one of its objects."""
 
-    pass
+    type: str = Field(default="DeleteAction", alias="@type")
 
 class DeliveryChargeSpecification(PriceSpecification):
     """The price for the delivery of an offer using a particular delivery method."""
 
+    type: str = Field(default="DeliveryChargeSpecification", alias="@type")
     appliesToDeliveryMethod: Any = Field(default=None)
     eligibleRegion: Optional[Place | str | GeoShape] = Field(default=None)
     ineligibleRegion: Optional[Place | str | GeoShape] = Field(default=None)
@@ -2425,20 +2895,37 @@ class DeliveryChargeSpecification(PriceSpecification):
 class DeliveryEvent(Event):
     """An event involving the delivery of an item."""
 
+    type: str = Field(default="DeliveryEvent", alias="@type")
     accessCode: Optional[str] = Field(default=None)
     hasDeliveryMethod: Any = Field(default=None)
     availableFrom: Optional[str | datetime] = Field(default=None)
     availableThrough: Optional[str | datetime] = Field(default=None)
 
 class DeliveryMethod(Enumeration):
-    """A delivery method is a standardized procedure for transferring the product or service to the destination of fulfillment chosen by the customer. Delivery methods are characterized by the means of transportation used, and by the organization or group that is the contracting party for the sending organization or person.\n\nCommonly used values:\n\n* http://purl.org/goodrelations/v1#DeliveryModeDirectDownload\n* http://purl.org/goodrelations/v1#DeliveryModeFreight\n* http://purl.org/goodrelations/v1#DeliveryModeMail\n* http://purl.org/goodrelations/v1#DeliveryModeOwnFleet\n* http://purl.org/goodrelations/v1#DeliveryModePickUp\n* http://purl.org/goodrelations/v1#DHL\n* http://purl.org/goodrelations/v1#FederalExpress\n* http://purl.org/goodrelations/v1#UPS
-        """
+    """A delivery method is a standardized procedure for transferring the product or
+    service to the destination of fulfillment chosen by the customer. Delivery methods
+    are characterized by the means of transportation used, and by the organization or
+    group that is the contracting party for the sending organization or
+    person.nnCommonly used values:nn*
+    http://purl.org/goodrelations/v1#DeliveryModeDirectDownloadn*
+    http://purl.org/goodrelations/v1#DeliveryModeFreightn*
+    http://purl.org/goodrelations/v1#DeliveryModeMailn*
+    http://purl.org/goodrelations/v1#DeliveryModeOwnFleetn*
+    http://purl.org/goodrelations/v1#DeliveryModePickUpn*
+    http://purl.org/goodrelations/v1#DHLn*
+    http://purl.org/goodrelations/v1#FederalExpressn*
+    http://purl.org/goodrelations/v1#UPS
+    """
 
-    pass
+    type: str = Field(default="DeliveryMethod", alias="@type")
 
 class Demand(Intangible):
-    """A demand entity represents the public, not necessarily binding, not necessarily exclusive, announcement by an organization or person to seek a certain type of goods or services. For describing demand using this type, the very same properties used for Offer apply."""
+    """A demand entity represents the public, not necessarily binding, not necessarily
+    exclusive, announcement by an organization or person to seek a certain type of goods
+    or services. For describing demand using this type, the very same properties used
+    for Offer apply."""
 
+    type: str = Field(default="Demand", alias="@type")
     eligibleDuration: Optional[QuantitativeValue | str] = Field(default=None)
     mpn: Optional[str] = Field(default=None)
     priceSpecification: Optional[PriceSpecification | str] = Field(default=None)
@@ -2477,26 +2964,29 @@ class Demand(Intangible):
 class Dentist(MedicalBusiness):
     """A dentist."""
 
-    pass
+    type: str = Field(default="Dentist", alias="@type")
 
 class DepartAction(MoveAction):
-    """The act of  departing from a place. An agent departs from a fromLocation for a destination, optionally with participants."""
+    """The act of  departing from a place. An agent departs from a fromLocation for a
+    destination, optionally with participants."""
 
-    pass
+    type: str = Field(default="DepartAction", alias="@type")
 
 class DepartmentStore(Store):
     """A department store."""
 
-    pass
+    type: str = Field(default="DepartmentStore", alias="@type")
 
 class DepositAccount(InvestmentOrDeposit):
-    """A type of Bank Account with a main purpose of depositing funds to gain interest or other benefits."""
+    """A type of Bank Account with a main purpose of depositing funds to gain interest or
+    other benefits."""
 
-    pass
+    type: str = Field(default="DepositAccount", alias="@type")
 
 class MedicalOrganization(Organization):
     """A medical organization (physical or not), such as hospital, institution or clinic."""
 
+    type: str = Field(default="MedicalOrganization", alias="@type")
     healthPlanNetworkId: Optional[str] = Field(default=None)
     medicalSpecialty: Any = Field(default=None)
     isAcceptingNewPatients: Optional[bool | str] = Field(default=None)
@@ -2504,11 +2994,14 @@ class MedicalOrganization(Organization):
 class DiagnosticLab(MedicalOrganization):
     """A medical laboratory that offers on-site or off-site diagnostic services."""
 
+    type: str = Field(default="DiagnosticLab", alias="@type")
     availableTest: Optional[MedicalTest | str] = Field(default=None)
 
 class MedicalProcedure(MedicalEntity):
-    """A process of care used in either a diagnostic, therapeutic, preventive or palliative capacity that relies on invasive (surgical), non-invasive, or other techniques."""
+    """A process of care used in either a diagnostic, therapeutic, preventive or palliative
+    capacity that relies on invasive (surgical), non-invasive, or other techniques."""
 
+    type: str = Field(default="MedicalProcedure", alias="@type")
     followup: Optional[str] = Field(default=None)
     status: Optional[str] = Field(default=None)
     procedureType: Any = Field(default=None)
@@ -2517,13 +3010,16 @@ class MedicalProcedure(MedicalEntity):
     howPerformed: Optional[str] = Field(default=None)
 
 class DiagnosticProcedure(MedicalProcedure):
-    """A medical procedure intended primarily for diagnostic, as opposed to therapeutic, purposes."""
+    """A medical procedure intended primarily for diagnostic, as opposed to therapeutic,
+    purposes."""
 
-    pass
+    type: str = Field(default="DiagnosticProcedure", alias="@type")
 
 class Diet(CreativeWork):
-    """A strategy of regulating the intake of food to achieve or maintain a specific health-related goal."""
+    """A strategy of regulating the intake of food to achieve or maintain a specific
+    health-related goal."""
 
+    type: str = Field(default="Diet", alias="@type")
     risks: Optional[str] = Field(default=None)
     expertConsiderations: Optional[str] = Field(default=None)
     dietFeatures: Optional[str] = Field(default=None)
@@ -2531,8 +3027,12 @@ class Diet(CreativeWork):
     physiologicalBenefits: Optional[str] = Field(default=None)
 
 class DietarySupplement(Product):
-    """A product taken by mouth that contains a dietary ingredient intended to supplement the diet. Dietary ingredients may include vitamins, minerals, herbs or other botanicals, amino acids, and substances such as enzymes, organ tissues, glandulars and metabolites."""
+    """A product taken by mouth that contains a dietary ingredient intended to supplement
+    the diet. Dietary ingredients may include vitamins, minerals, herbs or other
+    botanicals, amino acids, and substances such as enzymes, organ tissues, glandulars
+    and metabolites."""
 
+    type: str = Field(default="DietarySupplement", alias="@type")
     isProprietary: Optional[bool | str] = Field(default=None)
     targetPopulation: Optional[str] = Field(default=None)
     activeIngredient: Optional[str] = Field(default=None)
@@ -2547,62 +3047,74 @@ class DietarySupplement(Product):
 class DigitalDocument(CreativeWork):
     """An electronic file or document."""
 
+    type: str = Field(default="DigitalDocument", alias="@type")
     hasDigitalDocumentPermission: Any = Field(default=None)
 
 class DigitalDocumentPermission(Intangible):
     """A permission for a particular person or group to access a particular file."""
 
+    type: str = Field(default="DigitalDocumentPermission", alias="@type")
     grantee: Optional[Organization | Person | ContactPoint | Audience | str] = Field(default=None)
     permissionType: Any = Field(default=None)
 
 class DigitalDocumentPermissionType(Enumeration):
     """A type of permission which can be granted for accessing a digital document."""
 
-    pass
+    type: str = Field(default="DigitalDocumentPermissionType", alias="@type")
 
 class DigitalPlatformEnumeration(Enumeration):
-    """Enumerates some common technology platforms, for use with properties such as [[actionPlatform]]. It is not supposed to be comprehensive - when a suitable code is not enumerated here, textual or URL values can be used instead. These codes are at a fairly high level and do not deal with versioning and other nuance. Additional codes can be suggested [in github](https://github.com/schemaorg/schemaorg/issues/3057). """
+    """Enumerates some common technology platforms, for use with properties such as
+    actionPlatform. It is not supposed to be comprehensive - when a suitable code is not
+    enumerated here, textual or URL values can be used instead. These codes are at a
+    fairly high level and do not deal with versioning and other nuance. Additional codes
+    can be suggested [in github](https://github.com/schemaorg/schemaorg/issues/3057)."""
 
-    pass
+    type: str = Field(default="DigitalPlatformEnumeration", alias="@type")
 
 class DisagreeAction(ReactAction):
-    """The act of expressing a difference of opinion with the object. An agent disagrees to/about an object (a proposition, topic or theme) with participants."""
+    """The act of expressing a difference of opinion with the object. An agent disagrees
+    to/about an object (a proposition, topic or theme) with participants."""
 
-    pass
+    type: str = Field(default="DisagreeAction", alias="@type")
 
 class DiscoverAction(FindAction):
     """The act of discovering/finding an object."""
 
-    pass
+    type: str = Field(default="DiscoverAction", alias="@type")
 
 class DiscussionForumPosting(SocialMediaPosting):
     """A posting to a discussion forum."""
 
-    pass
+    type: str = Field(default="DiscussionForumPosting", alias="@type")
 
 class DislikeAction(ReactAction):
-    """The act of expressing a negative sentiment about the object. An agent dislikes an object (a proposition, topic or theme) with participants."""
+    """The act of expressing a negative sentiment about the object. An agent dislikes an
+    object (a proposition, topic or theme) with participants."""
 
-    pass
+    type: str = Field(default="DislikeAction", alias="@type")
 
 class Quantity(SchemaOrgBase):
-    """Quantities such as distance, time, mass, weight, etc. Particular instances of say Mass are strings like '3 kg' or '4 milligrams'."""
+    """Quantities such as distance, time, mass, weight, etc. Particular instances of say
+    Mass are strings like '3 kg' or '4 milligrams'."""
 
-    pass
+    type: str = Field(default="Quantity", alias="@type")
 
 class Distance(Quantity):
-    """Properties that take Distances as values are of the form '&lt;Number&gt; &lt;Length unit of measure&gt;'. E.g., '7 ft'."""
+    """Properties that take Distances as values are of the form '&lt;Number&gt; &lt;Length
+    unit of measure&gt;'. E.g., '7 ft'."""
 
-    pass
+    type: str = Field(default="Distance", alias="@type")
 
 class Distillery(FoodEstablishment):
     """A distillery."""
 
-    pass
+    type: str = Field(default="Distillery", alias="@type")
 
 class DonateAction(TransferAction):
-    """The act of providing goods, services, or money without compensation, often for philanthropic reasons."""
+    """The act of providing goods, services, or money without compensation, often for
+    philanthropic reasons."""
 
+    type: str = Field(default="DonateAction", alias="@type")
     priceSpecification: Optional[PriceSpecification | str] = Field(default=None)
     priceCurrency: Optional[str] = Field(default=None)
     recipient: Optional[Organization | Person | ContactPoint | Audience | str] = Field(default=None)
@@ -2611,6 +3123,7 @@ class DonateAction(TransferAction):
 class DoseSchedule(MedicalIntangible):
     """A specific dosing schedule for a drug or supplement."""
 
+    type: str = Field(default="DoseSchedule", alias="@type")
     targetPopulation: Optional[str] = Field(default=None)
     frequency: Optional[str] = Field(default=None)
     doseUnit: Optional[str] = Field(default=None)
@@ -2619,31 +3132,35 @@ class DoseSchedule(MedicalIntangible):
 class DownloadAction(TransferAction):
     """The act of downloading an object."""
 
-    pass
+    type: str = Field(default="DownloadAction", alias="@type")
 
 class DrawAction(CreateAction):
-    """The act of producing a visual/graphical representation of an object, typically with a pen/pencil and paper as instruments."""
+    """The act of producing a visual/graphical representation of an object, typically with
+    a pen/pencil and paper as instruments."""
 
-    pass
+    type: str = Field(default="DrawAction", alias="@type")
 
 class Drawing(CreativeWork):
     """A picture or diagram made with a pencil, pen, or crayon rather than paint."""
 
-    pass
+    type: str = Field(default="Drawing", alias="@type")
 
 class DrinkAction(ConsumeAction):
     """The act of swallowing liquids."""
 
-    pass
+    type: str = Field(default="DrinkAction", alias="@type")
 
 class DriveWheelConfigurationValue(QualitativeValue):
     """A value indicating which roadwheels will receive torque."""
 
-    pass
+    type: str = Field(default="DriveWheelConfigurationValue", alias="@type")
 
 class Drug(Product):
-    """A chemical or biologic substance, used as a medical therapy, that has a physiological effect on an organism. Here the term drug is used interchangeably with the term medicine although clinical knowledge makes a clear difference between them."""
+    """A chemical or biologic substance, used as a medical therapy, that has a
+    physiological effect on an organism. Here the term drug is used interchangeably with
+    the term medicine although clinical knowledge makes a clear difference between them."""
 
+    type: str = Field(default="Drug", alias="@type")
     availableStrength: Optional[DrugStrength | str] = Field(default=None)
     isProprietary: Optional[bool | str] = Field(default=None)
     dosageForm: Optional[str] = Field(default=None)
@@ -2676,13 +3193,22 @@ class Drug(Product):
     nonProprietaryName: Optional[str] = Field(default=None)
 
 class DrugClass(MedicalEntity):
-    """A class of medical drugs, e.g., statins. Classes can represent general pharmacological class, common mechanisms of action, common physiological effects, etc."""
+    """A class of medical drugs, e.g., statins. Classes can represent general
+    pharmacological class, common mechanisms of action, common physiological effects,
+    etc."""
 
+    type: str = Field(default="DrugClass", alias="@type")
     drug: Any = Field(default=None)
 
 class DrugCost(MedicalEntity):
-    """The cost per unit of a medical drug. Note that this type is not meant to represent the price in an offer of a drug for sale; see the Offer type for that. This type will typically be used to tag wholesale or average retail cost of a drug, or maximum reimbursable cost. Costs of medical drugs vary widely depending on how and where they are paid for, so while this type captures some of the variables, costs should be used with caution by consumers of this schema's markup."""
+    """The cost per unit of a medical drug. Note that this type is not meant to represent
+    the price in an offer of a drug for sale; see the Offer type for that. This type
+    will typically be used to tag wholesale or average retail cost of a drug, or maximum
+    reimbursable cost. Costs of medical drugs vary widely depending on how and where
+    they are paid for, so while this type captures some of the variables, costs should
+    be used with caution by consumers of this schema's markup."""
 
+    type: str = Field(default="DrugCost", alias="@type")
     costCurrency: Optional[str] = Field(default=None)
     costCategory: Any = Field(default=None)
     drugUnit: Optional[str] = Field(default=None)
@@ -2691,33 +3217,38 @@ class DrugCost(MedicalEntity):
     costPerUnit: Optional[str | float] = Field(default=None)
 
 class MedicalEnumeration(Enumeration):
-    """Enumerations related to health and the practice of medicine: A concept that is used to attribute a quality to another concept, as a qualifier, a collection of items or a listing of all of the elements of a set in medicine practice."""
+    """Enumerations related to health and the practice of medicine: A concept that is used
+    to attribute a quality to another concept, as a qualifier, a collection of items or
+    a listing of all of the elements of a set in medicine practice."""
 
-    pass
+    type: str = Field(default="MedicalEnumeration", alias="@type")
 
 class DrugCostCategory(MedicalEnumeration):
     """Enumerated categories of medical drug costs."""
 
-    pass
+    type: str = Field(default="DrugCostCategory", alias="@type")
 
 class DrugLegalStatus(MedicalIntangible):
     """The legal availability status of a medical drug."""
 
+    type: str = Field(default="DrugLegalStatus", alias="@type")
     applicableLocation: Optional[str | AdministrativeArea] = Field(default=None)
 
 class DrugPregnancyCategory(MedicalEnumeration):
-    """Categories that represent an assessment of the risk of fetal injury due to a drug or pharmaceutical used as directed by the mother during pregnancy."""
+    """Categories that represent an assessment of the risk of fetal injury due to a drug or
+    pharmaceutical used as directed by the mother during pregnancy."""
 
-    pass
+    type: str = Field(default="DrugPregnancyCategory", alias="@type")
 
 class DrugPrescriptionStatus(MedicalEnumeration):
     """Indicates whether this drug is available by prescription or over-the-counter."""
 
-    pass
+    type: str = Field(default="DrugPrescriptionStatus", alias="@type")
 
 class DrugStrength(MedicalIntangible):
     """A specific strength in which a medical drug is available in a specific country."""
 
+    type: str = Field(default="DrugStrength", alias="@type")
     strengthValue: Optional[str | float] = Field(default=None)
     activeIngredient: Optional[str] = Field(default=None)
     maximumIntake: Optional[MaximumDoseSchedule | str] = Field(default=None)
@@ -2727,31 +3258,35 @@ class DrugStrength(MedicalIntangible):
 class DryCleaningOrLaundry(LocalBusiness):
     """A dry-cleaning business."""
 
-    pass
+    type: str = Field(default="DryCleaningOrLaundry", alias="@type")
 
 class Duration(Quantity):
-    """Quantity: Duration (use [ISO 8601 duration format](http://en.wikipedia.org/wiki/ISO_8601))."""
+    """Quantity: Duration (use [ISO 8601 duration
+    format](http://en.wikipedia.org/wiki/ISO_8601))."""
 
-    pass
+    type: str = Field(default="Duration", alias="@type")
 
 class EnergyEfficiencyEnumeration(Enumeration):
-    """Enumerates energy efficiency levels (also known as "classes" or "ratings") and certifications that are part of several international energy efficiency standards."""
+    """Enumerates energy efficiency levels (also known as "classes" or "ratings") and
+    certifications that are part of several international energy efficiency standards."""
 
-    pass
+    type: str = Field(default="EnergyEfficiencyEnumeration", alias="@type")
 
 class EUEnergyEfficiencyEnumeration(EnergyEfficiencyEnumeration):
-    """Enumerates the EU energy efficiency classes A-G as well as A+, A++, and A+++ as defined in EU directive 2017/1369."""
+    """Enumerates the EU energy efficiency classes A-G as well as A+, A++, and A+++ as
+    defined in EU directive 2017/1369."""
 
-    pass
+    type: str = Field(default="EUEnergyEfficiencyEnumeration", alias="@type")
 
 class EatAction(ConsumeAction):
     """The act of swallowing solid objects."""
 
-    pass
+    type: str = Field(default="EatAction", alias="@type")
 
 class EducationEvent(Event):
     """Event type: Education event."""
 
+    type: str = Field(default="EducationEvent", alias="@type")
     assesses: Optional[DefinedTerm | str] = Field(default=None)
     teaches: Optional[DefinedTerm | str] = Field(default=None)
     educationalLevel: Optional[str | AnyUrl | DefinedTerm] = Field(default=None)
@@ -2759,16 +3294,26 @@ class EducationEvent(Event):
 class EducationalAudience(Audience):
     """An EducationalAudience."""
 
+    type: str = Field(default="EducationalAudience", alias="@type")
     educationalRole: Optional[str] = Field(default=None)
 
 class EducationalOccupationalCredential(Credential):
-    """An educational or occupational credential. A diploma, academic degree, certification, qualification, badge, etc., that may be awarded to a person or other entity that meets the requirements defined by the credentialer."""
+    """An educational or occupational credential. A diploma, academic degree,
+    certification, qualification, badge, etc., that may be awarded to a person or other
+    entity that meets the requirements defined by the credentialer."""
 
+    type: str = Field(default="EducationalOccupationalCredential", alias="@type")
     competencyRequired: Optional[AnyUrl | str] = Field(default=None)
 
 class EducationalOccupationalProgram(Intangible):
-    """A program offered by an institution which determines the learning progress to achieve an outcome, usually a credential like a degree or certificate. This would define a discrete set of opportunities (e.g., job, courses) that together constitute a program with a clear start, end, set of requirements, and transition to a new occupational opportunity (e.g., a job), or sometimes a higher educational opportunity (e.g., an advanced degree)."""
+    """A program offered by an institution which determines the learning progress to
+    achieve an outcome, usually a credential like a degree or certificate. This would
+    define a discrete set of opportunities (e.g., job, courses) that together constitute
+    a program with a clear start, end, set of requirements, and transition to a new
+    occupational opportunity (e.g., a job), or sometimes a higher educational
+    opportunity (e.g., an advanced degree)."""
 
+    type: str = Field(default="EducationalOccupationalProgram", alias="@type")
     educationalProgramMode: Optional[AnyUrl | str] = Field(default=None)
     programType: Optional[str | DefinedTerm] = Field(default=None)
     timeToComplete: Optional[str | timedelta] = Field(default=None)
@@ -2795,28 +3340,31 @@ class EducationalOccupationalProgram(Intangible):
     typicalCreditsPerTerm: Optional[int | StructuredValue | str] = Field(default=None)
 
 class HomeAndConstructionBusiness(LocalBusiness):
-    """A construction business.\n\nA HomeAndConstructionBusiness is a [[LocalBusiness]] that provides services around homes and buildings.\n\nAs a [[LocalBusiness]] it can be described as a [[provider]] of one or more [[Service]]\(s)."""
+    """A construction business.nnA HomeAndConstructionBusiness is a LocalBusiness that
+    provides services around homes and buildings.nnAs a LocalBusiness it can be
+    described as a provider of one or more Service(s)."""
 
-    pass
+    type: str = Field(default="HomeAndConstructionBusiness", alias="@type")
 
 class Electrician(HomeAndConstructionBusiness):
     """An electrician."""
 
-    pass
+    type: str = Field(default="Electrician", alias="@type")
 
 class ElectronicsStore(Store):
     """An electronics store."""
 
-    pass
+    type: str = Field(default="ElectronicsStore", alias="@type")
 
 class ElementarySchool(EducationalOrganization):
     """An elementary school."""
 
-    pass
+    type: str = Field(default="ElementarySchool", alias="@type")
 
 class Message(CreativeWork):
     """A single message from a sender to one or more organizations or people."""
 
+    type: str = Field(default="Message", alias="@type")
     sender: Optional[Organization | Audience | str] = Field(default=None)
     ccRecipient: Optional[Organization | str] = Field(default=None)
     dateRead: Optional[datetime | date | str] = Field(default=None)
@@ -2830,21 +3378,28 @@ class Message(CreativeWork):
 class EmailMessage(Message):
     """An email message."""
 
-    pass
+    type: str = Field(default="EmailMessage", alias="@type")
 
 class Embassy(GovernmentBuilding):
     """An embassy."""
 
-    pass
+    type: str = Field(default="Embassy", alias="@type")
 
 class EmergencyService(LocalBusiness):
     """An emergency service, such as a fire station or ER."""
 
-    pass
+    type: str = Field(default="EmergencyService", alias="@type")
 
 class Role(Intangible):
-    """Represents additional information about a relationship or property. For example a Role can be used to say that a 'member' role linking some SportsTeam to a player occurred during a particular time period. Or that a Person's 'actor' role in a Movie was for some particular characterName. Such properties can be attached to a Role entity, which is then associated with the main entities using ordinary properties like 'member' or 'actor'.\n\nSee also [blog post](https://blog.schema.org/2014/06/16/introducing-role/)."""
+    """Represents additional information about a relationship or property. For example a
+    Role can be used to say that a 'member' role linking some SportsTeam to a player
+    occurred during a particular time period. Or that a Person's 'actor' role in a Movie
+    was for some particular characterName. Such properties can be attached to a Role
+    entity, which is then associated with the main entities using ordinary properties
+    like 'member' or 'actor'.nnSee also [blog
+    post](https://blog.schema.org/2014/06/16/introducing-role/)."""
 
+    type: str = Field(default="Role", alias="@type")
     roleName: Optional[AnyUrl | str] = Field(default=None)
     endDate: Optional[datetime | date | str] = Field(default=None)
     startDate: Optional[datetime | date | str] = Field(default=None)
@@ -2853,53 +3408,70 @@ class Role(Intangible):
 class OrganizationRole(Role):
     """A subclass of Role used to describe roles within organizations."""
 
+    type: str = Field(default="OrganizationRole", alias="@type")
     numberedPosition: Optional[str | float] = Field(default=None)
 
 class EmployeeRole(OrganizationRole):
     """A subclass of OrganizationRole used to describe employee relationships."""
 
+    type: str = Field(default="EmployeeRole", alias="@type")
     baseSalary: Optional[PriceSpecification | float | MonetaryAmount | str] = Field(default=None)
     salaryCurrency: Optional[str] = Field(default=None)
 
 class EmployerAggregateRating(AggregateRating):
     """An aggregate rating of an Organization related to its role as an employer."""
 
-    pass
+    type: str = Field(default="EmployerAggregateRating", alias="@type")
 
 class EmployerReview(Review):
-    """An [[EmployerReview]] is a review of an [[Organization]] regarding its role as an employer, written by a current or former employee of that organization."""
+    """An EmployerReview is a review of an Organization regarding its role as an employer,
+    written by a current or former employee of that organization."""
 
-    pass
+    type: str = Field(default="EmployerReview", alias="@type")
 
 class EmploymentAgency(LocalBusiness):
     """An employment agency."""
 
-    pass
+    type: str = Field(default="EmploymentAgency", alias="@type")
 
 class EndorseAction(ReactAction):
     """An agent approves/certifies/likes/supports/sanctions an object."""
 
+    type: str = Field(default="EndorseAction", alias="@type")
     endorsee: Optional[Organization | Person | str] = Field(default=None)
 
 class EndorsementRating(Rating):
-    """An EndorsementRating is a rating that expresses some level of endorsement, for example inclusion in a "critic's pick" blog, a
-"Like" or "+1" on a social network. It can be considered the [[result]] of an [[EndorseAction]] in which the [[object]] of the action is rated positively by
-some [[agent]]. As is common elsewhere in schema.org, it is sometimes more useful to describe the results of such an action without explicitly describing the [[Action]].
+    """An EndorsementRating is a rating that expresses some level of endorsement, for
+    example inclusion in a "critic's pick" blog, a
+    "Like" or "+1" on a social network. It can be considered the result of an
+    EndorseAction in which the object of the action is rated positively by
+    some agent. As is common elsewhere in schema.org, it is sometimes more useful to
+    describe the results of such an action without explicitly describing the Action.
+    
+    An EndorsementRating may be part of a numeric scale or organized system, but this is
+    not required: having an explicit type for indicating a positive,
+    endorsement rating is particularly useful in the absence of numeric scales as it
+    helps consumers understand that the rating is broadly positive.
+    """
 
-An [[EndorsementRating]] may be part of a numeric scale or organized system, but this is not required: having an explicit type for indicating a positive,
-endorsement rating is particularly useful in the absence of numeric scales as it helps consumers understand that the rating is broadly positive.
-"""
-
-    pass
+    type: str = Field(default="EndorsementRating", alias="@type")
 
 class Energy(Quantity):
-    """Properties that take Energy as values are of the form '&lt;Number&gt; &lt;Energy unit of measure&gt;'."""
+    """Properties that take Energy as values are of the form '&lt;Number&gt; &lt;Energy
+    unit of measure&gt;'."""
 
-    pass
+    type: str = Field(default="Energy", alias="@type")
 
 class EnergyConsumptionDetails(Intangible):
-    """EnergyConsumptionDetails represents information related to the energy efficiency of a product that consumes energy. The information that can be provided is based on international regulations such as for example [EU directive 2017/1369](https://eur-lex.europa.eu/eli/reg/2017/1369/oj) for energy labeling and the [Energy labeling rule](https://www.ftc.gov/enforcement/rules/rulemaking-regulatory-reform-proceedings/energy-water-use-labeling-consumer) under the Energy Policy and Conservation Act (EPCA) in the US."""
+    """EnergyConsumptionDetails represents information related to the energy efficiency of
+    a product that consumes energy. The information that can be provided is based on
+    international regulations such as for example [EU directive 2017/1369](https://eur-
+    lex.europa.eu/eli/reg/2017/1369/oj) for energy labeling and the [Energy labeling
+    rule](https://www.ftc.gov/enforcement/rules/rulemaking-regulatory-reform-
+    proceedings/energy-water-use-labeling-consumer) under the Energy Policy and
+    Conservation Act (EPCA) in the US."""
 
+    type: str = Field(default="EnergyConsumptionDetails", alias="@type")
     energyEfficiencyScaleMin: Optional[EUEnergyEfficiencyEnumeration | str] = Field(default=None)
     energyEfficiencyScaleMax: Optional[EUEnergyEfficiencyEnumeration | str] = Field(default=None)
     hasEnergyEfficiencyCategory: Optional[EnergyEfficiencyEnumeration | str] = Field(default=None)
@@ -2907,11 +3479,13 @@ class EnergyConsumptionDetails(Intangible):
 class EnergyStarEnergyEfficiencyEnumeration(EnergyEfficiencyEnumeration):
     """Used to indicate whether a product is EnergyStar certified."""
 
-    pass
+    type: str = Field(default="EnergyStarEnergyEfficiencyEnumeration", alias="@type")
 
 class EngineSpecification(StructuredValue):
-    """Information about the engine of the vehicle. A vehicle can have multiple engines represented by multiple engine specification entities."""
+    """Information about the engine of the vehicle. A vehicle can have multiple engines
+    represented by multiple engine specification entities."""
 
+    type: str = Field(default="EngineSpecification", alias="@type")
     torque: Optional[QuantitativeValue | str] = Field(default=None)
     engineDisplacement: Optional[QuantitativeValue | str] = Field(default=None)
     engineType: Optional[str | AnyUrl | QualitativeValue] = Field(default=None)
@@ -2921,6 +3495,7 @@ class EngineSpecification(StructuredValue):
 class EntryPoint(Intangible):
     """An entry point, within some Web-based protocol."""
 
+    type: str = Field(default="EntryPoint", alias="@type")
     actionApplication: Optional[SoftwareApplication | str] = Field(default=None)
     actionPlatform: Optional[str | AnyUrl | DigitalPlatformEnumeration] = Field(default=None)
     urlTemplate: Optional[str] = Field(default=None)
@@ -2930,8 +3505,10 @@ class EntryPoint(Intangible):
     httpMethod: Optional[str] = Field(default=None)
 
 class Episode(CreativeWork):
-    """A media episode (e.g. TV, radio, video game) which can be part of a series or season."""
+    """A media episode (e.g. TV, radio, video game) which can be part of a series or
+    season."""
 
+    type: str = Field(default="Episode", alias="@type")
     episodeNumber: Optional[int | str] = Field(default=None)
     partOfSeason: Optional[CreativeWorkSeason | str] = Field(default=None)
     actor: Optional[Person | PerformingGroup | str] = Field(default=None)
@@ -2947,6 +3524,7 @@ class Episode(CreativeWork):
 class InstantaneousEvent(StructuredValue):
     """An event with no duration, like for instance a computer log entry."""
 
+    type: str = Field(default="InstantaneousEvent", alias="@type")
     timestamp: Optional[str | datetime] = Field(default=None)
     source: Optional[Thing | str] = Field(default=None)
     data: Optional[Thing | str] = Field(default=None)
@@ -2954,62 +3532,85 @@ class InstantaneousEvent(StructuredValue):
 class Error(InstantaneousEvent):
     """Representation of an Error."""
 
+    type: str = Field(default="Error", alias="@type")
     errorCode: Optional[int | str] = Field(default=None)
 
 class EventAttendanceModeEnumeration(Enumeration):
-    """An EventAttendanceModeEnumeration value is one of potentially several modes of organising an event, relating to whether it is online or offline."""
+    """An EventAttendanceModeEnumeration value is one of potentially several modes of
+    organising an event, relating to whether it is online or offline."""
 
-    pass
+    type: str = Field(default="EventAttendanceModeEnumeration", alias="@type")
 
 class EventReservation(Reservation):
-    """A reservation for an event like a concert, sporting event, or lecture.\n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations. For offers of tickets, use [[Offer]]."""
+    """A reservation for an event like a concert, sporting event, or lecture.nnNote: This
+    type is for information about actual reservations, e.g. in confirmation emails or
+    HTML pages with individual confirmations of reservations. For offers of tickets, use
+    Offer."""
 
-    pass
+    type: str = Field(default="EventReservation", alias="@type")
 
 class EventSeries(Series):
-    """A series of [[Event]]s. Included events can relate with the series using the [[superEvent]] property.
+    """A series of Events. Included events can relate with the series using the superEvent
+    property.
+    
+    An EventSeries is a collection of events that share some unifying characteristic.
+    For example, "The Olympic Games" is a series, which
+    is repeated regularly. The "2012 London Olympics" can be presented both as an Event
+    in the series "Olympic Games", and as an
+    EventSeries that included a number of sporting competitions as Events.
+    
+    The nature of the association between the events in an EventSeries can vary, but
+    typical examples could
+    include a thematic event series (e.g. topical meetups or classes), or a series of
+    regular events that share a location, attendee group and/or organizers.
+    
+    EventSeries has been defined as a kind of Event to make it easy for publishers to
+    use it in an Event context without
+    worrying about which kinds of series are really event-like enough to call an Event.
+    In general an EventSeries
+    may seem more Event-like when the period of time is compact and when aspects such as
+    location are fixed, but
+    it may also sometimes prove useful to describe a longer-term series as an Event.
+    """
 
-An EventSeries is a collection of events that share some unifying characteristic. For example, "The Olympic Games" is a series, which
-is repeated regularly. The "2012 London Olympics" can be presented both as an [[Event]] in the series "Olympic Games", and as an
-[[EventSeries]] that included a number of sporting competitions as Events.
-
-The nature of the association between the events in an [[EventSeries]] can vary, but typical examples could
-include a thematic event series (e.g. topical meetups or classes), or a series of regular events that share a location, attendee group and/or organizers.
-
-EventSeries has been defined as a kind of Event to make it easy for publishers to use it in an Event context without
-worrying about which kinds of series are really event-like enough to call an Event. In general an EventSeries
-may seem more Event-like when the period of time is compact and when aspects such as location are fixed, but
-it may also sometimes prove useful to describe a longer-term series as an Event.
-   """
-
-    pass
+    type: str = Field(default="EventSeries", alias="@type")
 
 class EventStatusType(StatusEnumeration):
-    """EventStatusType is an enumeration type whose instances represent several states that an Event may be in."""
+    """EventStatusType is an enumeration type whose instances represent several states that
+    an Event may be in."""
 
-    pass
+    type: str = Field(default="EventStatusType", alias="@type")
 
 class EventVenue(CivicStructure):
     """An event venue."""
 
-    pass
+    type: str = Field(default="EventVenue", alias="@type")
 
 class ExchangeRateSpecification(StructuredValue):
     """A structured value representing exchange rate."""
 
+    type: str = Field(default="ExchangeRateSpecification", alias="@type")
     currentExchangeRate: Optional[UnitPriceSpecification | str] = Field(default=None)
     exchangeRateSpread: Optional[MonetaryAmount | float | str] = Field(default=None)
     currency: Optional[str] = Field(default=None)
 
 class PlayAction(Action):
-    """The act of playing/exercising/training/performing for enjoyment, leisure, recreation, competition or exercise.\n\nRelated actions:\n\n* [[ListenAction]]: Unlike ListenAction (which is under ConsumeAction), PlayAction refers to performing for an audience or at an event, rather than consuming music.\n* [[WatchAction]]: Unlike WatchAction (which is under ConsumeAction), PlayAction refers to showing/displaying for an audience or at an event, rather than consuming visual content."""
+    """The act of playing/exercising/training/performing for enjoyment, leisure,
+    recreation, competition or exercise.nnRelated actions:nn* ListenAction: Unlike
+    ListenAction (which is under ConsumeAction), PlayAction refers to performing for an
+    audience or at an event, rather than consuming music.n* WatchAction: Unlike
+    WatchAction (which is under ConsumeAction), PlayAction refers to showing/displaying
+    for an audience or at an event, rather than consuming visual content."""
 
+    type: str = Field(default="PlayAction", alias="@type")
     event: Optional[Event | str] = Field(default=None)
     audience: Optional[Audience | str] = Field(default=None)
 
 class ExerciseAction(PlayAction):
-    """The act of participating in exertive activity for the purposes of improving health and fitness."""
+    """The act of participating in exertive activity for the purposes of improving health
+    and fitness."""
 
+    type: str = Field(default="ExerciseAction", alias="@type")
     exerciseRelatedDiet: Optional[Diet | str] = Field(default=None)
     sportsTeam: Optional[SportsTeam | str] = Field(default=None)
     sportsActivityLocation: Optional[SportsActivityLocation | str] = Field(default=None)
@@ -3027,24 +3628,30 @@ class ExerciseAction(PlayAction):
 class ExerciseGym(SportsActivityLocation):
     """A gym."""
 
-    pass
+    type: str = Field(default="ExerciseGym", alias="@type")
 
 class LifestyleModification(MedicalEntity):
-    """A process of care involving exercise, changes to diet, fitness routines, and other lifestyle changes aimed at improving a health condition."""
+    """A process of care involving exercise, changes to diet, fitness routines, and other
+    lifestyle changes aimed at improving a health condition."""
 
-    pass
+    type: str = Field(default="LifestyleModification", alias="@type")
 
 class PhysicalActivity(LifestyleModification):
-    """Any bodily activity that enhances or maintains physical fitness and overall health and wellness. Includes activity that is part of daily living and routine, structured exercise, and exercise prescribed as part of a medical treatment or recovery plan."""
+    """Any bodily activity that enhances or maintains physical fitness and overall health
+    and wellness. Includes activity that is part of daily living and routine, structured
+    exercise, and exercise prescribed as part of a medical treatment or recovery plan."""
 
+    type: str = Field(default="PhysicalActivity", alias="@type")
     category: Optional[str | AnyUrl | Thing] = Field(default=None)
     associatedAnatomy: Any = Field(default=None)
     epidemiology: Optional[str] = Field(default=None)
     pathophysiology: Optional[str] = Field(default=None)
 
 class ExercisePlan(PhysicalActivity):
-    """Fitness-related activity designed for a specific health-related purpose, including defined exercise routines as well as activity prescribed by a clinician."""
+    """Fitness-related activity designed for a specific health-related purpose, including
+    defined exercise routines as well as activity prescribed by a clinician."""
 
+    type: str = Field(default="ExercisePlan", alias="@type")
     restPeriods: Optional[str] = Field(default=None)
     activityFrequency: Optional[str] = Field(default=None)
     exerciseType: Optional[str] = Field(default=None)
@@ -3057,41 +3664,47 @@ class ExercisePlan(PhysicalActivity):
 class ExhibitionEvent(Event):
     """Event type: Exhibition event, e.g. at a museum, library, archive, tradeshow, ..."""
 
-    pass
+    type: str = Field(default="ExhibitionEvent", alias="@type")
 
 class FAQPage(WebPage):
-    """A [[FAQPage]] is a [[WebPage]] presenting one or more "[Frequently asked questions](https://en.wikipedia.org/wiki/FAQ)" (see also [[QAPage]])."""
+    """A FAQPage is a WebPage presenting one or more "[Frequently asked
+    questions](https://en.wikipedia.org/wiki/FAQ)" (see also QAPage)."""
 
-    pass
+    type: str = Field(default="FAQPage", alias="@type")
 
 class FMRadioChannel(RadioChannel):
     """A radio channel that uses FM."""
 
-    pass
+    type: str = Field(default="FMRadioChannel", alias="@type")
 
 class FastFoodRestaurant(FoodEstablishment):
     """A fast-food restaurant."""
 
-    pass
+    type: str = Field(default="FastFoodRestaurant", alias="@type")
 
 class Festival(Event):
     """Event type: Festival."""
 
-    pass
+    type: str = Field(default="Festival", alias="@type")
 
 class FilmAction(CreateAction):
     """The act of capturing sound and moving images on film, video, or digitally."""
 
-    pass
+    type: str = Field(default="FilmAction", alias="@type")
 
 class FinancialIncentive(Intangible):
-    """<p>Represents financial incentives for goods/services offered by an organization (or individual).</p>
-
-<p>Typically contains the [[name]] of the incentive, the [[incentivizedItem]], the [[incentiveAmount]], the [[incentiveStatus]], [[incentiveType]], the [[provider]] of the incentive, and [[eligibleWithSupplier]].</p>
-
-<p>Optionally contains criteria on whether the incentive is limited based on [[purchaseType]], [[purchasePriceLimit]], [[incomeLimit]], and the [[qualifiedExpense]].
+    """<p>Represents financial incentives for goods/services offered by an organization (or
+    individual).</p>
+    
+    <p>Typically contains the name of the incentive, the incentivizedItem, the
+    incentiveAmount, the incentiveStatus, incentiveType, the provider of the incentive,
+    and eligibleWithSupplier.</p>
+    
+    <p>Optionally contains criteria on whether the incentive is limited based on
+    purchaseType, purchasePriceLimit, incomeLimit, and the qualifiedExpense.
     """
 
+    type: str = Field(default="FinancialIncentive", alias="@type")
     purchaseType: Any = Field(default=None)
     incentiveType: Any = Field(default=None)
     validThrough: Optional[datetime | date | str] = Field(default=None)
@@ -3110,11 +3723,12 @@ class FinancialIncentive(Intangible):
 class FireStation(CivicStructure):
     """A fire station. With firemen."""
 
-    pass
+    type: str = Field(default="FireStation", alias="@type")
 
 class Flight(Trip):
     """An airline flight."""
 
+    type: str = Field(default="Flight", alias="@type")
     boardingPolicy: Any = Field(default=None)
     arrivalGate: Optional[str] = Field(default=None)
     arrivalTerminal: Optional[str] = Field(default=None)
@@ -3132,26 +3746,39 @@ class Flight(Trip):
     carrier: Optional[Organization | str] = Field(default=None)
 
 class FlightReservation(Reservation):
-    """A reservation for air travel.\n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations. For offers of tickets, use [[Offer]]."""
+    """A reservation for air travel.nnNote: This type is for information about actual
+    reservations, e.g. in confirmation emails or HTML pages with individual
+    confirmations of reservations. For offers of tickets, use Offer."""
 
+    type: str = Field(default="FlightReservation", alias="@type")
     passengerPriorityStatus: Optional[str | QualitativeValue] = Field(default=None)
     passengerSequenceNumber: Optional[str] = Field(default=None)
     boardingGroup: Optional[str] = Field(default=None)
     securityScreening: Optional[str] = Field(default=None)
 
 class Number(SchemaOrgBase):
-    """Data type: Number.\n\nUsage guidelines:\n\n* Use values from 0123456789 (Unicode 'DIGIT ZERO' (U+0030) to 'DIGIT NINE' (U+0039)) rather than superficially similar Unicode symbols.\n* Use '.' (Unicode 'FULL STOP' (U+002E)) rather than ',' to indicate a decimal point. Avoid using these symbols as a readability separator."""
+    """Data type: Number.nnUsage guidelines:nn* Use values from 0123456789 (Unicode 'DIGIT
+    ZERO' (U+0030) to 'DIGIT NINE' (U+0039)) rather than superficially similar Unicode
+    symbols.n* Use '.' (Unicode 'FULL STOP' (U+002E)) rather than ',' to indicate a
+    decimal point. Avoid using these symbols as a readability separator."""
 
-    pass
+    type: str = Field(default="Number", alias="@type")
 
 class Float(Number):
     """Data type: Floating number."""
 
-    pass
+    type: str = Field(default="Float", alias="@type")
 
 class FloorPlan(Intangible):
-    """A FloorPlan is an explicit representation of a collection of similar accommodations, allowing the provision of common information (room counts, sizes, layout diagrams) and offers for rental or sale. In typical use, some [[ApartmentComplex]] has an [[accommodationFloorPlan]] which is a [[FloorPlan]].  A FloorPlan is always in the context of a particular place, either a larger [[ApartmentComplex]] or a single [[Apartment]]. The visual/spatial aspects of a floor plan (i.e. room layout, [see wikipedia](https://en.wikipedia.org/wiki/Floor_plan)) can be indicated using [[image]]. """
+    """A FloorPlan is an explicit representation of a collection of similar accommodations,
+    allowing the provision of common information (room counts, sizes, layout diagrams)
+    and offers for rental or sale. In typical use, some ApartmentComplex has an
+    accommodationFloorPlan which is a FloorPlan.  A FloorPlan is always in the context
+    of a particular place, either a larger ApartmentComplex or a single Apartment. The
+    visual/spatial aspects of a floor plan (i.e. room layout, [see
+    wikipedia](https://en.wikipedia.org/wiki/Floor_plan)) can be indicated using image."""
 
+    type: str = Field(default="FloorPlan", alias="@type")
     numberOfRooms: Optional[QuantitativeValue | float | str] = Field(default=None)
     numberOfPartialBathrooms: Optional[str | float] = Field(default=None)
     numberOfFullBathrooms: Optional[str | float] = Field(default=None)
@@ -3168,16 +3795,30 @@ class FloorPlan(Intangible):
 class Florist(Store):
     """A florist."""
 
-    pass
+    type: str = Field(default="Florist", alias="@type")
 
 class FollowAction(InteractAction):
-    """The act of forming a personal connection with someone/something (object) unidirectionally/asymmetrically to get updates polled from.\n\nRelated actions:\n\n* [[BefriendAction]]: Unlike BefriendAction, FollowAction implies that the connection is *not* necessarily reciprocal.\n* [[SubscribeAction]]: Unlike SubscribeAction, FollowAction implies that the follower acts as an active agent constantly/actively polling for updates.\n* [[RegisterAction]]: Unlike RegisterAction, FollowAction implies that the agent is interested in continuing receiving updates from the object.\n* [[JoinAction]]: Unlike JoinAction, FollowAction implies that the agent is interested in getting updates from the object.\n* [[TrackAction]]: Unlike TrackAction, FollowAction refers to the polling of updates of all aspects of animate objects rather than the location of inanimate objects (e.g. you track a package, but you don't follow it)."""
+    """The act of forming a personal connection with someone/something (object)
+    unidirectionally/asymmetrically to get updates polled from.nnRelated actions:nn*
+    BefriendAction: Unlike BefriendAction, FollowAction implies that the connection is
+    *not* necessarily reciprocal.n* SubscribeAction: Unlike SubscribeAction,
+    FollowAction implies that the follower acts as an active agent constantly/actively
+    polling for updates.n* RegisterAction: Unlike RegisterAction, FollowAction implies
+    that the agent is interested in continuing receiving updates from the object.n*
+    JoinAction: Unlike JoinAction, FollowAction implies that the agent is interested in
+    getting updates from the object.n* TrackAction: Unlike TrackAction, FollowAction
+    refers to the polling of updates of all aspects of animate objects rather than the
+    location of inanimate objects (e.g. you track a package, but you don't follow it)."""
 
+    type: str = Field(default="FollowAction", alias="@type")
     followee: Optional[Organization | str] = Field(default=None)
 
 class FoodEstablishmentReservation(Reservation):
-    """A reservation to dine at a food-related business.\n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations."""
+    """A reservation to dine at a food-related business.nnNote: This type is for
+    information about actual reservations, e.g. in confirmation emails or HTML pages
+    with individual confirmations of reservations."""
 
+    type: str = Field(default="FoodEstablishmentReservation", alias="@type")
     endTime: Optional[datetime | time | str] = Field(default=None)
     partySize: Optional[int | QuantitativeValue | str] = Field(default=None)
     startTime: Optional[datetime | time | str] = Field(default=None)
@@ -3185,50 +3826,64 @@ class FoodEstablishmentReservation(Reservation):
 class FoodEvent(Event):
     """Event type: Food event."""
 
-    pass
+    type: str = Field(default="FoodEvent", alias="@type")
 
 class FoodService(Service):
     """A food service, like breakfast, lunch, or dinner."""
 
-    pass
+    type: str = Field(default="FoodService", alias="@type")
 
 class FulfillmentTypeEnumeration(Enumeration):
     """A type of product fulfillment."""
 
-    pass
+    type: str = Field(default="FulfillmentTypeEnumeration", alias="@type")
 
 class Project(Organization):
-    """An enterprise (potentially individual but typically collaborative), planned to achieve a particular aim.
-Use properties from [[Organization]], [[subOrganization]]/[[parentOrganization]] to indicate project sub-structures. 
-   """
-
-    pass
-
-class FundingAgency(Project):
-    """A FundingAgency is an organization that implements one or more [[FundingScheme]]s and manages
-    the granting process (via [[Grant]]s, typically [[MonetaryGrant]]s).
-    A funding agency is not always required for grant funding, e.g. philanthropic giving, corporate sponsorship etc.
-    
-Examples of funding agencies include ERC, REA, NIH, Bill and Melinda Gates Foundation, ...
+    """An enterprise (potentially individual but typically collaborative), planned to
+    achieve a particular aim.
+    Use properties from Organization, subOrganization/parentOrganization to indicate
+    project sub-structures.
     """
 
-    pass
+    type: str = Field(default="Project", alias="@type")
+
+class FundingAgency(Project):
+    """A FundingAgency is an organization that implements one or more FundingSchemes and
+    manages
+        the granting process (via Grants, typically MonetaryGrants).
+        A funding agency is not always required for grant funding, e.g. philanthropic
+    giving, corporate sponsorship etc.
+    
+    Examples of funding agencies include ERC, REA, NIH, Bill and Melinda Gates
+    Foundation, ...
+    """
+
+    type: str = Field(default="FundingAgency", alias="@type")
 
 class FundingScheme(Organization):
-    """A FundingScheme combines organizational, project and policy aspects of grant-based funding
-    that sets guidelines, principles and mechanisms to support other kinds of projects and activities.
-    Funding is typically organized via [[Grant]] funding. Examples of funding schemes: Swiss Priority Programmes (SPPs); EU Framework 7 (FP7); Horizon 2020; the NIH-R01 Grant Program; Wellcome institutional strategic support fund. For large scale public sector funding, the management and administration of grant awards is often handled by other, dedicated, organizations - [[FundingAgency]]s such as ERC, REA, ..."""
+    """A FundingScheme combines organizational, project and policy aspects of grant-based
+    funding
+        that sets guidelines, principles and mechanisms to support other kinds of
+    projects and activities.
+        Funding is typically organized via Grant funding. Examples of funding schemes:
+    Swiss Priority Programmes (SPPs); EU Framework 7 (FP7); Horizon 2020; the NIH-R01
+    Grant Program; Wellcome institutional strategic support fund. For large scale public
+    sector funding, the management and administration of grant awards is often handled
+    by other, dedicated, organizations - FundingAgencys such as ERC, REA, ..."""
 
-    pass
+    type: str = Field(default="FundingScheme", alias="@type")
 
 class FurnitureStore(Store):
     """A furniture store."""
 
-    pass
+    type: str = Field(default="FurnitureStore", alias="@type")
 
 class Game(CreativeWork):
-    """The Game type represents things which are games. These are typically rule-governed recreational activities, e.g. role-playing games in which players assume the role of characters in a fictional setting."""
+    """The Game type represents things which are games. These are typically rule-governed
+    recreational activities, e.g. role-playing games in which players assume the role of
+    characters in a fictional setting."""
 
+    type: str = Field(default="Game", alias="@type")
     numberOfPlayers: Optional[QuantitativeValue | str] = Field(default=None)
     gameLocation: Optional[Place | AnyUrl | str] = Field(default=None)
     characterAttribute: Optional[Thing | str] = Field(default=None)
@@ -3236,18 +3891,20 @@ class Game(CreativeWork):
     gameItem: Optional[Thing | str] = Field(default=None)
 
 class GameAvailabilityEnumeration(Enumeration):
-    """For a [[VideoGame]], such as used with a [[PlayGameAction]], an enumeration of the kind of game availability offered. """
+    """For a VideoGame, such as used with a PlayGameAction, an enumeration of the kind of
+    game availability offered."""
 
-    pass
+    type: str = Field(default="GameAvailabilityEnumeration", alias="@type")
 
 class GamePlayMode(Enumeration):
     """Indicates whether this game is multi-player, co-op or single-player."""
 
-    pass
+    type: str = Field(default="GamePlayMode", alias="@type")
 
 class GameServer(Intangible):
     """Server that provides game interaction in a multiplayer game."""
 
+    type: str = Field(default="GameServer", alias="@type")
     playersOnline: Optional[int | str] = Field(default=None)
     serverStatus: Any = Field(default=None)
     game: Optional[VideoGame | str] = Field(default=None)
@@ -3255,31 +3912,35 @@ class GameServer(Intangible):
 class GameServerStatus(StatusEnumeration):
     """Status of a game server."""
 
-    pass
+    type: str = Field(default="GameServerStatus", alias="@type")
 
 class GardenStore(Store):
     """A garden store."""
 
-    pass
+    type: str = Field(default="GardenStore", alias="@type")
 
 class GasStation(AutomotiveBusiness):
     """A gas station."""
 
-    pass
+    type: str = Field(default="GasStation", alias="@type")
 
 class GatedResidenceCommunity(Residence):
     """Residence type: Gated community."""
 
-    pass
+    type: str = Field(default="GatedResidenceCommunity", alias="@type")
 
 class GenderType(Enumeration):
     """An enumeration of genders."""
 
-    pass
+    type: str = Field(default="GenderType", alias="@type")
 
 class Gene(BioChemEntity):
-    """A discrete unit of inheritance which affects one or more biological traits (Source: [https://en.wikipedia.org/wiki/Gene](https://en.wikipedia.org/wiki/Gene)). Examples include FOXP2 (Forkhead box protein P2), SCARNA21 (small Cajal body-specific RNA 21), A- (agouti genotype)."""
+    """A discrete unit of inheritance which affects one or more biological traits (Source:
+    [https://en.wikipedia.org/wiki/Gene](https://en.wikipedia.org/wiki/Gene)). Examples
+    include FOXP2 (Forkhead box protein P2), SCARNA21 (small Cajal body-specific RNA
+    21), A- (agouti genotype)."""
 
+    type: str = Field(default="Gene", alias="@type")
     expressedIn: Optional[BioChemEntity | AnatomicalStructure | str] = Field(default=None)
     hasBioPolymerSequence: Optional[str] = Field(default=None)
     encodesBioChemEntity: Optional[BioChemEntity | str] = Field(default=None)
@@ -3288,11 +3949,15 @@ class Gene(BioChemEntity):
 class GeneralContractor(HomeAndConstructionBusiness):
     """A general contractor."""
 
-    pass
+    type: str = Field(default="GeneralContractor", alias="@type")
 
 class GeoShape(StructuredValue):
-    """The geographic shape of a place. A GeoShape can be described using several properties whose values are based on latitude/longitude pairs. Either whitespace or commas can be used to separate latitude and longitude; whitespace should be used when writing a list of several such points."""
+    """The geographic shape of a place. A GeoShape can be described using several
+    properties whose values are based on latitude/longitude pairs. Either whitespace or
+    commas can be used to separate latitude and longitude; whitespace should be used
+    when writing a list of several such points."""
 
+    type: str = Field(default="GeoShape", alias="@type")
     address: Optional[str] = Field(default=None)
     box: Optional[str] = Field(default=None)
     postalCode: Optional[str] = Field(default=None)
@@ -3303,17 +3968,22 @@ class GeoShape(StructuredValue):
     addressCountry: Optional[Country | str] = Field(default=None)
 
 class GeoCircle(GeoShape):
-    """A GeoCircle is a GeoShape representing a circular geographic area. As it is a GeoShape
-          it provides the simple textual property 'circle', but also allows the combination of postalCode alongside geoRadius.
-          The center of the circle can be indicated via the 'geoMidpoint' property, or more approximately using 'address', 'postalCode'.
-       """
+    """A GeoCircle is a GeoShape representing a circular geographic area. As it is a
+    GeoShape
+              it provides the simple textual property 'circle', but also allows the
+    combination of postalCode alongside geoRadius.
+              The center of the circle can be indicated via the 'geoMidpoint' property,
+    or more approximately using 'address', 'postalCode'.
+    """
 
+    type: str = Field(default="GeoCircle", alias="@type")
     geoMidpoint: Any = Field(default=None)
     geoRadius: Optional[str | float] = Field(default=None)
 
 class GeoCoordinates(StructuredValue):
     """The geographic coordinates of a place or event."""
 
+    type: str = Field(default="GeoCoordinates", alias="@type")
     address: Optional[PostalAddress | str] = Field(default=None)
     postalCode: Optional[str] = Field(default=None)
     longitude: Optional[str | float] = Field(default=None)
@@ -3322,8 +3992,10 @@ class GeoCoordinates(StructuredValue):
     latitude: Optional[str | float] = Field(default=None)
 
 class GeospatialGeometry(Intangible):
-    """(Eventually to be defined as) a supertype of GeoShape designed to accommodate definitions from Geo-Spatial best practices."""
+    """(Eventually to be defined as) a supertype of GeoShape designed to accommodate
+    definitions from Geo-Spatial best practices."""
 
+    type: str = Field(default="GeospatialGeometry", alias="@type")
     geoIntersects: Optional[Place | str] = Field(default=None)
     geoCoveredBy: Optional[Place | str] = Field(default=None)
     geoTouches: Optional[Place | str] = Field(default=None)
@@ -3336,33 +4008,40 @@ class GeospatialGeometry(Intangible):
     geoContains: Optional[Place | str] = Field(default=None)
 
 class GiveAction(TransferAction):
-    """The act of transferring ownership of an object to a destination. Reciprocal of TakeAction.\n\nRelated actions:\n\n* [[TakeAction]]: Reciprocal of GiveAction.\n* [[SendAction]]: Unlike SendAction, GiveAction implies that ownership is being transferred (e.g. I may send my laptop to you, but that doesn't mean I'm giving it to you)."""
+    """The act of transferring ownership of an object to a destination. Reciprocal of
+    TakeAction.nnRelated actions:nn* TakeAction: Reciprocal of GiveAction.n* SendAction:
+    Unlike SendAction, GiveAction implies that ownership is being transferred (e.g. I
+    may send my laptop to you, but that doesn't mean I'm giving it to you)."""
 
+    type: str = Field(default="GiveAction", alias="@type")
     recipient: Optional[Organization | Audience | str] = Field(default=None)
 
 class GolfCourse(SportsActivityLocation):
     """A golf course."""
 
-    pass
+    type: str = Field(default="GolfCourse", alias="@type")
 
 class GovernmentBenefitsType(Enumeration):
-    """GovernmentBenefitsType enumerates several kinds of government benefits to support the COVID-19 situation. Note that this structure may not capture all benefits offered."""
+    """GovernmentBenefitsType enumerates several kinds of government benefits to support
+    the COVID-19 situation. Note that this structure may not capture all benefits
+    offered."""
 
-    pass
+    type: str = Field(default="GovernmentBenefitsType", alias="@type")
 
 class GovernmentOffice(LocalBusiness):
     """A government office&#x2014;for example, an IRS or DMV office."""
 
-    pass
+    type: str = Field(default="GovernmentOffice", alias="@type")
 
 class GovernmentOrganization(Organization):
     """A governmental organization or agency."""
 
-    pass
+    type: str = Field(default="GovernmentOrganization", alias="@type")
 
 class Permit(Intangible):
     """A permit issued by an organization, e.g. a parking pass."""
 
+    type: str = Field(default="Permit", alias="@type")
     validUntil: Optional[date | str] = Field(default=None)
     validFor: Optional[timedelta | str] = Field(default=None)
     issuedThrough: Optional[Service | str] = Field(default=None)
@@ -3374,23 +4053,33 @@ class Permit(Intangible):
 class GovernmentPermit(Permit):
     """A permit issued by a government agency."""
 
-    pass
+    type: str = Field(default="GovernmentPermit", alias="@type")
 
 class GovernmentService(Service):
-    """A service provided by a government organization, e.g. food stamps, veterans benefits, etc."""
+    """A service provided by a government organization, e.g. food stamps, veterans
+    benefits, etc."""
 
+    type: str = Field(default="GovernmentService", alias="@type")
     jurisdiction: Optional[str | AdministrativeArea] = Field(default=None)
     serviceOperator: Optional[Organization | str] = Field(default=None)
 
 class Grant(Intangible):
-    """A grant, typically financial or otherwise quantifiable, of resources. Typically a [[funder]] sponsors some [[MonetaryAmount]] to an [[Organization]] or [[Person]],
-    sometimes not necessarily via a dedicated or long-lived [[Project]], resulting in one or more outputs, or [[fundedItem]]s. For financial sponsorship, indicate the [[funder]] of a [[MonetaryGrant]]. For non-financial support, indicate [[sponsor]] of [[Grant]]s of resources (e.g. office space).
-
-Grants support  activities directed towards some agreed collective goals, often but not always organized as [[Project]]s. Long-lived projects are sometimes sponsored by a variety of grants over time, but it is also common for a project to be associated with a single grant.
-
-The amount of a [[Grant]] is represented using [[amount]] as a [[MonetaryAmount]].
+    """A grant, typically financial or otherwise quantifiable, of resources. Typically a
+    funder sponsors some MonetaryAmount to an Organization or Person,
+        sometimes not necessarily via a dedicated or long-lived Project, resulting in
+    one or more outputs, or fundedItems. For financial sponsorship, indicate the funder
+    of a MonetaryGrant. For non-financial support, indicate sponsor of Grants of
+    resources (e.g. office space).
+    
+    Grants support  activities directed towards some agreed collective goals, often but
+    not always organized as Projects. Long-lived projects are sometimes sponsored by a
+    variety of grants over time, but it is also common for a project to be associated
+    with a single grant.
+    
+    The amount of a Grant is represented using amount as a MonetaryAmount.
     """
 
+    type: str = Field(default="Grant", alias="@type")
     sponsor: Optional[Organization | str] = Field(default=None)
     funder: Optional[Organization | str] = Field(default=None)
     fundedItem: Optional[MedicalEntity | CreativeWork | Organization | str] = Field(default=None)
@@ -3398,47 +4087,54 @@ The amount of a [[Grant]] is represented using [[amount]] as a [[MonetaryAmount]
 class GroceryStore(Store):
     """A grocery store."""
 
-    pass
+    type: str = Field(default="GroceryStore", alias="@type")
 
 class Guide(CreativeWork):
-    """[[Guide]] is a page or article that recommends specific products or services, or aspects of a thing for a user to consider. A [[Guide]] may represent a Buying Guide and detail aspects of products or services for a user to consider. A [[Guide]] may represent a Product Guide and recommend specific products or services. A [[Guide]] may represent a Ranked List and recommend specific products or services with ranking."""
+    """Guide is a page or article that recommends specific products or services, or aspects
+    of a thing for a user to consider. A Guide may represent a Buying Guide and detail
+    aspects of products or services for a user to consider. A Guide may represent a
+    Product Guide and recommend specific products or services. A Guide may represent a
+    Ranked List and recommend specific products or services with ranking."""
 
+    type: str = Field(default="Guide", alias="@type")
     reviewAspect: Optional[StructuredValue | str] = Field(default=None)
     category: Optional[str | AnyUrl | Thing | PhysicalActivityCategory] = Field(default=None)
 
 class HVACBusiness(HomeAndConstructionBusiness):
     """A business that provides Heating, Ventilation and Air Conditioning services."""
 
-    pass
+    type: str = Field(default="HVACBusiness", alias="@type")
 
 class Hackathon(Event):
     """A [hackathon](https://en.wikipedia.org/wiki/Hackathon) event."""
 
-    pass
+    type: str = Field(default="Hackathon", alias="@type")
 
 class HairSalon(HealthAndBeautyBusiness):
     """A hair salon."""
 
-    pass
+    type: str = Field(default="HairSalon", alias="@type")
 
 class HardwareStore(Store):
     """A hardware store."""
 
-    pass
+    type: str = Field(default="HardwareStore", alias="@type")
 
 class HealthAspectEnumeration(Enumeration):
-    """HealthAspectEnumeration enumerates several aspects of health content online, each of which might be described using [[hasHealthAspect]] and [[HealthTopicContent]]."""
+    """HealthAspectEnumeration enumerates several aspects of health content online, each of
+    which might be described using hasHealthAspect and HealthTopicContent."""
 
-    pass
+    type: str = Field(default="HealthAspectEnumeration", alias="@type")
 
 class HealthClub(HealthAndBeautyBusiness):
     """A health club."""
 
-    pass
+    type: str = Field(default="HealthClub", alias="@type")
 
 class HealthInsurancePlan(Intangible):
     """A US-style health insurance plan, including PPOs, EPOs, and HMOs."""
 
+    type: str = Field(default="HealthInsurancePlan", alias="@type")
     usesHealthPlanIdStandard: Optional[AnyUrl | str] = Field(default=None)
     benefitsSummaryUrl: Optional[AnyUrl | str] = Field(default=None)
     includesHealthPlanFormulary: Any = Field(default=None)
@@ -3452,6 +4148,7 @@ class HealthInsurancePlan(Intangible):
 class HealthPlanCostSharingSpecification(Intangible):
     """A description of costs to the patient under a given network or formulary."""
 
+    type: str = Field(default="HealthPlanCostSharingSpecification", alias="@type")
     healthPlanCoinsuranceRate: Optional[str | float] = Field(default=None)
     healthPlanCopayOption: Optional[str] = Field(default=None)
     healthPlanCoinsuranceOption: Optional[str] = Field(default=None)
@@ -3459,8 +4156,10 @@ class HealthPlanCostSharingSpecification(Intangible):
     healthPlanCopay: Optional[PriceSpecification | str] = Field(default=None)
 
 class HealthPlanFormulary(Intangible):
-    """For a given health insurance plan, the specification for costs and coverage of prescription drugs."""
+    """For a given health insurance plan, the specification for costs and coverage of
+    prescription drugs."""
 
+    type: str = Field(default="HealthPlanFormulary", alias="@type")
     healthPlanCostSharing: Optional[HealthPlanCostSharingSpecification | bool | str] = Field(default=None)
     offersPrescriptionByMail: Optional[bool | str] = Field(default=None)
     healthPlanDrugTier: Optional[str] = Field(default=None)
@@ -3468,93 +4167,117 @@ class HealthPlanFormulary(Intangible):
 class HealthPlanNetwork(Intangible):
     """A US-style health insurance plan network."""
 
+    type: str = Field(default="HealthPlanNetwork", alias="@type")
     healthPlanCostSharing: Optional[HealthPlanCostSharingSpecification | bool | str] = Field(default=None)
     healthPlanNetworkTier: Optional[str] = Field(default=None)
     healthPlanNetworkId: Optional[str] = Field(default=None)
 
 class WebContent(CreativeWork):
-    """WebContent is a type representing all [[WebPage]], [[WebSite]] and [[WebPageElement]] content. It is sometimes the case that detailed distinctions between Web pages, sites and their parts are not always important or obvious. The  [[WebContent]] type makes it easier to describe Web-addressable content without requiring such distinctions to always be stated. (The intent is that the existing types [[WebPage]], [[WebSite]] and [[WebPageElement]] will eventually be declared as subtypes of [[WebContent]].)"""
+    """WebContent is a type representing all WebPage, WebSite and WebPageElement content.
+    It is sometimes the case that detailed distinctions between Web pages, sites and
+    their parts are not always important or obvious. The  WebContent type makes it
+    easier to describe Web-addressable content without requiring such distinctions to
+    always be stated. (The intent is that the existing types WebPage, WebSite and
+    WebPageElement will eventually be declared as subtypes of WebContent.)"""
 
-    pass
+    type: str = Field(default="WebContent", alias="@type")
 
 class HealthTopicContent(WebContent):
-    """[[HealthTopicContent]] is [[WebContent]] that is about some aspect of a health topic, e.g. a condition, its symptoms or treatments. Such content may be comprised of several parts or sections and use different types of media. Multiple instances of [[WebContent]] (and hence [[HealthTopicContent]]) can be related using [[hasPart]] / [[isPartOf]] where there is some kind of content hierarchy, and their content described with [[about]] and [[mentions]] e.g. building upon the existing [[MedicalCondition]] vocabulary.
-  """
+    """HealthTopicContent is WebContent that is about some aspect of a health topic, e.g. a
+    condition, its symptoms or treatments. Such content may be comprised of several
+    parts or sections and use different types of media. Multiple instances of WebContent
+    (and hence HealthTopicContent) can be related using hasPart / isPartOf where there
+    is some kind of content hierarchy, and their content described with about and
+    mentions e.g. building upon the existing MedicalCondition vocabulary.
+    """
 
+    type: str = Field(default="HealthTopicContent", alias="@type")
     hasHealthAspect: Any = Field(default=None)
 
 class HighSchool(EducationalOrganization):
     """A high school."""
 
-    pass
+    type: str = Field(default="HighSchool", alias="@type")
 
 class HinduTemple(PlaceOfWorship):
     """A Hindu temple."""
 
-    pass
+    type: str = Field(default="HinduTemple", alias="@type")
 
 class HobbyShop(Store):
     """A store that sells materials useful or necessary for various hobbies."""
 
-    pass
+    type: str = Field(default="HobbyShop", alias="@type")
 
 class HomeGoodsStore(Store):
     """A home goods store."""
 
-    pass
+    type: str = Field(default="HomeGoodsStore", alias="@type")
 
 class Hospital(CivicStructure):
     """A hospital."""
 
+    type: str = Field(default="Hospital", alias="@type")
     availableService: Optional[MedicalTest | str] = Field(default=None)
     healthcareReportingData: Optional[CDCPMDRecord | str] = Field(default=None)
     medicalSpecialty: Any = Field(default=None)
 
 class Hostel(LodgingBusiness):
     """A hostel - cheap accommodation, often in shared dormitories.
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
-    pass
+    type: str = Field(default="Hostel", alias="@type")
 
 class Hotel(LodgingBusiness):
-    """A hotel is an establishment that provides lodging paid on a short-term basis (source: Wikipedia, the free encyclopedia, see http://en.wikipedia.org/wiki/Hotel).
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    """A hotel is an establishment that provides lodging paid on a short-term basis
+    (source: Wikipedia, the free encyclopedia, see http://en.wikipedia.org/wiki/Hotel).
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
-    pass
+    type: str = Field(default="Hotel", alias="@type")
 
 class Room(Accommodation):
-    """A room is a distinguishable space within a structure, usually separated from other spaces by interior walls (source: Wikipedia, the free encyclopedia, see <a href="http://en.wikipedia.org/wiki/Room">http://en.wikipedia.org/wiki/Room</a>).
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    """A room is a distinguishable space within a structure, usually separated from other
+    spaces by interior walls (source: Wikipedia, the free encyclopedia, see <a
+    href="http://en.wikipedia.org/wiki/Room">http://en.wikipedia.org/wiki/Room</a>).
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
-    pass
+    type: str = Field(default="Room", alias="@type")
 
 class HotelRoom(Room):
     """A hotel room is a single room in a hotel.
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
-    pass
+    type: str = Field(default="HotelRoom", alias="@type")
 
 class House(Accommodation):
-    """A house is a building or structure that has the ability to be occupied for habitation by humans or other creatures (source: Wikipedia, the free encyclopedia, see <a href="http://en.wikipedia.org/wiki/House">http://en.wikipedia.org/wiki/House</a>)."""
+    """A house is a building or structure that has the ability to be occupied for
+    habitation by humans or other creatures (source: Wikipedia, the free encyclopedia,
+    see <a
+    href="http://en.wikipedia.org/wiki/House">http://en.wikipedia.org/wiki/House</a>)."""
 
-    pass
+    type: str = Field(default="House", alias="@type")
 
 class HousePainter(HomeAndConstructionBusiness):
     """A house painting service."""
 
-    pass
+    type: str = Field(default="HousePainter", alias="@type")
 
 class HowTo(CreativeWork):
     """Instructions that explain how to achieve a result by performing a sequence of steps."""
 
+    type: str = Field(default="HowTo", alias="@type")
     estimatedCost: Optional[str | MonetaryAmount] = Field(default=None)
     supply: Optional[str] = Field(default=None)
     step: Optional[str | CreativeWork | HowToStep] = Field(default=None)
@@ -3568,14 +4291,17 @@ class HowTo(CreativeWork):
 class ListItem(Intangible):
     """An list item, e.g. a step in a checklist or how-to description."""
 
+    type: str = Field(default="ListItem", alias="@type")
     item: Optional[Thing | str] = Field(default=None)
     previousItem: Any = Field(default=None)
     position: Optional[int | str] = Field(default=None)
     nextItem: Any = Field(default=None)
 
 class HowToDirection(ListItem):
-    """A direction indicating a single action to do in the instructions for how to achieve a result."""
+    """A direction indicating a single action to do in the instructions for how to achieve
+    a result."""
 
+    type: str = Field(default="HowToDirection", alias="@type")
     beforeMedia: Optional[MediaObject | AnyUrl | str] = Field(default=None)
     supply: Optional[str | HowToSupply] = Field(default=None)
     duringMedia: Optional[MediaObject | AnyUrl | str] = Field(default=None)
@@ -3586,111 +4312,151 @@ class HowToDirection(ListItem):
     prepTime: Optional[timedelta | str] = Field(default=None)
 
 class HowToItem(ListItem):
-    """An item used as either a tool or supply when performing the instructions for how to achieve a result."""
+    """An item used as either a tool or supply when performing the instructions for how to
+    achieve a result."""
 
+    type: str = Field(default="HowToItem", alias="@type")
     requiredQuantity: Optional[QuantitativeValue | float | str] = Field(default=None)
 
 class HowToSection(CreativeWork):
-    """A sub-grouping of steps in the instructions for how to achieve a result (e.g. steps for making a pie crust within a pie recipe)."""
+    """A sub-grouping of steps in the instructions for how to achieve a result (e.g. steps
+    for making a pie crust within a pie recipe)."""
 
+    type: str = Field(default="HowToSection", alias="@type")
     steps: Optional[CreativeWork | ItemList | str] = Field(default=None)
 
 class HowToStep(ListItem):
-    """A step in the instructions for how to achieve a result. It is an ordered list with HowToDirection and/or HowToTip items."""
+    """A step in the instructions for how to achieve a result. It is an ordered list with
+    HowToDirection and/or HowToTip items."""
 
-    pass
+    type: str = Field(default="HowToStep", alias="@type")
 
 class HowToSupply(HowToItem):
     """A supply consumed when performing the instructions for how to achieve a result."""
 
+    type: str = Field(default="HowToSupply", alias="@type")
     estimatedCost: Optional[str | MonetaryAmount] = Field(default=None)
 
 class HowToTip(CreativeWork):
-    """An explanation in the instructions for how to achieve a result. It provides supplementary information about a technique, supply, author's preference, etc. It can explain what could be done, or what should not be done, but doesn't specify what should be done (see HowToDirection)."""
+    """An explanation in the instructions for how to achieve a result. It provides
+    supplementary information about a technique, supply, author's preference, etc. It
+    can explain what could be done, or what should not be done, but doesn't specify what
+    should be done (see HowToDirection)."""
 
-    pass
+    type: str = Field(default="HowToTip", alias="@type")
 
 class HowToTool(HowToItem):
-    """A tool used (but not consumed) when performing instructions for how to achieve a result."""
+    """A tool used (but not consumed) when performing instructions for how to achieve a
+    result."""
 
-    pass
+    type: str = Field(default="HowToTool", alias="@type")
 
 class HyperToc(CreativeWork):
-    """A HyperToc represents a hypertext table of contents for complex media objects, such as [[VideoObject]], [[AudioObject]]. Items in the table of contents are indicated using the [[tocEntry]] property, and typed [[HyperTocEntry]]. For cases where the same larger work is split into multiple files, [[associatedMedia]] can be used on individual [[HyperTocEntry]] items."""
+    """A HyperToc represents a hypertext table of contents for complex media objects, such
+    as VideoObject, AudioObject. Items in the table of contents are indicated using the
+    tocEntry property, and typed HyperTocEntry. For cases where the same larger work is
+    split into multiple files, associatedMedia can be used on individual HyperTocEntry
+    items."""
 
+    type: str = Field(default="HyperToc", alias="@type")
     tocEntry: Optional[HyperTocEntry | str] = Field(default=None)
 
 class HyperTocEntry(CreativeWork):
-    """A HyperToEntry is an item within a [[HyperToc]], which represents a hypertext table of contents for complex media objects, such as [[VideoObject]], [[AudioObject]]. The media object itself is indicated using [[associatedMedia]]. Each section of interest within that content can be described with a [[HyperTocEntry]], with associated [[startOffset]] and [[endOffset]]. When several entries are all from the same file, [[associatedMedia]] is used on the overarching [[HyperTocEntry]]; if the content has been split into multiple files, they can be referenced using [[associatedMedia]] on each [[HyperTocEntry]]."""
+    """A HyperToEntry is an item within a HyperToc, which represents a hypertext table of
+    contents for complex media objects, such as VideoObject, AudioObject. The media
+    object itself is indicated using associatedMedia. Each section of interest within
+    that content can be described with a HyperTocEntry, with associated startOffset and
+    endOffset. When several entries are all from the same file, associatedMedia is used
+    on the overarching HyperTocEntry; if the content has been split into multiple files,
+    they can be referenced using associatedMedia on each HyperTocEntry."""
 
+    type: str = Field(default="HyperTocEntry", alias="@type")
     tocContinuation: Any = Field(default=None)
     utterances: Optional[str] = Field(default=None)
 
 class MediaEnumeration(Enumeration):
-    """MediaEnumeration enumerations are lists of codes, labels etc. useful for describing media objects. They may be reflections of externally developed lists, or created at schema.org, or a combination."""
+    """MediaEnumeration enumerations are lists of codes, labels etc. useful for describing
+    media objects. They may be reflections of externally developed lists, or created at
+    schema.org, or a combination."""
 
-    pass
+    type: str = Field(default="MediaEnumeration", alias="@type")
 
 class IPTCDigitalSourceEnumeration(MediaEnumeration):
-    """<a href="https://www.iptc.org/">IPTC</a> "Digital Source" codes for use with the [[digitalSourceType]] property, providing information about the source for a digital media object.
-In general these codes are not declared here to be mutually exclusive, although some combinations would be contradictory if applied simultaneously, or might be considered mutually incompatible by upstream maintainers of the definitions. See the IPTC <a href="https://www.iptc.org/std/photometadata/documentation/userguide/">documentation</a>
- for <a href="https://cv.iptc.org/newscodes/digitalsourcetype/">detailed definitions</a> of all terms."""
+    """<a href="https://www.iptc.org/">IPTC</a> "Digital Source" codes for use with the
+    digitalSourceType property, providing information about the source for a digital
+    media object.
+    In general these codes are not declared here to be mutually exclusive, although some
+    combinations would be contradictory if applied simultaneously, or might be
+    considered mutually incompatible by upstream maintainers of the definitions. See the
+    IPTC <a href="https://www.iptc.org/std/photometadata/documentation/userguide/">docum
+    entation</a>
+     for <a href="https://cv.iptc.org/newscodes/digitalsourcetype/">detailed
+    definitions</a> of all terms."""
 
-    pass
+    type: str = Field(default="IPTCDigitalSourceEnumeration", alias="@type")
 
 class ITNonprofitType(NonprofitType):
     """ITNonprofitType: Non-profit organization type originating from Italy."""
 
-    pass
+    type: str = Field(default="ITNonprofitType", alias="@type")
 
 class IceCreamShop(FoodEstablishment):
     """An ice cream shop."""
 
-    pass
+    type: str = Field(default="IceCreamShop", alias="@type")
 
 class IgnoreAction(AssessAction):
     """The act of intentionally disregarding the object. An agent ignores an object."""
 
-    pass
+    type: str = Field(default="IgnoreAction", alias="@type")
 
 class MediaGallery(CollectionPage):
-    """Web page type: Media gallery page. A mixed-media page that can contain media such as images, videos, and other multimedia."""
+    """Web page type: Media gallery page. A mixed-media page that can contain media such as
+    images, videos, and other multimedia."""
 
-    pass
+    type: str = Field(default="MediaGallery", alias="@type")
 
 class ImageGallery(MediaGallery):
     """Web page type: Image gallery page."""
 
-    pass
+    type: str = Field(default="ImageGallery", alias="@type")
 
 class ImageObjectSnapshot(ImageObject):
-    """A specific and exact (byte-for-byte) version of an [[ImageObject]]. Two byte-for-byte identical files, for the purposes of this type, considered identical. If they have different embedded metadata (e.g. XMP, EXIF) the files will differ. Different external facts about the files, e.g. creator or dateCreated that aren't represented in their actual content, do not affect this notion of identity."""
+    """A specific and exact (byte-for-byte) version of an ImageObject. Two byte-for-byte
+    identical files, for the purposes of this type, considered identical. If they have
+    different embedded metadata (e.g. XMP, EXIF) the files will differ. Different
+    external facts about the files, e.g. creator or dateCreated that aren't represented
+    in their actual content, do not affect this notion of identity."""
 
-    pass
+    type: str = Field(default="ImageObjectSnapshot", alias="@type")
 
 class ImagingTest(MedicalTest):
     """Any medical imaging modality typically used for diagnostic purposes."""
 
+    type: str = Field(default="ImagingTest", alias="@type")
     imagingTechnique: Optional[MedicalImagingTechnique | str] = Field(default=None)
 
 class IncentiveQualifiedExpenseType(Enumeration):
-    """The types of expenses that are covered by the incentive. For example some incentives are only for the goods (tangible items) but the services (labor) are excluded."""
+    """The types of expenses that are covered by the incentive. For example some incentives
+    are only for the goods (tangible items) but the services (labor) are excluded."""
 
-    pass
+    type: str = Field(default="IncentiveQualifiedExpenseType", alias="@type")
 
 class IncentiveStatus(Enumeration):
     """Enumerates a status for an incentive, such as whether it is active."""
 
-    pass
+    type: str = Field(default="IncentiveStatus", alias="@type")
 
 class IncentiveType(Enumeration):
-    """Enumerates common financial incentives for products, including tax credits, tax deductions, rebates and subsidies, etc."""
+    """Enumerates common financial incentives for products, including tax credits, tax
+    deductions, rebates and subsidies, etc."""
 
-    pass
+    type: str = Field(default="IncentiveType", alias="@type")
 
 class Physician(MedicalBusiness):
-    """An individual physician or a physician's office considered as a [[MedicalOrganization]]."""
+    """An individual physician or a physician's office considered as a MedicalOrganization."""
 
+    type: str = Field(default="Physician", alias="@type")
     hospitalAffiliation: Optional[Hospital | str] = Field(default=None)
     availableService: Optional[MedicalProcedure | MedicalTest | str] = Field(default=None)
     medicalSpecialty: Optional[MedicalSpecialty | str] = Field(default=None)
@@ -3698,24 +4464,32 @@ class Physician(MedicalBusiness):
     usNPI: Optional[str] = Field(default=None)
 
 class IndividualPhysician(Physician):
-    """An individual medical practitioner. For their official address use [[address]], for affiliations to hospitals use [[hospitalAffiliation]]. 
-The [[practicesAt]] property can be used to indicate [[MedicalOrganization]] hospitals, clinics, pharmacies etc. where this physician practices."""
+    """An individual medical practitioner. For their official address use address, for
+    affiliations to hospitals use hospitalAffiliation.
+    The practicesAt property can be used to indicate MedicalOrganization hospitals,
+    clinics, pharmacies etc. where this physician practices."""
 
+    type: str = Field(default="IndividualPhysician", alias="@type")
     practicesAt: Optional[MedicalOrganization | str] = Field(default=None)
 
 class IndividualProduct(Product):
-    """A single, identifiable product instance (e.g. a laptop with a particular serial number)."""
+    """A single, identifiable product instance (e.g. a laptop with a particular serial
+    number)."""
 
+    type: str = Field(default="IndividualProduct", alias="@type")
     serialNumber: Optional[str] = Field(default=None)
 
 class InfectiousAgentClass(MedicalEnumeration):
     """Classes of agents or pathogens that transmit infectious diseases. Enumerated type."""
 
-    pass
+    type: str = Field(default="InfectiousAgentClass", alias="@type")
 
 class MedicalCondition(MedicalEntity):
-    """Any condition of the human body that affects the normal functioning of a person, whether physically or mentally. Includes diseases, injuries, disabilities, disorders, syndromes, etc."""
+    """Any condition of the human body that affects the normal functioning of a person,
+    whether physically or mentally. Includes diseases, injuries, disabilities,
+    disorders, syndromes, etc."""
 
+    type: str = Field(default="MedicalCondition", alias="@type")
     cause: Any = Field(default=None)
     possibleComplication: Optional[str] = Field(default=None)
     naturalProgression: Optional[str] = Field(default=None)
@@ -3735,8 +4509,12 @@ class MedicalCondition(MedicalEntity):
     pathophysiology: Optional[str] = Field(default=None)
 
 class InfectiousDisease(MedicalCondition):
-    """An infectious disease is a clinically evident human disease resulting from the presence of pathogenic microbial agents, like pathogenic viruses, pathogenic bacteria, fungi, protozoa, multicellular parasites, and prions. To be considered an infectious disease, such pathogens are known to be able to cause this disease."""
+    """An infectious disease is a clinically evident human disease resulting from the
+    presence of pathogenic microbial agents, like pathogenic viruses, pathogenic
+    bacteria, fungi, protozoa, multicellular parasites, and prions. To be considered an
+    infectious disease, such pathogens are known to be able to cause this disease."""
 
+    type: str = Field(default="InfectiousDisease", alias="@type")
     infectiousAgentClass: Optional[InfectiousAgentClass | str] = Field(default=None)
     infectiousAgent: Optional[str] = Field(default=None)
     transmissionMethod: Optional[str] = Field(default=None)
@@ -3744,21 +4522,23 @@ class InfectiousDisease(MedicalCondition):
 class InstallAction(ConsumeAction):
     """The act of installing an application."""
 
-    pass
+    type: str = Field(default="InstallAction", alias="@type")
 
 class InsuranceAgency(FinancialService):
     """An Insurance agency."""
 
-    pass
+    type: str = Field(default="InsuranceAgency", alias="@type")
 
 class Integer(Number):
     """Data type: Integer."""
 
-    pass
+    type: str = Field(default="Integer", alias="@type")
 
 class InteractionCounter(StructuredValue):
-    """A summary of how users have interacted with this CreativeWork. In most cases, authors will use a subtype to specify the specific type of interaction."""
+    """A summary of how users have interacted with this CreativeWork. In most cases,
+    authors will use a subtype to specify the specific type of interaction."""
 
+    type: str = Field(default="InteractionCounter", alias="@type")
     endTime: Optional[datetime | time | str] = Field(default=None)
     location: Optional[str | PostalAddress | VirtualLocation | Place] = Field(default=None)
     interactionType: Optional[Action | str] = Field(default=None)
@@ -3769,21 +4549,24 @@ class InteractionCounter(StructuredValue):
 class InternetCafe(LocalBusiness):
     """An internet cafe."""
 
-    pass
+    type: str = Field(default="InternetCafe", alias="@type")
 
 class InvestmentFund(InvestmentOrDeposit):
-    """A company or fund that gathers capital from a number of investors to create a pool of money that is then re-invested into stocks, bonds and other assets."""
+    """A company or fund that gathers capital from a number of investors to create a pool
+    of money that is then re-invested into stocks, bonds and other assets."""
 
-    pass
+    type: str = Field(default="InvestmentFund", alias="@type")
 
 class InviteAction(CommunicateAction):
     """The act of asking someone to attend an event. Reciprocal of RsvpAction."""
 
+    type: str = Field(default="InviteAction", alias="@type")
     event: Optional[Event | str] = Field(default=None)
 
 class Invoice(Intangible):
     """A statement of the money due for goods or services; a bill."""
 
+    type: str = Field(default="Invoice", alias="@type")
     paymentMethod: Optional[str] = Field(default=None)
     billingPeriod: Optional[timedelta | str] = Field(default=None)
     accountId: Optional[str] = Field(default=None)
@@ -3804,26 +4587,28 @@ class Invoice(Intangible):
 class ItemAvailability(Enumeration):
     """A list of possible product availability options."""
 
-    pass
+    type: str = Field(default="ItemAvailability", alias="@type")
 
 class ItemListOrderType(Enumeration):
-    """Enumerated for values for itemListOrder for indicating how an ordered ItemList is organized."""
+    """Enumerated for values for itemListOrder for indicating how an ordered ItemList is
+    organized."""
 
-    pass
+    type: str = Field(default="ItemListOrderType", alias="@type")
 
 class ItemPage(WebPage):
     """A page devoted to a single item, such as a particular product or hotel."""
 
-    pass
+    type: str = Field(default="ItemPage", alias="@type")
 
 class JewelryStore(Store):
     """A jewelry store."""
 
-    pass
+    type: str = Field(default="JewelryStore", alias="@type")
 
 class JobPosting(Intangible):
     """A listing that describes a job opening in a certain organization."""
 
+    type: str = Field(default="JobPosting", alias="@type")
     qualifications: Optional[Credential | str] = Field(default=None)
     datePosted: Optional[date | datetime | str] = Field(default=None)
     jobDuration: Optional[QuantitativeValue | timedelta | str] = Field(default=None)
@@ -3864,13 +4649,19 @@ class JobPosting(Intangible):
     totalJobOpenings: Optional[int | str] = Field(default=None)
 
 class JoinAction(InteractAction):
-    """An agent joins an event/group with participants/friends at a location.\n\nRelated actions:\n\n* [[RegisterAction]]: Unlike RegisterAction, JoinAction refers to joining a group/team of people.\n* [[SubscribeAction]]: Unlike SubscribeAction, JoinAction does not imply that you'll be receiving updates.\n* [[FollowAction]]: Unlike FollowAction, JoinAction does not imply that you'll be polling for updates."""
+    """An agent joins an event/group with participants/friends at a location.nnRelated
+    actions:nn* RegisterAction: Unlike RegisterAction, JoinAction refers to joining a
+    group/team of people.n* SubscribeAction: Unlike SubscribeAction, JoinAction does not
+    imply that you'll be receiving updates.n* FollowAction: Unlike FollowAction,
+    JoinAction does not imply that you'll be polling for updates."""
 
+    type: str = Field(default="JoinAction", alias="@type")
     event: Optional[Event | str] = Field(default=None)
 
 class Joint(AnatomicalStructure):
     """The anatomical location at which two or more bones make contact."""
 
+    type: str = Field(default="Joint", alias="@type")
     structuralClass: Optional[str] = Field(default=None)
     functionalClass: Optional[MedicalEntity | str] = Field(default=None)
     biomechnicalClass: Optional[str] = Field(default=None)
@@ -3878,36 +4669,46 @@ class Joint(AnatomicalStructure):
 class LakeBodyOfWater(BodyOfWater):
     """A lake (for example, Lake Pontrachain)."""
 
-    pass
+    type: str = Field(default="LakeBodyOfWater", alias="@type")
 
 class LandmarksOrHistoricalBuildings(Place):
     """An historical landmark or building."""
 
-    pass
+    type: str = Field(default="LandmarksOrHistoricalBuildings", alias="@type")
 
 class Language(Intangible):
-    """Natural languages such as Spanish, Tamil, Hindi, English, etc. Formal language code tags expressed in [BCP 47](https://en.wikipedia.org/wiki/IETF_language_tag) can be used via the [[alternateName]] property. The Language type previously also covered programming languages such as Scheme and Lisp, which are now best represented using [[ComputerLanguage]]."""
+    """Natural languages such as Spanish, Tamil, Hindi, English, etc. Formal language code
+    tags expressed in [BCP 47](https://en.wikipedia.org/wiki/IETF_language_tag) can be
+    used via the alternateName property. The Language type previously also covered
+    programming languages such as Scheme and Lisp, which are now best represented using
+    ComputerLanguage."""
 
-    pass
+    type: str = Field(default="Language", alias="@type")
 
 class LeaveAction(InteractAction):
-    """An agent leaves an event / group with participants/friends at a location.\n\nRelated actions:\n\n* [[JoinAction]]: The antonym of LeaveAction.\n* [[UnRegisterAction]]: Unlike UnRegisterAction, LeaveAction implies leaving a group/team of people rather than a service."""
+    """An agent leaves an event / group with participants/friends at a location.nnRelated
+    actions:nn* JoinAction: The antonym of LeaveAction.n* UnRegisterAction: Unlike
+    UnRegisterAction, LeaveAction implies leaving a group/team of people rather than a
+    service."""
 
+    type: str = Field(default="LeaveAction", alias="@type")
     event: Optional[Event | str] = Field(default=None)
 
 class LegalForceStatus(StatusEnumeration):
     """A list of possible statuses for the legal force of a legislation."""
 
-    pass
+    type: str = Field(default="LegalForceStatus", alias="@type")
 
 class LegalValueLevel(Enumeration):
     """A list of possible levels for the legal validity of a legislation."""
 
-    pass
+    type: str = Field(default="LegalValueLevel", alias="@type")
 
 class Legislation(CreativeWork):
-    """A legal document such as an act, decree, bill, etc. (enforceable or not) or a component of a legal act (like an article)."""
+    """A legal document such as an act, decree, bill, etc. (enforceable or not) or a
+    component of a legal act (like an article)."""
 
+    type: str = Field(default="Legislation", alias="@type")
     legislationTransposes: Any = Field(default=None)
     legislationCountersignedBy: Optional[Organization | str] = Field(default=None)
     legislationIdentifier: Optional[AnyUrl | str] = Field(default=None)
@@ -3930,71 +4731,88 @@ class Legislation(CreativeWork):
     legislationApplies: Any = Field(default=None)
 
 class LegislationObject(Legislation):
-    """A specific object or file containing a Legislation. Note that the same Legislation can be published in multiple files. For example, a digitally signed PDF, a plain PDF and an HTML version."""
+    """A specific object or file containing a Legislation. Note that the same Legislation
+    can be published in multiple files. For example, a digitally signed PDF, a plain PDF
+    and an HTML version."""
 
+    type: str = Field(default="LegislationObject", alias="@type")
     legislationLegalValue: Any = Field(default=None)
 
 class LegislativeBuilding(GovernmentBuilding):
     """A legislative building&#x2014;for example, the state capitol."""
 
-    pass
+    type: str = Field(default="LegislativeBuilding", alias="@type")
 
 class LendAction(TransferAction):
-    """The act of providing an object under an agreement that it will be returned at a later date. Reciprocal of BorrowAction.\n\nRelated actions:\n\n* [[BorrowAction]]: Reciprocal of LendAction."""
+    """The act of providing an object under an agreement that it will be returned at a
+    later date. Reciprocal of BorrowAction.nnRelated actions:nn* BorrowAction:
+    Reciprocal of LendAction."""
 
+    type: str = Field(default="LendAction", alias="@type")
     borrower: Optional[Person | str] = Field(default=None)
 
 class Library(LocalBusiness):
     """A library."""
 
-    pass
+    type: str = Field(default="Library", alias="@type")
 
 class LibrarySystem(Organization):
-    """A [[LibrarySystem]] is a collaborative system amongst several libraries."""
+    """A LibrarySystem is a collaborative system amongst several libraries."""
 
-    pass
+    type: str = Field(default="LibrarySystem", alias="@type")
 
 class Ligament(AnatomicalStructure):
-    """A short band of tough, flexible, fibrous connective tissue that functions to connect multiple bones, cartilages, and structurally support joints."""
+    """A short band of tough, flexible, fibrous connective tissue that functions to connect
+    multiple bones, cartilages, and structurally support joints."""
 
-    pass
+    type: str = Field(default="Ligament", alias="@type")
 
 class LikeAction(ReactAction):
-    """The act of expressing a positive sentiment about the object. An agent likes an object (a proposition, topic or theme) with participants."""
+    """The act of expressing a positive sentiment about the object. An agent likes an
+    object (a proposition, topic or theme) with participants."""
 
-    pass
+    type: str = Field(default="LikeAction", alias="@type")
 
 class LinkRole(Role):
-    """A Role that represents a Web link, e.g. as expressed via the 'url' property. Its linkRelationship property can indicate URL-based and plain textual link types, e.g. those in IANA link registry or others such as 'amphtml'. This structure provides a placeholder where details from HTML's link element can be represented outside of HTML, e.g. in JSON-LD feeds."""
+    """A Role that represents a Web link, e.g. as expressed via the 'url' property. Its
+    linkRelationship property can indicate URL-based and plain textual link types, e.g.
+    those in IANA link registry or others such as 'amphtml'. This structure provides a
+    placeholder where details from HTML's link element can be represented outside of
+    HTML, e.g. in JSON-LD feeds."""
 
+    type: str = Field(default="LinkRole", alias="@type")
     linkRelationship: Optional[str] = Field(default=None)
     inLanguage: Optional[str | Language] = Field(default=None)
 
 class LiquorStore(Store):
     """A shop that sells alcoholic drinks such as wine, beer, whisky and other spirits."""
 
-    pass
+    type: str = Field(default="LiquorStore", alias="@type")
 
 class ListenAction(ConsumeAction):
     """The act of consuming audio content."""
 
-    pass
+    type: str = Field(default="ListenAction", alias="@type")
 
 class LiteraryEvent(Event):
     """Event type: Literary event."""
 
-    pass
+    type: str = Field(default="LiteraryEvent", alias="@type")
 
 class LiveBlogPosting(BlogPosting):
-    """A [[LiveBlogPosting]] is a [[BlogPosting]] intended to provide a rolling textual coverage of an ongoing event through continuous updates."""
+    """A LiveBlogPosting is a BlogPosting intended to provide a rolling textual coverage of
+    an ongoing event through continuous updates."""
 
+    type: str = Field(default="LiveBlogPosting", alias="@type")
     coverageEndTime: Optional[datetime | str] = Field(default=None)
     liveBlogUpdate: Optional[BlogPosting | str] = Field(default=None)
     coverageStartTime: Optional[datetime | str] = Field(default=None)
 
 class LoanOrCredit(FinancialProduct):
-    """A financial product for the loaning of an amount of money, or line of credit, under agreed terms and charges."""
+    """A financial product for the loaning of an amount of money, or line of credit, under
+    agreed terms and charges."""
 
+    type: str = Field(default="LoanOrCredit", alias="@type")
     requiredCollateral: Optional[Thing | str] = Field(default=None)
     loanType: Optional[AnyUrl | str] = Field(default=None)
     loanTerm: Optional[QuantitativeValue | str] = Field(default=None)
@@ -4006,9 +4824,15 @@ class LoanOrCredit(FinancialProduct):
     currency: Optional[str] = Field(default=None)
 
 class PropertyValue(StructuredValue):
-    """A property-value pair, e.g. representing a feature of a product or place. Use the 'name' property for the name of the property. If there is an additional human-readable version of the value, put that into the 'description' property.\n\n Always use specific schema.org properties when a) they exist and b) you can populate them. Using PropertyValue as a substitute will typically not trigger the same effect as using the original, specific property.
+    """A property-value pair, e.g. representing a feature of a product or place. Use the
+    'name' property for the name of the property. If there is an additional human-
+    readable version of the value, put that into the 'description' property.nn Always
+    use specific schema.org properties when a) they exist and b) you can populate them.
+    Using PropertyValue as a substitute will typically not trigger the same effect as
+    using the original, specific property.
     """
 
+    type: str = Field(default="PropertyValue", alias="@type")
     unitCode: Optional[AnyUrl | str] = Field(default=None)
     valueReference: Optional[StructuredValue | str | QualitativeValue | MeasurementTypeEnumeration | QuantitativeValue | Enumeration] = Field(default=None)
     measurementTechnique: Optional[str | AnyUrl | MeasurementMethodEnum] = Field(default=None)
@@ -4020,8 +4844,10 @@ class PropertyValue(StructuredValue):
     propertyID: Optional[AnyUrl | str] = Field(default=None)
 
 class LocationFeatureSpecification(PropertyValue):
-    """Specifies a location feature by providing a structured value representing a feature of an accommodation as a property-value pair of varying degrees of formality."""
+    """Specifies a location feature by providing a structured value representing a feature
+    of an accommodation as a property-value pair of varying degrees of formality."""
 
+    type: str = Field(default="LocationFeatureSpecification", alias="@type")
     hoursAvailable: Any = Field(default=None)
     validThrough: Optional[datetime | date | str] = Field(default=None)
     validFrom: Optional[datetime | date | str] = Field(default=None)
@@ -4029,11 +4855,14 @@ class LocationFeatureSpecification(PropertyValue):
 class Locksmith(HomeAndConstructionBusiness):
     """A locksmith."""
 
-    pass
+    type: str = Field(default="Locksmith", alias="@type")
 
 class LodgingReservation(Reservation):
-    """A reservation for lodging at a hotel, motel, inn, etc.\n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations."""
+    """A reservation for lodging at a hotel, motel, inn, etc.nnNote: This type is for
+    information about actual reservations, e.g. in confirmation emails or HTML pages
+    with individual confirmations of reservations."""
 
+    type: str = Field(default="LodgingReservation", alias="@type")
     lodgingUnitDescription: Optional[str] = Field(default=None)
     numChildren: Optional[int | QuantitativeValue | str] = Field(default=None)
     numAdults: Optional[int | QuantitativeValue | str] = Field(default=None)
@@ -4044,16 +4873,19 @@ class LodgingReservation(Reservation):
 class LoginAction(ControlAction):
     """The action of logging into a device or application."""
 
-    pass
+    type: str = Field(default="LoginAction", alias="@type")
 
 class LoseAction(AchieveAction):
     """The act of being defeated in a competitive activity."""
 
+    type: str = Field(default="LoseAction", alias="@type")
     winner: Optional[Person | str] = Field(default=None)
 
 class LymphaticVessel(Vessel):
-    """A type of blood vessel that specifically carries lymph fluid unidirectionally toward the heart."""
+    """A type of blood vessel that specifically carries lymph fluid unidirectionally toward
+    the heart."""
 
+    type: str = Field(default="LymphaticVessel", alias="@type")
     originatesFrom: Optional[Vessel | str] = Field(default=None)
     regionDrained: Optional[AnatomicalSystem | AnatomicalStructure | str] = Field(default=None)
     runsTo: Optional[Vessel | str] = Field(default=None)
@@ -4061,104 +4893,147 @@ class LymphaticVessel(Vessel):
 class Manuscript(CreativeWork):
     """A book, document, or piece of music written by hand rather than typed or printed."""
 
-    pass
+    type: str = Field(default="Manuscript", alias="@type")
 
 class Map(CreativeWork):
     """A map."""
 
+    type: str = Field(default="Map", alias="@type")
     mapType: Any = Field(default=None)
 
 class MapCategoryType(Enumeration):
     """An enumeration of several kinds of Map."""
 
-    pass
+    type: str = Field(default="MapCategoryType", alias="@type")
 
 class MarryAction(InteractAction):
     """The act of marrying a person."""
 
-    pass
+    type: str = Field(default="MarryAction", alias="@type")
 
 class Mass(Quantity):
-    """Properties that take Mass as values are of the form '&lt;Number&gt; &lt;Mass unit of measure&gt;'. E.g., '7 kg'."""
+    """Properties that take Mass as values are of the form '&lt;Number&gt; &lt;Mass unit of
+    measure&gt;'. E.g., '7 kg'."""
 
-    pass
+    type: str = Field(default="Mass", alias="@type")
 
 class MathSolver(CreativeWork):
     """A math solver which is capable of solving a subset of mathematical problems."""
 
+    type: str = Field(default="MathSolver", alias="@type")
     mathExpression: Optional[str] = Field(default=None)
 
 class MaximumDoseSchedule(DoseSchedule):
-    """The maximum dosing schedule considered safe for a drug or supplement as recommended by an authority or by the drug/supplement's manufacturer. Capture the recommending authority in the recognizingAuthority property of MedicalEntity."""
+    """The maximum dosing schedule considered safe for a drug or supplement as recommended
+    by an authority or by the drug/supplement's manufacturer. Capture the recommending
+    authority in the recognizingAuthority property of MedicalEntity."""
 
-    pass
+    type: str = Field(default="MaximumDoseSchedule", alias="@type")
 
 class MeasurementMethodEnum(Enumeration):
-    """Enumeration(s) for use with [[measurementMethod]]."""
+    """Enumeration(s) for use with measurementMethod."""
 
-    pass
+    type: str = Field(default="MeasurementMethodEnum", alias="@type")
 
 class MediaManipulationRatingEnumeration(Enumeration):
-    """ Codes for use with the [[mediaAuthenticityCategory]] property, indicating the authenticity of a media object (in the context of how it was published or shared). In general these codes are not mutually exclusive, although some combinations (such as 'original' versus 'transformed', 'edited' and 'staged') would be contradictory if applied in the same [[MediaReview]]. Note that the application of these codes is with regard to a piece of media shared or published in a particular context."""
+    """ Codes for use with the mediaAuthenticityCategory property, indicating the
+    authenticity of a media object (in the context of how it was published or shared).
+    In general these codes are not mutually exclusive, although some combinations (such
+    as 'original' versus 'transformed', 'edited' and 'staged') would be contradictory if
+    applied in the same MediaReview. Note that the application of these codes is with
+    regard to a piece of media shared or published in a particular context."""
 
-    pass
+    type: str = Field(default="MediaManipulationRatingEnumeration", alias="@type")
 
 class MediaReview(Review):
-    """A [[MediaReview]] is a more specialized form of Review dedicated to the evaluation of media content online, typically in the context of fact-checking and misinformation.
-    For more general reviews of media in the broader sense, use [[UserReview]], [[CriticReview]] or other [[Review]] types. This definition is
-    a work in progress. While the [[MediaManipulationRatingEnumeration]] list reflects significant community review amongst fact-checkers and others working
-    to combat misinformation, the specific structures for representing media objects, their versions and publication context, are still evolving. Similarly, best practices for the relationship between [[MediaReview]] and [[ClaimReview]] markup have not yet been finalized."""
+    """A MediaReview is a more specialized form of Review dedicated to the evaluation of
+    media content online, typically in the context of fact-checking and misinformation.
+        For more general reviews of media in the broader sense, use UserReview,
+    CriticReview or other Review types. This definition is
+        a work in progress. While the MediaManipulationRatingEnumeration list reflects
+    significant community review amongst fact-checkers and others working
+        to combat misinformation, the specific structures for representing media
+    objects, their versions and publication context, are still evolving. Similarly, best
+    practices for the relationship between MediaReview and ClaimReview markup have not
+    yet been finalized."""
 
+    type: str = Field(default="MediaReview", alias="@type")
     originalMediaLink: Optional[MediaObject | AnyUrl | WebPage | str] = Field(default=None)
     originalMediaContextDescription: Optional[str] = Field(default=None)
     mediaAuthenticityCategory: Any = Field(default=None)
 
 class MediaReviewItem(CreativeWork):
-    """Represents an item or group of closely related items treated as a unit for the sake of evaluation in a [[MediaReview]]. Authorship etc. apply to the items rather than to the curation/grouping or reviewing party."""
+    """Represents an item or group of closely related items treated as a unit for the sake
+    of evaluation in a MediaReview. Authorship etc. apply to the items rather than to
+    the curation/grouping or reviewing party."""
 
+    type: str = Field(default="MediaReviewItem", alias="@type")
     mediaItemAppearance: Optional[MediaObject | str] = Field(default=None)
 
 class MediaSubscription(Intangible):
-    """A subscription which allows a user to access media including audio, video, books, etc."""
+    """A subscription which allows a user to access media including audio, video, books,
+    etc."""
 
+    type: str = Field(default="MediaSubscription", alias="@type")
     expectsAcceptanceOf: Optional[Offer | str] = Field(default=None)
     authenticator: Optional[Organization | str] = Field(default=None)
 
 class MedicalAudience(Audience):
     """Target audiences for medical web pages."""
 
-    pass
+    type: str = Field(default="MedicalAudience", alias="@type")
 
 class MedicalAudienceType(MedicalEnumeration):
     """Target audiences types for medical web pages. Enumerated type."""
 
-    pass
+    type: str = Field(default="MedicalAudienceType", alias="@type")
 
 class MedicalCause(MedicalEntity):
-    """The causative agent(s) that are responsible for the pathophysiologic process that eventually results in a medical condition, symptom or sign. In this schema, unless otherwise specified this is meant to be the proximate cause of the medical condition, symptom or sign. The proximate cause is defined as the causative agent that most directly results in the medical condition, symptom or sign. For example, the HIV virus could be considered a cause of AIDS. Or in a diagnostic context, if a patient fell and sustained a hip fracture and two days later sustained a pulmonary embolism which eventuated in a cardiac arrest, the cause of the cardiac arrest (the proximate cause) would be the pulmonary embolism and not the fall. Medical causes can include cardiovascular, chemical, dermatologic, endocrine, environmental, gastroenterologic, genetic, hematologic, gynecologic, iatrogenic, infectious, musculoskeletal, neurologic, nutritional, obstetric, oncologic, otolaryngologic, pharmacologic, psychiatric, pulmonary, renal, rheumatologic, toxic, traumatic, or urologic causes; medical conditions can be causes as well."""
+    """The causative agent(s) that are responsible for the pathophysiologic process that
+    eventually results in a medical condition, symptom or sign. In this schema, unless
+    otherwise specified this is meant to be the proximate cause of the medical
+    condition, symptom or sign. The proximate cause is defined as the causative agent
+    that most directly results in the medical condition, symptom or sign. For example,
+    the HIV virus could be considered a cause of AIDS. Or in a diagnostic context, if a
+    patient fell and sustained a hip fracture and two days later sustained a pulmonary
+    embolism which eventuated in a cardiac arrest, the cause of the cardiac arrest (the
+    proximate cause) would be the pulmonary embolism and not the fall. Medical causes
+    can include cardiovascular, chemical, dermatologic, endocrine, environmental,
+    gastroenterologic, genetic, hematologic, gynecologic, iatrogenic, infectious,
+    musculoskeletal, neurologic, nutritional, obstetric, oncologic, otolaryngologic,
+    pharmacologic, psychiatric, pulmonary, renal, rheumatologic, toxic, traumatic, or
+    urologic causes; medical conditions can be causes as well."""
 
+    type: str = Field(default="MedicalCause", alias="@type")
     causeOf: Optional[MedicalEntity | str] = Field(default=None)
 
 class MedicalCode(MedicalIntangible):
     """A code for a medical entity."""
 
+    type: str = Field(default="MedicalCode", alias="@type")
     codeValue: Optional[str] = Field(default=None)
     codingSystem: Optional[str] = Field(default=None)
 
 class MedicalConditionStage(MedicalIntangible):
     """A stage of a medical condition, such as 'Stage IIIa'."""
 
+    type: str = Field(default="MedicalConditionStage", alias="@type")
     stageAsNumber: Optional[str | float] = Field(default=None)
     subStageSuffix: Optional[str] = Field(default=None)
 
 class MedicalContraindication(MedicalEntity):
-    """A condition or factor that serves as a reason to withhold a certain medical therapy. Contraindications can be absolute (there are no reasonable circumstances for undertaking a course of action) or relative (the patient is at higher risk of complications, but these risks may be outweighed by other considerations or mitigated by other measures)."""
+    """A condition or factor that serves as a reason to withhold a certain medical therapy.
+    Contraindications can be absolute (there are no reasonable circumstances for
+    undertaking a course of action) or relative (the patient is at higher risk of
+    complications, but these risks may be outweighed by other considerations or
+    mitigated by other measures)."""
 
-    pass
+    type: str = Field(default="MedicalContraindication", alias="@type")
 
 class MedicalDevice(MedicalEntity):
     """Any object used in a medical capacity, such as to diagnose or treat a patient."""
 
+    type: str = Field(default="MedicalDevice", alias="@type")
     preOp: Optional[str] = Field(default=None)
     adverseOutcome: Optional[MedicalEntity | str] = Field(default=None)
     contraindication: Optional[str] = Field(default=None)
@@ -4167,41 +5042,61 @@ class MedicalDevice(MedicalEntity):
     postOp: Optional[str] = Field(default=None)
 
 class MedicalDevicePurpose(MedicalEnumeration):
-    """Categories of medical devices, organized by the purpose or intended use of the device."""
+    """Categories of medical devices, organized by the purpose or intended use of the
+    device."""
 
-    pass
+    type: str = Field(default="MedicalDevicePurpose", alias="@type")
 
 class MedicalEvidenceLevel(MedicalEnumeration):
     """Level of evidence for a medical guideline. Enumerated type."""
 
-    pass
+    type: str = Field(default="MedicalEvidenceLevel", alias="@type")
 
 class MedicalGuideline(MedicalEntity):
-    """Any recommendation made by a standard society (e.g. ACC/AHA) or consensus statement that denotes how to diagnose and treat a particular condition. Note: this type should be used to tag the actual guideline recommendation; if the guideline recommendation occurs in a larger scholarly article, use MedicalScholarlyArticle to tag the overall article, not this type. Note also: the organization making the recommendation should be captured in the recognizingAuthority base property of MedicalEntity."""
+    """Any recommendation made by a standard society (e.g. ACC/AHA) or consensus statement
+    that denotes how to diagnose and treat a particular condition. Note: this type
+    should be used to tag the actual guideline recommendation; if the guideline
+    recommendation occurs in a larger scholarly article, use MedicalScholarlyArticle to
+    tag the overall article, not this type. Note also: the organization making the
+    recommendation should be captured in the recognizingAuthority base property of
+    MedicalEntity."""
 
+    type: str = Field(default="MedicalGuideline", alias="@type")
     guidelineSubject: Optional[MedicalEntity | str] = Field(default=None)
     evidenceOrigin: Optional[str] = Field(default=None)
     evidenceLevel: Any = Field(default=None)
     guidelineDate: Optional[date | str] = Field(default=None)
 
 class MedicalGuidelineContraindication(MedicalGuideline):
-    """A guideline contraindication that designates a process as harmful and where quality of the data supporting the contraindication is sound."""
+    """A guideline contraindication that designates a process as harmful and where quality
+    of the data supporting the contraindication is sound."""
 
-    pass
+    type: str = Field(default="MedicalGuidelineContraindication", alias="@type")
 
 class MedicalGuidelineRecommendation(MedicalGuideline):
-    """A guideline recommendation that is regarded as efficacious and where quality of the data supporting the recommendation is sound."""
+    """A guideline recommendation that is regarded as efficacious and where quality of the
+    data supporting the recommendation is sound."""
 
+    type: str = Field(default="MedicalGuidelineRecommendation", alias="@type")
     recommendationStrength: Optional[str] = Field(default=None)
 
 class MedicalImagingTechnique(MedicalEnumeration):
-    """Any medical imaging modality typically used for diagnostic purposes. Enumerated type."""
+    """Any medical imaging modality typically used for diagnostic purposes. Enumerated
+    type."""
 
-    pass
+    type: str = Field(default="MedicalImagingTechnique", alias="@type")
 
 class MedicalStudy(MedicalEntity):
-    """A medical study is an umbrella type covering all kinds of research studies relating to human medicine or health, including observational studies and interventional trials and registries, randomized, controlled or not. When the specific type of study is known, use one of the extensions of this type, such as MedicalTrial or MedicalObservationalStudy. Also, note that this type should be used to mark up data that describes the study itself; to tag an article that publishes the results of a study, use MedicalScholarlyArticle. Note: use the code property of MedicalEntity to store study IDs, e.g. clinicaltrials.gov ID."""
+    """A medical study is an umbrella type covering all kinds of research studies relating
+    to human medicine or health, including observational studies and interventional
+    trials and registries, randomized, controlled or not. When the specific type of
+    study is known, use one of the extensions of this type, such as MedicalTrial or
+    MedicalObservationalStudy. Also, note that this type should be used to mark up data
+    that describes the study itself; to tag an article that publishes the results of a
+    study, use MedicalScholarlyArticle. Note: use the code property of MedicalEntity to
+    store study IDs, e.g. clinicaltrials.gov ID."""
 
+    type: str = Field(default="MedicalStudy", alias="@type")
     sponsor: Optional[Organization | Person | str] = Field(default=None)
     status: Optional[str] = Field(default=None)
     studySubject: Optional[MedicalEntity | str] = Field(default=None)
@@ -4209,134 +5104,179 @@ class MedicalStudy(MedicalEntity):
     healthCondition: Optional[MedicalCondition | str] = Field(default=None)
 
 class MedicalObservationalStudy(MedicalStudy):
-    """An observational study is a type of medical study that attempts to infer the possible effect of a treatment through observation of a cohort of subjects over a period of time. In an observational study, the assignment of subjects into treatment groups versus control groups is outside the control of the investigator. This is in contrast with controlled studies, such as the randomized controlled trials represented by MedicalTrial, where each subject is randomly assigned to a treatment group or a control group before the start of the treatment."""
+    """An observational study is a type of medical study that attempts to infer the
+    possible effect of a treatment through observation of a cohort of subjects over a
+    period of time. In an observational study, the assignment of subjects into treatment
+    groups versus control groups is outside the control of the investigator. This is in
+    contrast with controlled studies, such as the randomized controlled trials
+    represented by MedicalTrial, where each subject is randomly assigned to a treatment
+    group or a control group before the start of the treatment."""
 
+    type: str = Field(default="MedicalObservationalStudy", alias="@type")
     studyDesign: Optional[MedicalObservationalStudyDesign | str] = Field(default=None)
 
 class MedicalObservationalStudyDesign(MedicalEnumeration):
     """Design models for observational medical studies. Enumerated type."""
 
-    pass
+    type: str = Field(default="MedicalObservationalStudyDesign", alias="@type")
 
 class MedicalProcedureType(MedicalEnumeration):
     """An enumeration that describes different types of medical procedures."""
 
-    pass
+    type: str = Field(default="MedicalProcedureType", alias="@type")
 
 class MedicalRiskEstimator(MedicalEntity):
-    """Any rule set or interactive tool for estimating the risk of developing a complication or condition."""
+    """Any rule set or interactive tool for estimating the risk of developing a
+    complication or condition."""
 
+    type: str = Field(default="MedicalRiskEstimator", alias="@type")
     includedRiskFactor: Optional[MedicalRiskFactor | str] = Field(default=None)
     estimatesRiskOf: Optional[MedicalEntity | str] = Field(default=None)
 
 class MedicalRiskCalculator(MedicalRiskEstimator):
-    """A complex mathematical calculation requiring an online calculator, used to assess prognosis. Note: use the url property of Thing to record any URLs for online calculators."""
+    """A complex mathematical calculation requiring an online calculator, used to assess
+    prognosis. Note: use the url property of Thing to record any URLs for online
+    calculators."""
 
-    pass
+    type: str = Field(default="MedicalRiskCalculator", alias="@type")
 
 class MedicalRiskFactor(MedicalEntity):
-    """A risk factor is anything that increases a person's likelihood of developing or contracting a disease, medical condition, or complication."""
+    """A risk factor is anything that increases a person's likelihood of developing or
+    contracting a disease, medical condition, or complication."""
 
+    type: str = Field(default="MedicalRiskFactor", alias="@type")
     increasesRiskOf: Optional[MedicalEntity | str] = Field(default=None)
 
 class MedicalRiskScore(MedicalRiskEstimator):
-    """A simple system that adds up the number of risk factors to yield a score that is associated with prognosis, e.g. CHAD score, TIMI risk score."""
+    """A simple system that adds up the number of risk factors to yield a score that is
+    associated with prognosis, e.g. CHAD score, TIMI risk score."""
 
+    type: str = Field(default="MedicalRiskScore", alias="@type")
     algorithm: Optional[str] = Field(default=None)
 
 class ScholarlyArticle(Article):
     """A scholarly article."""
 
-    pass
+    type: str = Field(default="ScholarlyArticle", alias="@type")
 
 class MedicalScholarlyArticle(ScholarlyArticle):
     """A scholarly article in the medical domain."""
 
+    type: str = Field(default="MedicalScholarlyArticle", alias="@type")
     publicationType: Optional[str] = Field(default=None)
 
 class MedicalSignOrSymptom(MedicalCondition):
-    """Any feature associated or not with a medical condition. In medicine a symptom is generally subjective while a sign is objective."""
+    """Any feature associated or not with a medical condition. In medicine a symptom is
+    generally subjective while a sign is objective."""
 
-    pass
+    type: str = Field(default="MedicalSignOrSymptom", alias="@type")
 
 class MedicalSign(MedicalSignOrSymptom):
-    """Any physical manifestation of a person's medical condition discoverable by objective diagnostic tests or physical examination."""
+    """Any physical manifestation of a person's medical condition discoverable by objective
+    diagnostic tests or physical examination."""
 
+    type: str = Field(default="MedicalSign", alias="@type")
     identifyingTest: Optional[MedicalTest | str] = Field(default=None)
     identifyingExam: Any = Field(default=None)
 
 class MedicalSpecialty(MedicalEnumeration):
-    """Any specific branch of medical science or practice. Medical specialities include clinical specialties that pertain to particular organ systems and their respective disease states, as well as allied health specialties. Enumerated type."""
+    """Any specific branch of medical science or practice. Medical specialities include
+    clinical specialties that pertain to particular organ systems and their respective
+    disease states, as well as allied health specialties. Enumerated type."""
 
-    pass
+    type: str = Field(default="MedicalSpecialty", alias="@type")
 
 class MedicalStudyStatus(MedicalEnumeration):
     """The status of a medical study. Enumerated type."""
 
-    pass
+    type: str = Field(default="MedicalStudyStatus", alias="@type")
 
 class MedicalSymptom(MedicalSignOrSymptom):
-    """Any complaint sensed and expressed by the patient (therefore defined as subjective)  like stomachache, lower-back pain, or fatigue."""
+    """Any complaint sensed and expressed by the patient (therefore defined as subjective)
+    like stomachache, lower-back pain, or fatigue."""
 
-    pass
+    type: str = Field(default="MedicalSymptom", alias="@type")
 
 class MedicalTestPanel(MedicalTest):
     """Any collection of tests commonly ordered together."""
 
+    type: str = Field(default="MedicalTestPanel", alias="@type")
     subTest: Optional[MedicalTest | str] = Field(default=None)
 
 class TherapeuticProcedure(MedicalProcedure):
-    """A medical procedure intended primarily for therapeutic purposes, aimed at improving a health condition."""
+    """A medical procedure intended primarily for therapeutic purposes, aimed at improving
+    a health condition."""
 
+    type: str = Field(default="TherapeuticProcedure", alias="@type")
     adverseOutcome: Optional[MedicalEntity | str] = Field(default=None)
     doseSchedule: Any = Field(default=None)
     drug: Any = Field(default=None)
 
 class MedicalTherapy(TherapeuticProcedure):
-    """Any medical intervention designed to prevent, treat, and cure human diseases and medical conditions, including both curative and palliative therapies. Medical therapies are typically processes of care relying upon pharmacotherapy, behavioral therapy, supportive therapy (with fluid or nutrition for example), or detoxification (e.g. hemodialysis) aimed at improving or preventing a health condition."""
+    """Any medical intervention designed to prevent, treat, and cure human diseases and
+    medical conditions, including both curative and palliative therapies. Medical
+    therapies are typically processes of care relying upon pharmacotherapy, behavioral
+    therapy, supportive therapy (with fluid or nutrition for example), or detoxification
+    (e.g. hemodialysis) aimed at improving or preventing a health condition."""
 
+    type: str = Field(default="MedicalTherapy", alias="@type")
     contraindication: Optional[str] = Field(default=None)
     duplicateTherapy: Any = Field(default=None)
     seriousAdverseOutcome: Optional[MedicalEntity | str] = Field(default=None)
 
 class MedicalTrial(MedicalStudy):
-    """A medical trial is a type of medical study that uses a scientific process to compare the safety and efficacy of medical therapies or medical procedures. In general, medical trials are controlled and subjects are allocated at random to the different treatment and/or control groups."""
+    """A medical trial is a type of medical study that uses a scientific process to compare
+    the safety and efficacy of medical therapies or medical procedures. In general,
+    medical trials are controlled and subjects are allocated at random to the different
+    treatment and/or control groups."""
 
+    type: str = Field(default="MedicalTrial", alias="@type")
     trialDesign: Any = Field(default=None)
 
 class MedicalTrialDesign(MedicalEnumeration):
     """Design models for medical trials. Enumerated type."""
 
-    pass
+    type: str = Field(default="MedicalTrialDesign", alias="@type")
 
 class MedicalWebPage(WebPage):
     """A web page that provides medical information."""
 
+    type: str = Field(default="MedicalWebPage", alias="@type")
     medicalAudience: Optional[MedicalAudience | MedicalAudienceType | str] = Field(default=None)
     aspect: Optional[str] = Field(default=None)
 
 class MedicineSystem(MedicalEnumeration):
     """Systems of medical practice."""
 
-    pass
+    type: str = Field(default="MedicineSystem", alias="@type")
 
 class MeetingRoom(Room):
-    """A meeting room, conference room, or conference hall is a room provided for singular events such as business conferences and meetings (source: Wikipedia, the free encyclopedia, see <a href="http://en.wikipedia.org/wiki/Conference_hall">http://en.wikipedia.org/wiki/Conference_hall</a>).
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    """A meeting room, conference room, or conference hall is a room provided for singular
+    events such as business conferences and meetings (source: Wikipedia, the free
+    encyclopedia, see <a href="http://en.wikipedia.org/wiki/Conference_hall">http://en.w
+    ikipedia.org/wiki/Conference_hall</a>).
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
-    pass
+    type: str = Field(default="MeetingRoom", alias="@type")
 
 class MemberProgram(Intangible):
-    """A MemberProgram defines a loyalty (or membership) program that provides its members with certain benefits, for example better pricing, free shipping or returns, or the ability to earn loyalty points. Member programs may have multiple tiers, for example silver and gold members, each with different benefits."""
+    """A MemberProgram defines a loyalty (or membership) program that provides its members
+    with certain benefits, for example better pricing, free shipping or returns, or the
+    ability to earn loyalty points. Member programs may have multiple tiers, for example
+    silver and gold members, each with different benefits."""
 
+    type: str = Field(default="MemberProgram", alias="@type")
     hostingOrganization: Optional[Organization | str] = Field(default=None)
     hasTiers: Any = Field(default=None)
 
 class MemberProgramTier(Intangible):
-    """A MemberProgramTier specifies a tier under a loyalty (member) program, for example "gold"."""
+    """A MemberProgramTier specifies a tier under a loyalty (member) program, for example
+    "gold"."""
 
+    type: str = Field(default="MemberProgramTier", alias="@type")
     hasTierRequirement: Optional[UnitPriceSpecification | MonetaryAmount | CreditCard | str] = Field(default=None)
     membershipPointsEarned: Optional[QuantitativeValue | float | str] = Field(default=None)
     hasTierBenefit: Optional[TierBenefitEnumeration | str] = Field(default=None)
@@ -4345,36 +5285,44 @@ class MemberProgramTier(Intangible):
 class MensClothingStore(Store):
     """A men's clothing store."""
 
-    pass
+    type: str = Field(default="MensClothingStore", alias="@type")
 
 class Menu(CreativeWork):
-    """A structured representation of food or drink items available from a FoodEstablishment."""
+    """A structured representation of food or drink items available from a
+    FoodEstablishment."""
 
+    type: str = Field(default="Menu", alias="@type")
     hasMenuSection: Optional[MenuSection | str] = Field(default=None)
     hasMenuItem: Any = Field(default=None)
 
 class MenuItem(Intangible):
     """A food or drink item listed in a menu or menu section."""
 
+    type: str = Field(default="MenuItem", alias="@type")
     menuAddOn: Optional[MenuSection | str] = Field(default=None)
     suitableForDiet: Optional[Diet | str] = Field(default=None)
     offers: Optional[Offer | Demand | str] = Field(default=None)
     nutrition: Optional[NutritionInformation | str] = Field(default=None)
 
 class MenuSection(CreativeWork):
-    """A sub-grouping of food or drink items in a menu. E.g. courses (such as 'Dinner', 'Breakfast', etc.), specific type of dishes (such as 'Meat', 'Vegan', 'Drinks', etc.), or some other classification made by the menu provider."""
+    """A sub-grouping of food or drink items in a menu. E.g. courses (such as 'Dinner',
+    'Breakfast', etc.), specific type of dishes (such as 'Meat', 'Vegan', 'Drinks',
+    etc.), or some other classification made by the menu provider."""
 
+    type: str = Field(default="MenuSection", alias="@type")
     hasMenuSection: Any = Field(default=None)
     hasMenuItem: Any = Field(default=None)
 
 class MerchantReturnEnumeration(Enumeration):
     """Enumerates several kinds of product return policies."""
 
-    pass
+    type: str = Field(default="MerchantReturnEnumeration", alias="@type")
 
 class MerchantReturnPolicy(Intangible):
-    """A MerchantReturnPolicy provides information about product return policies associated with an [[Organization]], [[Product]], or [[Offer]]."""
+    """A MerchantReturnPolicy provides information about product return policies associated
+    with an Organization, Product, or Offer."""
 
+    type: str = Field(default="MerchantReturnPolicy", alias="@type")
     returnShippingFeesAmount: Optional[MonetaryAmount | str] = Field(default=None)
     validForMemberTier: Any = Field(default=None)
     returnPolicySeasonalOverride: Optional[MerchantReturnPolicySeasonalOverride | str] = Field(default=None)
@@ -4401,6 +5349,7 @@ class MerchantReturnPolicy(Intangible):
 class MerchantReturnPolicySeasonalOverride(Intangible):
     """A seasonal override of a return policy, for example used for holidays."""
 
+    type: str = Field(default="MerchantReturnPolicySeasonalOverride", alias="@type")
     returnShippingFeesAmount: Optional[MonetaryAmount | str] = Field(default=None)
     returnFees: Any = Field(default=None)
     restockingFee: Optional[MonetaryAmount | float | str] = Field(default=None)
@@ -4412,13 +5361,15 @@ class MerchantReturnPolicySeasonalOverride(Intangible):
     merchantReturnDays: Optional[int | date | datetime | str] = Field(default=None)
 
 class MiddleSchool(EducationalOrganization):
-    """A middle school (typically for children aged around 11-14, although this varies somewhat)."""
+    """A middle school (typically for children aged around 11-14, although this varies
+    somewhat)."""
 
-    pass
+    type: str = Field(default="MiddleSchool", alias="@type")
 
 class SoftwareApplication(CreativeWork):
     """A software application."""
 
+    type: str = Field(default="SoftwareApplication", alias="@type")
     softwareVersion: Optional[str] = Field(default=None)
     memoryRequirements: Optional[AnyUrl | str] = Field(default=None)
     requirements: Optional[AnyUrl | str] = Field(default=None)
@@ -4446,18 +5397,23 @@ class SoftwareApplication(CreativeWork):
     countriesSupported: Optional[str] = Field(default=None)
 
 class MobileApplication(SoftwareApplication):
-    """A software application designed specifically to work well on a mobile device such as a telephone."""
+    """A software application designed specifically to work well on a mobile device such as
+    a telephone."""
 
+    type: str = Field(default="MobileApplication", alias="@type")
     carrierRequirements: Optional[str] = Field(default=None)
 
 class MobilePhoneStore(Store):
     """A store that sells mobile phones and related accessories."""
 
-    pass
+    type: str = Field(default="MobilePhoneStore", alias="@type")
 
 class MolecularEntity(BioChemEntity):
-    """Any constitutionally or isotopically distinct atom, molecule, ion, ion pair, radical, radical ion, complex, conformer etc., identifiable as a separately distinguishable entity."""
+    """Any constitutionally or isotopically distinct atom, molecule, ion, ion pair,
+    radical, radical ion, complex, conformer etc., identifiable as a separately
+    distinguishable entity."""
 
+    type: str = Field(default="MolecularEntity", alias="@type")
     molecularFormula: Optional[str] = Field(default=None)
     monoisotopicMolecularWeight: Optional[QuantitativeValue | str] = Field(default=None)
     smiles: Optional[str] = Field(default=None)
@@ -4469,8 +5425,12 @@ class MolecularEntity(BioChemEntity):
     chemicalRole: Optional[str | DefinedTerm] = Field(default=None)
 
 class MonetaryAmount(StructuredValue):
-    """A monetary value or range. This type can be used to describe an amount of money such as $50 USD, or a range as in describing a bank account being suitable for a balance between £1,000 and £1,000,000 GBP, or the value of a salary, etc. It is recommended to use [[PriceSpecification]] Types to describe the price of an Offer, Invoice, etc."""
+    """A monetary value or range. This type can be used to describe an amount of money such
+    as $50 USD, or a range as in describing a bank account being suitable for a balance
+    between £1,000 and £1,000,000 GBP, or the value of a salary, etc. It is recommended
+    to use PriceSpecification Types to describe the price of an Offer, Invoice, etc."""
 
+    type: str = Field(default="MonetaryAmount", alias="@type")
     validThrough: Optional[datetime | date | str] = Field(default=None)
     validFrom: Optional[datetime | date | str] = Field(default=None)
     maxValue: Optional[str | float] = Field(default=None)
@@ -4481,6 +5441,7 @@ class MonetaryAmount(StructuredValue):
 class QuantitativeValueDistribution(StructuredValue):
     """A statistical distribution of values."""
 
+    type: str = Field(default="QuantitativeValueDistribution", alias="@type")
     median: Optional[str | float] = Field(default=None)
     percentile90: Optional[str | float] = Field(default=None)
     percentile25: Optional[str | float] = Field(default=None)
@@ -4491,66 +5452,75 @@ class QuantitativeValueDistribution(StructuredValue):
 class MonetaryAmountDistribution(QuantitativeValueDistribution):
     """A statistical distribution of monetary amounts."""
 
+    type: str = Field(default="MonetaryAmountDistribution", alias="@type")
     currency: Optional[str] = Field(default=None)
 
 class MonetaryGrant(Grant):
     """A monetary grant."""
 
+    type: str = Field(default="MonetaryGrant", alias="@type")
     amount: Optional[MonetaryAmount | float | str] = Field(default=None)
 
 class MoneyTransfer(TransferAction):
-    """The act of transferring money from one place to another place. This may occur electronically or physically."""
+    """The act of transferring money from one place to another place. This may occur
+    electronically or physically."""
 
+    type: str = Field(default="MoneyTransfer", alias="@type")
     beneficiaryBank: Optional[str | BankOrCreditUnion] = Field(default=None)
     amount: Optional[MonetaryAmount | float | str] = Field(default=None)
 
 class MortgageLoan(LoanOrCredit):
-    """A loan in which property or real estate is used as collateral. (A loan securitized against some real estate.)"""
+    """A loan in which property or real estate is used as collateral. (A loan securitized
+    against some real estate.)"""
 
+    type: str = Field(default="MortgageLoan", alias="@type")
     domiciledMortgage: Optional[bool | str] = Field(default=None)
     loanMortgageMandateAmount: Optional[str | MonetaryAmount] = Field(default=None)
 
 class Mosque(PlaceOfWorship):
     """A mosque."""
 
-    pass
+    type: str = Field(default="Mosque", alias="@type")
 
 class Motel(LodgingBusiness):
     """A motel.
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
-    pass
+    type: str = Field(default="Motel", alias="@type")
 
 class Motorcycle(Vehicle):
     """A motorcycle or motorbike is a single-track, two-wheeled motor vehicle."""
 
-    pass
+    type: str = Field(default="Motorcycle", alias="@type")
 
 class MotorcycleDealer(AutomotiveBusiness):
     """A motorcycle dealer."""
 
-    pass
+    type: str = Field(default="MotorcycleDealer", alias="@type")
 
 class MotorcycleRepair(AutomotiveBusiness):
     """A motorcycle repair shop."""
 
-    pass
+    type: str = Field(default="MotorcycleRepair", alias="@type")
 
 class MotorizedBicycle(Vehicle):
-    """A motorized bicycle is a bicycle with an attached motor used to power the vehicle, or to assist with pedaling."""
+    """A motorized bicycle is a bicycle with an attached motor used to power the vehicle,
+    or to assist with pedaling."""
 
-    pass
+    type: str = Field(default="MotorizedBicycle", alias="@type")
 
 class Mountain(Landform):
     """A mountain, like Mount Whitney or Mount Everest."""
 
-    pass
+    type: str = Field(default="Mountain", alias="@type")
 
 class Movie(CreativeWork):
     """A movie."""
 
+    type: str = Field(default="Movie", alias="@type")
     actor: Optional[Person | PerformingGroup | str] = Field(default=None)
     subtitleLanguage: Optional[str | Language] = Field(default=None)
     directors: Optional[Person | str] = Field(default=None)
@@ -4565,16 +5535,17 @@ class Movie(CreativeWork):
 class MovieClip(Clip):
     """A short segment/part of a movie."""
 
-    pass
+    type: str = Field(default="MovieClip", alias="@type")
 
 class MovieRentalStore(Store):
     """A movie rental store."""
 
-    pass
+    type: str = Field(default="MovieRentalStore", alias="@type")
 
 class MovieSeries(CreativeWorkSeries):
     """A series of movies. Included movies can be indicated with the hasPart property."""
 
+    type: str = Field(default="MovieSeries", alias="@type")
     actor: Optional[Person | PerformingGroup | str] = Field(default=None)
     directors: Optional[Person | str] = Field(default=None)
     productionCompany: Optional[Organization | str] = Field(default=None)
@@ -4586,16 +5557,19 @@ class MovieSeries(CreativeWorkSeries):
 class MovieTheater(EntertainmentBusiness):
     """A movie theater."""
 
+    type: str = Field(default="MovieTheater", alias="@type")
     screenCount: Optional[str | float] = Field(default=None)
 
 class MovingCompany(HomeAndConstructionBusiness):
     """A moving company."""
 
-    pass
+    type: str = Field(default="MovingCompany", alias="@type")
 
 class Muscle(AnatomicalStructure):
-    """A muscle is an anatomical structure consisting of a contractile form of tissue that animals use to effect movement."""
+    """A muscle is an anatomical structure consisting of a contractile form of tissue that
+    animals use to effect movement."""
 
+    type: str = Field(default="Muscle", alias="@type")
     insertion: Optional[AnatomicalStructure | str] = Field(default=None)
     muscleAction: Optional[str] = Field(default=None)
     antagonist: Any = Field(default=None)
@@ -4605,11 +5579,12 @@ class Muscle(AnatomicalStructure):
 class Museum(CivicStructure):
     """A museum."""
 
-    pass
+    type: str = Field(default="Museum", alias="@type")
 
 class MusicPlaylist(CreativeWork):
     """A collection of music tracks in playlist form."""
 
+    type: str = Field(default="MusicPlaylist", alias="@type")
     tracks: Optional[MusicRecording | str] = Field(default=None)
     track: Optional[ItemList | MusicRecording | str] = Field(default=None)
     numTracks: Optional[int | str] = Field(default=None)
@@ -4617,24 +5592,27 @@ class MusicPlaylist(CreativeWork):
 class MusicAlbum(MusicPlaylist):
     """A collection of music tracks."""
 
+    type: str = Field(default="MusicAlbum", alias="@type")
     albumRelease: Optional[MusicRelease | str] = Field(default=None)
     albumProductionType: Optional[MusicAlbumProductionType | str] = Field(default=None)
     albumReleaseType: Optional[MusicAlbumReleaseType | str] = Field(default=None)
     byArtist: Optional[Person | MusicGroup | str] = Field(default=None)
 
 class MusicAlbumProductionType(Enumeration):
-    """Classification of the album by its type of content: soundtrack, live album, studio album, etc."""
+    """Classification of the album by its type of content: soundtrack, live album, studio
+    album, etc."""
 
-    pass
+    type: str = Field(default="MusicAlbumProductionType", alias="@type")
 
 class MusicAlbumReleaseType(Enumeration):
     """The kind of release which this album is: single, EP or album."""
 
-    pass
+    type: str = Field(default="MusicAlbumReleaseType", alias="@type")
 
 class MusicComposition(CreativeWork):
     """A musical composition."""
 
+    type: str = Field(default="MusicComposition", alias="@type")
     musicArrangement: Any = Field(default=None)
     composer: Optional[Organization | Person | str] = Field(default=None)
     lyricist: Optional[Person | str] = Field(default=None)
@@ -4649,11 +5627,13 @@ class MusicComposition(CreativeWork):
 class MusicEvent(Event):
     """Event type: Music event."""
 
-    pass
+    type: str = Field(default="MusicEvent", alias="@type")
 
 class MusicGroup(PerformingGroup):
-    """A musical group, such as a band, an orchestra, or a choir. Can also be a solo musician."""
+    """A musical group, such as a band, an orchestra, or a choir. Can also be a solo
+    musician."""
 
+    type: str = Field(default="MusicGroup", alias="@type")
     tracks: Optional[MusicRecording | str] = Field(default=None)
     albums: Any = Field(default=None)
     musicGroupMember: Optional[Person | str] = Field(default=None)
@@ -4664,6 +5644,7 @@ class MusicGroup(PerformingGroup):
 class MusicRecording(CreativeWork):
     """A music recording (track), usually a single song."""
 
+    type: str = Field(default="MusicRecording", alias="@type")
     inPlaylist: Any = Field(default=None)
     inAlbum: Any = Field(default=None)
     duration: Optional[QuantitativeValue | timedelta | str] = Field(default=None)
@@ -4674,6 +5655,7 @@ class MusicRecording(CreativeWork):
 class MusicRelease(MusicPlaylist):
     """A MusicRelease is a specific release of a music album."""
 
+    type: str = Field(default="MusicRelease", alias="@type")
     creditedTo: Optional[Organization | Person | str] = Field(default=None)
     releaseOf: Any = Field(default=None)
     musicReleaseFormat: Any = Field(default=None)
@@ -4682,43 +5664,46 @@ class MusicRelease(MusicPlaylist):
     recordLabel: Optional[Organization | str] = Field(default=None)
 
 class MusicReleaseFormatType(Enumeration):
-    """Format of this release (the type of recording media used, i.e. compact disc, digital media, LP, etc.)."""
+    """Format of this release (the type of recording media used, i.e. compact disc, digital
+    media, LP, etc.)."""
 
-    pass
+    type: str = Field(default="MusicReleaseFormatType", alias="@type")
 
 class MusicStore(Store):
     """A music store."""
 
-    pass
+    type: str = Field(default="MusicStore", alias="@type")
 
 class MusicVenue(CivicStructure):
     """A music venue."""
 
-    pass
+    type: str = Field(default="MusicVenue", alias="@type")
 
 class MusicVideoObject(MediaObject):
     """A music video file."""
 
-    pass
+    type: str = Field(default="MusicVideoObject", alias="@type")
 
 class NGO(Organization):
     """Organization: Non-governmental Organization."""
 
-    pass
+    type: str = Field(default="NGO", alias="@type")
 
 class NLNonprofitType(NonprofitType):
     """NLNonprofitType: Non-profit organization type originating from the Netherlands."""
 
-    pass
+    type: str = Field(default="NLNonprofitType", alias="@type")
 
 class NailSalon(HealthAndBeautyBusiness):
     """A nail salon."""
 
-    pass
+    type: str = Field(default="NailSalon", alias="@type")
 
 class Nerve(AnatomicalStructure):
-    """A common pathway for the electrochemical nerve impulses that are transmitted along each of the axons."""
+    """A common pathway for the electrochemical nerve impulses that are transmitted along
+    each of the axons."""
 
+    type: str = Field(default="Nerve", alias="@type")
     branch: Optional[AnatomicalStructure | str] = Field(default=None)
     sensoryUnit: Optional[SuperficialAnatomy | AnatomicalStructure | str] = Field(default=None)
     sourcedFrom: Optional[BrainStructure | str] = Field(default=None)
@@ -4727,34 +5712,38 @@ class Nerve(AnatomicalStructure):
 class NewsMediaOrganization(Organization):
     """A News/Media organization such as a newspaper or TV station."""
 
+    type: str = Field(default="NewsMediaOrganization", alias="@type")
     verificationFactCheckingPolicy: Optional[AnyUrl | CreativeWork | str] = Field(default=None)
     noBylinesPolicy: Optional[AnyUrl | CreativeWork | str] = Field(default=None)
     missionCoveragePrioritiesPolicy: Optional[AnyUrl | CreativeWork | str] = Field(default=None)
     masthead: Optional[AnyUrl | CreativeWork | str] = Field(default=None)
 
 class Newspaper(Periodical):
-    """A publication containing information about varied topics that are pertinent to general information, a geographic area, or a specific subject matter (i.e. business, culture, education). Often published daily."""
+    """A publication containing information about varied topics that are pertinent to
+    general information, a geographic area, or a specific subject matter (i.e. business,
+    culture, education). Often published daily."""
 
-    pass
+    type: str = Field(default="Newspaper", alias="@type")
 
 class NightClub(EntertainmentBusiness):
     """A nightclub or discotheque."""
 
-    pass
+    type: str = Field(default="NightClub", alias="@type")
 
 class Notary(LegalService):
     """A notary."""
 
-    pass
+    type: str = Field(default="Notary", alias="@type")
 
 class NoteDigitalDocument(DigitalDocument):
     """A file containing a note, primarily for the author."""
 
-    pass
+    type: str = Field(default="NoteDigitalDocument", alias="@type")
 
 class NutritionInformation(StructuredValue):
     """Nutritional information about the recipe."""
 
+    type: str = Field(default="NutritionInformation", alias="@type")
     saturatedFatContent: Optional[Mass | str] = Field(default=None)
     cholesterolContent: Optional[Mass | str] = Field(default=None)
     unsaturatedFatContent: Optional[Mass | str] = Field(default=None)
@@ -4771,6 +5760,7 @@ class NutritionInformation(StructuredValue):
 class QuantitativeValue(StructuredValue):
     """ A point value or interval for product characteristics and other purposes."""
 
+    type: str = Field(default="QuantitativeValue", alias="@type")
     unitCode: Optional[AnyUrl | str] = Field(default=None)
     additionalProperty: Any = Field(default=None)
     valueReference: Optional[StructuredValue | str | MeasurementTypeEnumeration | Enumeration] = Field(default=None)
@@ -4780,13 +5770,24 @@ class QuantitativeValue(StructuredValue):
     minValue: Optional[str | float] = Field(default=None)
 
 class Observation(QuantitativeValue):
-    """Instances of the class [[Observation]] are used to specify observations about an entity at a particular time. The principal properties of an [[Observation]] are [[observationAbout]], [[measuredProperty]], [[statType]], [[value] and [[observationDate]]  and [[measuredProperty]]. Some but not all Observations represent a [[QuantitativeValue]]. Quantitative observations can be about a [[StatisticalVariable]], which is an abstract specification about which we can make observations that are grounded at a particular location and time.
-
-Observations can also encode a subset of simple RDF-like statements (its observationAbout, a StatisticalVariable, defining the measuredPoperty; its observationAbout property indicating the entity the statement is about, and [[value]] )
-
-In the context of a quantitative knowledge graph, typical properties could include [[measuredProperty]], [[observationAbout]], [[observationDate]], [[value]], [[unitCode]], [[unitText]], [[measurementMethod]].
+    """Instances of the class Observation are used to specify observations about an entity
+    at a particular time. The principal properties of an Observation are
+    observationAbout, measuredProperty, statType, [[value] and observationDate  and
+    measuredProperty. Some but not all Observations represent a QuantitativeValue.
+    Quantitative observations can be about a StatisticalVariable, which is an abstract
+    specification about which we can make observations that are grounded at a particular
+    location and time.
+    
+    Observations can also encode a subset of simple RDF-like statements (its
+    observationAbout, a StatisticalVariable, defining the measuredPoperty; its
+    observationAbout property indicating the entity the statement is about, and value )
+    
+    In the context of a quantitative knowledge graph, typical properties could include
+    measuredProperty, observationAbout, observationDate, value, unitCode, unitText,
+    measurementMethod.
     """
 
+    type: str = Field(default="Observation", alias="@type")
     observationPeriod: Optional[str] = Field(default=None)
     measurementQualifier: Optional[Enumeration | str] = Field(default=None)
     measuredProperty: Any = Field(default=None)
@@ -4801,6 +5802,7 @@ In the context of a quantitative knowledge graph, typical properties could inclu
 class Occupation(Intangible):
     """A profession, may involve prolonged training and/or a formal qualification."""
 
+    type: str = Field(default="Occupation", alias="@type")
     qualifications: Optional[Credential | str] = Field(default=None)
     responsibilities: Optional[str] = Field(default=None)
     estimatedSalary: Optional[MonetaryAmountDistribution | MonetaryAmount | float | str] = Field(default=None)
@@ -4811,60 +5813,71 @@ class Occupation(Intangible):
     occupationLocation: Optional[str | AdministrativeArea] = Field(default=None)
 
 class OccupationalExperienceRequirements(Intangible):
-    """Indicates employment-related experience requirements, e.g. [[monthsOfExperience]]."""
+    """Indicates employment-related experience requirements, e.g. monthsOfExperience."""
 
+    type: str = Field(default="OccupationalExperienceRequirements", alias="@type")
     monthsOfExperience: Optional[str | float] = Field(default=None)
 
 class OccupationalTherapy(MedicalTherapy):
-    """A treatment of people with physical, emotional, or social problems, using purposeful activity to help them overcome or learn to deal with their problems."""
+    """A treatment of people with physical, emotional, or social problems, using purposeful
+    activity to help them overcome or learn to deal with their problems."""
 
-    pass
+    type: str = Field(default="OccupationalTherapy", alias="@type")
 
 class OceanBodyOfWater(BodyOfWater):
     """An ocean (for example, the Pacific)."""
 
-    pass
+    type: str = Field(default="OceanBodyOfWater", alias="@type")
 
 class OfferCatalog(ItemList):
-    """An OfferCatalog is an ItemList that contains related Offers and/or further OfferCatalogs that are offeredBy the same provider."""
+    """An OfferCatalog is an ItemList that contains related Offers and/or further
+    OfferCatalogs that are offeredBy the same provider."""
 
-    pass
+    type: str = Field(default="OfferCatalog", alias="@type")
 
 class OfferForLease(Offer):
-    """An [[OfferForLease]] in Schema.org represents an [[Offer]] to lease out something, i.e. an [[Offer]] whose
-  [[businessFunction]] is [lease out](http://purl.org/goodrelations/v1#LeaseOut.). See [Good Relations](https://en.wikipedia.org/wiki/GoodRelations) for
-  background on the underlying concepts.
-  """
+    """An OfferForLease in Schema.org represents an Offer to lease out something, i.e. an
+    Offer whose
+      businessFunction is [lease out](http://purl.org/goodrelations/v1#LeaseOut.). See
+    [Good Relations](https://en.wikipedia.org/wiki/GoodRelations) for
+      background on the underlying concepts.
+    """
 
-    pass
+    type: str = Field(default="OfferForLease", alias="@type")
 
 class OfferForPurchase(Offer):
-    """An [[OfferForPurchase]] in Schema.org represents an [[Offer]] to sell something, i.e. an [[Offer]] whose
-  [[businessFunction]] is [sell](http://purl.org/goodrelations/v1#Sell.). See [Good Relations](https://en.wikipedia.org/wiki/GoodRelations) for
-  background on the underlying concepts.
-  """
+    """An OfferForPurchase in Schema.org represents an Offer to sell something, i.e. an
+    Offer whose
+      businessFunction is [sell](http://purl.org/goodrelations/v1#Sell.). See [Good
+    Relations](https://en.wikipedia.org/wiki/GoodRelations) for
+      background on the underlying concepts.
+    """
 
-    pass
+    type: str = Field(default="OfferForPurchase", alias="@type")
 
 class OfferItemCondition(Enumeration):
     """A list of possible conditions for the item."""
 
-    pass
+    type: str = Field(default="OfferItemCondition", alias="@type")
 
 class OfferShippingDetails(StructuredValue):
     """OfferShippingDetails represents information about shipping destinations.
+    
+    Multiple of these entities can be used to represent different shipping rates for
+    different destinations:
+    
+    One entity for Alaska/Hawaii. A different one for continental US. A different one
+    for all France.
+    
+    Multiple of these entities can be used to represent different shipping costs and
+    delivery times.
+    
+    Two entities that are identical but differ in rate and time:
+    
+    E.g. Cheaper and slower: $5 in 5-7 days
+    or Fast and expensive: $15 in 1-2 days."""
 
-Multiple of these entities can be used to represent different shipping rates for different destinations:
-
-One entity for Alaska/Hawaii. A different one for continental US. A different one for all France.
-
-Multiple of these entities can be used to represent different shipping costs and delivery times.
-
-Two entities that are identical but differ in rate and time:
-
-E.g. Cheaper and slower: $5 in 5-7 days
-or Fast and expensive: $15 in 1-2 days."""
-
+    type: str = Field(default="OfferShippingDetails", alias="@type")
     hasShippingService: Optional[ShippingService | str] = Field(default=None)
     validForMemberTier: Optional[MemberProgramTier | str] = Field(default=None)
     doesNotShip: Optional[bool | str] = Field(default=None)
@@ -4880,33 +5893,43 @@ or Fast and expensive: $15 in 1-2 days."""
 class OfficeEquipmentStore(Store):
     """An office equipment store."""
 
-    pass
+    type: str = Field(default="OfficeEquipmentStore", alias="@type")
 
 class OnDemandEvent(PublicationEvent):
-    """A publication event, e.g. catch-up TV or radio podcast, during which a program is available on-demand."""
+    """A publication event, e.g. catch-up TV or radio podcast, during which a program is
+    available on-demand."""
 
-    pass
+    type: str = Field(default="OnDemandEvent", alias="@type")
 
 class OnlineBusiness(Organization):
-    """A particular online business, either standalone or the online part of a broader organization. Examples include an eCommerce site, an online travel booking site, an online learning site, an online logistics and shipping provider, an online (virtual) doctor, etc."""
+    """A particular online business, either standalone or the online part of a broader
+    organization. Examples include an eCommerce site, an online travel booking site, an
+    online learning site, an online logistics and shipping provider, an online (virtual)
+    doctor, etc."""
 
-    pass
+    type: str = Field(default="OnlineBusiness", alias="@type")
 
 class OnlineStore(OnlineBusiness):
     """An eCommerce site."""
 
+    type: str = Field(default="OnlineStore", alias="@type")
     isStoreOn: Any = Field(default=None)
 
 class OnlineMarketplace(OnlineStore):
     """An eCommerce marketplace."""
 
+    type: str = Field(default="OnlineMarketplace", alias="@type")
     hasStore: Optional[OnlineStore | str] = Field(default=None)
 
 class OpeningHoursSpecification(StructuredValue):
-    """A structured value providing information about the opening hours of a place or a certain service inside a place.\n\n
-The place is __open__ if the [[opens]] property is specified, and __closed__ otherwise.\n\nIf the value for the [[closes]] property is less than the value for the [[opens]] property then the hour range is assumed to span over the next day.
-      """
+    """A structured value providing information about the opening hours of a place or a
+    certain service inside a place.nn
+    The place is __open__ if the opens property is specified, and __closed__
+    otherwise.nnIf the value for the closes property is less than the value for the
+    opens property then the hour range is assumed to span over the next day.
+    """
 
+    type: str = Field(default="OpeningHoursSpecification", alias="@type")
     closes: Optional[time | str] = Field(default=None)
     validThrough: Optional[datetime | date | str] = Field(default=None)
     dayOfWeek: Any = Field(default=None)
@@ -4914,23 +5937,28 @@ The place is __open__ if the [[opens]] property is specified, and __closed__ oth
     opens: Optional[time | str] = Field(default=None)
 
 class OperatingSystem(SoftwareApplication):
-    """System software that manages computer hardware and software resources, and provides common services for computer programs."""
+    """System software that manages computer hardware and software resources, and provides
+    common services for computer programs."""
 
-    pass
+    type: str = Field(default="OperatingSystem", alias="@type")
 
 class OpinionNewsArticle(NewsArticle):
-    """An [[OpinionNewsArticle]] is a [[NewsArticle]] that primarily expresses opinions rather than journalistic reporting of news and events. For example, a [[NewsArticle]] consisting of a column or [[Blog]]/[[BlogPosting]] entry in the Opinions section of a news publication. """
+    """An OpinionNewsArticle is a NewsArticle that primarily expresses opinions rather than
+    journalistic reporting of news and events. For example, a NewsArticle consisting of
+    a column or Blog/BlogPosting entry in the Opinions section of a news publication."""
 
-    pass
+    type: str = Field(default="OpinionNewsArticle", alias="@type")
 
 class Optician(MedicalBusiness):
     """A store that sells reading glasses and similar devices for improving vision."""
 
-    pass
+    type: str = Field(default="Optician", alias="@type")
 
 class Order(Intangible):
-    """An order is a confirmation of a transaction (a receipt), which can contain multiple line items, each represented by an Offer that has been accepted by the customer."""
+    """An order is a confirmation of a transaction (a receipt), which can contain multiple
+    line items, each represented by an Offer that has been accepted by the customer."""
 
+    type: str = Field(default="Order", alias="@type")
     orderStatus: Optional[OrderStatus | str] = Field(default=None)
     discountCurrency: Optional[str] = Field(default=None)
     paymentMethod: Optional[str | PaymentMethod] = Field(default=None)
@@ -4957,11 +5985,14 @@ class Order(Intangible):
 class OrderAction(TradeAction):
     """An agent orders an object/product/service to be delivered/sent."""
 
+    type: str = Field(default="OrderAction", alias="@type")
     deliveryMethod: Any = Field(default=None)
 
 class OrderItem(StructuredValue):
-    """An order item is a line of an order. It includes the quantity and shipping details of a bought offer."""
+    """An order item is a line of an order. It includes the quantity and shipping details
+    of a bought offer."""
 
+    type: str = Field(default="OrderItem", alias="@type")
     orderItemStatus: Optional[OrderStatus | str] = Field(default=None)
     orderDelivery: Optional[ParcelDelivery | str] = Field(default=None)
     orderItemNumber: Optional[str] = Field(default=None)
@@ -4971,16 +6002,18 @@ class OrderItem(StructuredValue):
 class OrderStatus(StatusEnumeration):
     """Enumerated status values for Order."""
 
-    pass
+    type: str = Field(default="OrderStatus", alias="@type")
 
 class OutletStore(Store):
     """An outlet store."""
 
-    pass
+    type: str = Field(default="OutletStore", alias="@type")
 
 class OwnershipInfo(StructuredValue):
-    """A structured value providing information about when a certain organization or person owned a certain product."""
+    """A structured value providing information about when a certain organization or person
+    owned a certain product."""
 
+    type: str = Field(default="OwnershipInfo", alias="@type")
     ownedFrom: Optional[str | datetime] = Field(default=None)
     ownedThrough: Optional[str | datetime] = Field(default=None)
     acquiredFrom: Optional[Organization | str] = Field(default=None)
@@ -4989,21 +6022,23 @@ class OwnershipInfo(StructuredValue):
 class PaintAction(CreateAction):
     """The act of producing a painting, typically with paint and canvas as instruments."""
 
-    pass
+    type: str = Field(default="PaintAction", alias="@type")
 
 class Painting(CreativeWork):
     """A painting."""
 
-    pass
+    type: str = Field(default="Painting", alias="@type")
 
 class PalliativeProcedure(MedicalProcedure):
-    """A medical procedure intended primarily for palliative purposes, aimed at relieving the symptoms of an underlying health condition."""
+    """A medical procedure intended primarily for palliative purposes, aimed at relieving
+    the symptoms of an underlying health condition."""
 
-    pass
+    type: str = Field(default="PalliativeProcedure", alias="@type")
 
 class ParcelDelivery(Intangible):
     """The delivery of a parcel either via the postal service or a commercial service."""
 
+    type: str = Field(default="ParcelDelivery", alias="@type")
     trackingUrl: Optional[AnyUrl | str] = Field(default=None)
     expectedArrivalFrom: Optional[datetime | date | str] = Field(default=None)
     partOfOrder: Any = Field(default=None)
@@ -5018,8 +6053,10 @@ class ParcelDelivery(Intangible):
     carrier: Optional[Organization | str] = Field(default=None)
 
 class PeopleAudience(Audience):
-    """A set of characteristics belonging to people, e.g. who compose an item's target audience."""
+    """A set of characteristics belonging to people, e.g. who compose an item's target
+    audience."""
 
+    type: str = Field(default="PeopleAudience", alias="@type")
     suggestedMaxAge: Optional[str | float] = Field(default=None)
     requiredMaxAge: Optional[int | str] = Field(default=None)
     suggestedMeasurement: Optional[QuantitativeValue | str] = Field(default=None)
@@ -5031,29 +6068,34 @@ class PeopleAudience(Audience):
     requiredGender: Optional[str] = Field(default=None)
 
 class ParentAudience(PeopleAudience):
-    """A set of characteristics describing parents, who can be interested in viewing some content."""
+    """A set of characteristics describing parents, who can be interested in viewing some
+    content."""
 
+    type: str = Field(default="ParentAudience", alias="@type")
     childMaxAge: Optional[str | float] = Field(default=None)
     childMinAge: Optional[str | float] = Field(default=None)
 
 class Park(CivicStructure):
     """A park."""
 
-    pass
+    type: str = Field(default="Park", alias="@type")
 
 class ParkingFacility(CivicStructure):
     """A parking lot or other parking facility."""
 
-    pass
+    type: str = Field(default="ParkingFacility", alias="@type")
 
 class PathologyTest(MedicalTest):
-    """A medical test performed by a laboratory that typically involves examination of a tissue sample by a pathologist."""
+    """A medical test performed by a laboratory that typically involves examination of a
+    tissue sample by a pathologist."""
 
+    type: str = Field(default="PathologyTest", alias="@type")
     tissueSample: Optional[str] = Field(default=None)
 
 class Patient(MedicalAudience):
     """A patient is any person recipient of health care services."""
 
+    type: str = Field(default="Patient", alias="@type")
     diagnosis: Optional[MedicalCondition | str] = Field(default=None)
     drug: Any = Field(default=None)
     healthCondition: Optional[MedicalCondition | str] = Field(default=None)
@@ -5061,57 +6103,71 @@ class Patient(MedicalAudience):
 class PawnShop(Store):
     """A shop that will buy, or lend money against the security of, personal possessions."""
 
-    pass
+    type: str = Field(default="PawnShop", alias="@type")
 
 class PayAction(TradeAction):
     """An agent pays a price to a participant."""
 
+    type: str = Field(default="PayAction", alias="@type")
     recipient: Optional[Organization | Person | ContactPoint | Audience | str] = Field(default=None)
 
 class PaymentChargeSpecification(PriceSpecification):
     """The costs of settling the payment using a particular payment method."""
 
+    type: str = Field(default="PaymentChargeSpecification", alias="@type")
     appliesToDeliveryMethod: Any = Field(default=None)
     appliesToPaymentMethod: Optional[PaymentMethod | str] = Field(default=None)
 
 class PaymentMethodType(Enumeration):
-    """The type of payment method, only for generic payment types, specific forms of payments, like card payment should be expressed using subclasses of PaymentMethod."""
+    """The type of payment method, only for generic payment types, specific forms of
+    payments, like card payment should be expressed using subclasses of PaymentMethod."""
 
-    pass
+    type: str = Field(default="PaymentMethodType", alias="@type")
 
 class PaymentService(PaymentMethod):
-    """A Service to transfer funds from a person or organization to a beneficiary person or organization."""
+    """A Service to transfer funds from a person or organization to a beneficiary person or
+    organization."""
 
-    pass
+    type: str = Field(default="PaymentService", alias="@type")
 
 class PaymentStatusType(StatusEnumeration):
     """A specific payment status. For example, PaymentDue, PaymentComplete, etc."""
 
-    pass
+    type: str = Field(default="PaymentStatusType", alias="@type")
 
 class PerformAction(PlayAction):
     """The act of participating in performance arts."""
 
+    type: str = Field(default="PerformAction", alias="@type")
     entertainmentBusiness: Optional[EntertainmentBusiness | str] = Field(default=None)
 
 class PerformanceRole(Role):
-    """A PerformanceRole is a Role that some entity places with regard to a theatrical performance, e.g. in a Movie, TVSeries etc."""
+    """A PerformanceRole is a Role that some entity places with regard to a theatrical
+    performance, e.g. in a Movie, TVSeries etc."""
 
+    type: str = Field(default="PerformanceRole", alias="@type")
     characterName: Optional[str] = Field(default=None)
 
 class PerformingArtsEvent(Event):
-    """Live performance <a class="localLink" href="http://schema.org/Event">Event of the performing arts (music, theatre, dance, acrobatics, spoken word), including performance art and performative sports (e.g. choreographed forms of martial arts, figure skating, competitive ballroom dancing).<br/><br/>Note: Use <a class="localLink" href="http://schema.org/additionalType">additionalType</a> to differentiate between productions / shows (PerformanceWork, EventSeries), tours (EventSeries), and individual performances."""
+    """Live performance <a class="localLink" href="http://schema.org/Event">Event of the
+    performing arts (music, theatre, dance, acrobatics, spoken word), including
+    performance art and performative sports (e.g. choreographed forms of martial arts,
+    figure skating, competitive ballroom dancing).<br/><br/>Note: Use <a
+    class="localLink" href="http://schema.org/additionalType">additionalType</a> to
+    differentiate between productions / shows (PerformanceWork, EventSeries), tours
+    (EventSeries), and individual performances."""
 
-    pass
+    type: str = Field(default="PerformingArtsEvent", alias="@type")
 
 class PerformingArtsTheater(CivicStructure):
     """A theater or other performing art center."""
 
-    pass
+    type: str = Field(default="PerformingArtsTheater", alias="@type")
 
 class Person(Thing):
     """A person (alive, dead, undead, or fictional)."""
 
+    type: str = Field(default="Person", alias="@type")
     deathDate: Optional[date | str] = Field(default=None)
     telephone: Optional[str] = Field(default=None)
     sponsor: Optional[Organization | str] = Field(default=None)
@@ -5184,102 +6240,111 @@ class Person(Thing):
 class PetStore(Store):
     """A pet store."""
 
-    pass
+    type: str = Field(default="PetStore", alias="@type")
 
 class Pharmacy(MedicalBusiness):
     """A pharmacy or drugstore."""
 
-    pass
+    type: str = Field(default="Pharmacy", alias="@type")
 
 class Photograph(CreativeWork):
     """A photograph."""
 
-    pass
+    type: str = Field(default="Photograph", alias="@type")
 
 class PhotographAction(CreateAction):
     """The act of capturing still images of objects using a camera."""
 
-    pass
+    type: str = Field(default="PhotographAction", alias="@type")
 
 class PhysicalActivityCategory(Enumeration):
     """Categories of physical activity, organized by physiologic classification."""
 
-    pass
+    type: str = Field(default="PhysicalActivityCategory", alias="@type")
 
 class PhysicalExam(MedicalProcedure):
-    """A type of physical examination of a patient performed by a physician. """
+    """A type of physical examination of a patient performed by a physician."""
 
-    pass
+    type: str = Field(default="PhysicalExam", alias="@type")
 
 class PhysicalTherapy(MedicalTherapy):
-    """A process of progressive physical care and rehabilitation aimed at improving a health condition."""
+    """A process of progressive physical care and rehabilitation aimed at improving a
+    health condition."""
 
-    pass
+    type: str = Field(default="PhysicalTherapy", alias="@type")
 
 class PhysiciansOffice(Physician):
     """A doctor's office or clinic."""
 
-    pass
+    type: str = Field(default="PhysiciansOffice", alias="@type")
 
 class Play(CreativeWork):
-    """A play is a form of literature, usually consisting of dialogue between characters, intended for theatrical performance rather than just reading. Note: A performance of a Play would be a [[TheaterEvent]] or [[BroadcastEvent]] - the *Play* being the [[workPerformed]]."""
+    """A play is a form of literature, usually consisting of dialogue between characters,
+    intended for theatrical performance rather than just reading. Note: A performance of
+    a Play would be a TheaterEvent or BroadcastEvent - the *Play* being the
+    workPerformed."""
 
-    pass
+    type: str = Field(default="Play", alias="@type")
 
 class PlayGameAction(ConsumeAction):
     """The act of playing a video game."""
 
+    type: str = Field(default="PlayGameAction", alias="@type")
     gameAvailabilityType: Optional[GameAvailabilityEnumeration | str] = Field(default=None)
 
 class Playground(CivicStructure):
     """A playground."""
 
-    pass
+    type: str = Field(default="Playground", alias="@type")
 
 class Plumber(HomeAndConstructionBusiness):
     """A plumbing service."""
 
-    pass
+    type: str = Field(default="Plumber", alias="@type")
 
 class PodcastEpisode(Episode):
     """A single episode of a podcast series."""
 
-    pass
+    type: str = Field(default="PodcastEpisode", alias="@type")
 
 class PodcastSeason(CreativeWorkSeason):
-    """A single season of a podcast. Many podcasts do not break down into separate seasons. In that case, PodcastSeries should be used."""
+    """A single season of a podcast. Many podcasts do not break down into separate seasons.
+    In that case, PodcastSeries should be used."""
 
-    pass
+    type: str = Field(default="PodcastSeason", alias="@type")
 
 class PodcastSeries(CreativeWorkSeries):
-    """A podcast is an episodic series of digital audio or video files which a user can download and listen to."""
+    """A podcast is an episodic series of digital audio or video files which a user can
+    download and listen to."""
 
+    type: str = Field(default="PodcastSeries", alias="@type")
     webFeed: Optional[AnyUrl | str] = Field(default=None)
     actor: Any = Field(default=None)
 
 class PoliceStation(CivicStructure):
     """A police station."""
 
-    pass
+    type: str = Field(default="PoliceStation", alias="@type")
 
 class PoliticalParty(Organization):
     """Organization: Political Party."""
 
-    pass
+    type: str = Field(default="PoliticalParty", alias="@type")
 
 class Pond(BodyOfWater):
     """A pond."""
 
-    pass
+    type: str = Field(default="Pond", alias="@type")
 
 class PostOffice(GovernmentOffice):
     """A post office."""
 
-    pass
+    type: str = Field(default="PostOffice", alias="@type")
 
 class PostalAddress(ContactPoint):
     """The mailing address."""
 
+    type: str = Field(default="PostalAddress", alias="@type")
     addressRegion: Optional[str | AdministrativeArea] = Field(default=None)
     postalCode: Optional[str] = Field(default=None)
     addressLocality: Optional[str] = Field(default=None)
@@ -5289,86 +6354,109 @@ class PostalAddress(ContactPoint):
     addressCountry: Optional[Country | str] = Field(default=None)
 
 class PostalCodeRangeSpecification(StructuredValue):
-    """Indicates a range of postal codes, usually defined as the set of valid codes between [[postalCodeBegin]] and [[postalCodeEnd]], inclusively."""
+    """Indicates a range of postal codes, usually defined as the set of valid codes between
+    postalCodeBegin and postalCodeEnd, inclusively."""
 
+    type: str = Field(default="PostalCodeRangeSpecification", alias="@type")
     postalCodeBegin: Optional[str] = Field(default=None)
     postalCodeEnd: Optional[str] = Field(default=None)
 
 class Poster(CreativeWork):
-    """A large, usually printed placard, bill, or announcement, often illustrated, that is posted to advertise or publicize something."""
+    """A large, usually printed placard, bill, or announcement, often illustrated, that is
+    posted to advertise or publicize something."""
 
-    pass
+    type: str = Field(default="Poster", alias="@type")
 
 class PreOrderAction(TradeAction):
     """An agent orders a (not yet released) object/product/service to be delivered/sent."""
 
-    pass
+    type: str = Field(default="PreOrderAction", alias="@type")
 
 class PrependAction(InsertAction):
     """The act of inserting at the beginning if an ordered collection."""
 
-    pass
+    type: str = Field(default="PrependAction", alias="@type")
 
 class Preschool(EducationalOrganization):
     """A preschool."""
 
-    pass
+    type: str = Field(default="Preschool", alias="@type")
 
 class PresentationDigitalDocument(DigitalDocument):
     """A file containing slides or used for a presentation."""
 
-    pass
+    type: str = Field(default="PresentationDigitalDocument", alias="@type")
 
 class PreventionIndication(MedicalIndication):
     """An indication for preventing an underlying condition, symptom, etc."""
 
-    pass
+    type: str = Field(default="PreventionIndication", alias="@type")
 
 class PriceComponentTypeEnumeration(Enumeration):
-    """Enumerates different price components that together make up the total price for an offered product."""
+    """Enumerates different price components that together make up the total price for an
+    offered product."""
 
-    pass
+    type: str = Field(default="PriceComponentTypeEnumeration", alias="@type")
 
 class PriceTypeEnumeration(Enumeration):
-    """Enumerates different price types, for example list price, invoice price, and sale price."""
+    """Enumerates different price types, for example list price, invoice price, and sale
+    price."""
 
-    pass
+    type: str = Field(default="PriceTypeEnumeration", alias="@type")
 
 class ProductCollection(Collection):
-    """A set of products (either [[ProductGroup]]s or specific variants) that are listed together e.g. in an [[Offer]]."""
+    """A set of products (either ProductGroups or specific variants) that are listed
+    together e.g. in an Offer."""
 
+    type: str = Field(default="ProductCollection", alias="@type")
     includesObject: Optional[TypeAndQuantityNode | str] = Field(default=None)
 
 class ProductGroup(Product):
-    """A ProductGroup represents a group of [[Product]]s that vary only in certain well-described ways, such as by [[size]], [[color]], [[material]] etc.
+    """A ProductGroup represents a group of Products that vary only in certain well-
+    described ways, such as by size, color, material etc.
+    
+    While a ProductGroup itself is not directly offered for sale, the various varying
+    products that it represents can be. The ProductGroup serves as a prototype or
+    template, standing in for all of the products who have an isVariantOf relationship
+    to it. As such, properties (including additional types) can be applied to the
+    ProductGroup to represent characteristics shared by each of the (possibly very many)
+    variants. Properties that reference a ProductGroup are not included in this
+    mechanism; neither are the following specific properties variesBy, hasVariant, url."""
 
-While a ProductGroup itself is not directly offered for sale, the various varying products that it represents can be. The ProductGroup serves as a prototype or template, standing in for all of the products who have an [[isVariantOf]] relationship to it. As such, properties (including additional types) can be applied to the ProductGroup to represent characteristics shared by each of the (possibly very many) variants. Properties that reference a ProductGroup are not included in this mechanism; neither are the following specific properties [[variesBy]], [[hasVariant]], [[url]]. """
-
+    type: str = Field(default="ProductGroup", alias="@type")
     productGroupID: Optional[str] = Field(default=None)
     variesBy: Optional[str] = Field(default=None)
     hasVariant: Optional[Product | str] = Field(default=None)
 
 class ProductModel(Product):
-    """A datasheet or vendor specification of a product (in the sense of a prototypical description)."""
+    """A datasheet or vendor specification of a product (in the sense of a prototypical
+    description)."""
 
+    type: str = Field(default="ProductModel", alias="@type")
     predecessorOf: Any = Field(default=None)
     successorOf: Any = Field(default=None)
 
 class ProfessionalService(LocalBusiness):
-    """Original definition: "provider of professional services."\n\nThe general [[ProfessionalService]] type for local businesses was deprecated due to confusion with [[Service]]. For reference, the types that it included were: [[Dentist]],
-        [[AccountingService]], [[Attorney]], [[Notary]], as well as types for several kinds of [[HomeAndConstructionBusiness]]: [[Electrician]], [[GeneralContractor]],
-        [[HousePainter]], [[Locksmith]], [[Plumber]], [[RoofingContractor]]. [[LegalService]] was introduced as a more inclusive supertype of [[Attorney]]."""
+    """Original definition: "provider of professional services."nnThe general
+    ProfessionalService type for local businesses was deprecated due to confusion with
+    Service. For reference, the types that it included were: Dentist,
+            AccountingService, Attorney, Notary, as well as types for several kinds of
+    HomeAndConstructionBusiness: Electrician, GeneralContractor,
+            HousePainter, Locksmith, Plumber, RoofingContractor. LegalService was
+    introduced as a more inclusive supertype of Attorney."""
 
-    pass
+    type: str = Field(default="ProfessionalService", alias="@type")
 
 class ProfilePage(WebPage):
     """Web page type: Profile page."""
 
-    pass
+    type: str = Field(default="ProfilePage", alias="@type")
 
 class ProgramMembership(Intangible):
-    """Used to describe membership in a loyalty programs (e.g. "StarAliance"), traveler clubs (e.g. "AAA"), purchase clubs ("Safeway Club"), etc."""
+    """Used to describe membership in a loyalty programs (e.g. "StarAliance"), traveler
+    clubs (e.g. "AAA"), purchase clubs ("Safeway Club"), etc."""
 
+    type: str = Field(default="ProgramMembership", alias="@type")
     members: Optional[Organization | Person | str] = Field(default=None)
     hostingOrganization: Optional[Organization | str] = Field(default=None)
     programName: Optional[str] = Field(default=None)
@@ -5380,14 +6468,17 @@ class ProgramMembership(Intangible):
 class PronounceableText(Text):
     """Data type: PronounceableText."""
 
+    type: str = Field(default="PronounceableText", alias="@type")
     phoneticText: Optional[str] = Field(default=None)
     textValue: Optional[str] = Field(default=None)
     speechToTextMarkup: Optional[str] = Field(default=None)
     inLanguage: Optional[str] = Field(default=None)
 
 class Property(Intangible):
-    """A property, used to indicate attributes and relationships of some Thing; equivalent to rdf:Property."""
+    """A property, used to indicate attributes and relationships of some Thing; equivalent
+    to rdf:Property."""
 
+    type: str = Field(default="Property", alias="@type")
     domainIncludes: Optional[Class | str] = Field(default=None)
     supersededBy: Optional[Enumeration | Class | str] = Field(default=None)
     rangeIncludes: Optional[Class | str] = Field(default=None)
@@ -5396,6 +6487,7 @@ class Property(Intangible):
 class PropertyValueSpecification(Intangible):
     """A Property value specification."""
 
+    type: str = Field(default="PropertyValueSpecification", alias="@type")
     valueMaxLength: Optional[str | float] = Field(default=None)
     stepValue: Optional[str | float] = Field(default=None)
     valueName: Optional[str] = Field(default=None)
@@ -5409,28 +6501,41 @@ class PropertyValueSpecification(Intangible):
     minValue: Optional[str | float] = Field(default=None)
 
 class Protein(BioChemEntity):
-    """Protein is here used in its widest possible definition, as classes of amino acid based molecules. Amyloid-beta Protein in human (UniProt P05067), eukaryota (e.g. an OrthoDB group) or even a single molecule that one can point to are all of type :Protein. A protein can thus be a subclass of another protein, e.g. :Protein as a UniProt record can have multiple isoforms inside it which would also be :Protein. They can be imagined, synthetic, hypothetical or naturally occurring."""
+    """Protein is here used in its widest possible definition, as classes of amino acid
+    based molecules. Amyloid-beta Protein in human (UniProt P05067), eukaryota (e.g. an
+    OrthoDB group) or even a single molecule that one can point to are all of type
+    :Protein. A protein can thus be a subclass of another protein, e.g. :Protein as a
+    UniProt record can have multiple isoforms inside it which would also be :Protein.
+    They can be imagined, synthetic, hypothetical or naturally occurring."""
 
+    type: str = Field(default="Protein", alias="@type")
     hasBioPolymerSequence: Optional[str] = Field(default=None)
 
 class PsychologicalTreatment(TherapeuticProcedure):
-    """A process of care relying upon counseling, dialogue and communication  aimed at improving a mental health condition without use of drugs."""
+    """A process of care relying upon counseling, dialogue and communication  aimed at
+    improving a mental health condition without use of drugs."""
 
-    pass
+    type: str = Field(default="PsychologicalTreatment", alias="@type")
 
 class PublicSwimmingPool(SportsActivityLocation):
     """A public swimming pool."""
 
-    pass
+    type: str = Field(default="PublicSwimmingPool", alias="@type")
 
 class PublicToilet(CivicStructure):
-    """A public toilet is a room or small building containing one or more toilets (and possibly also urinals) which is available for use by the general public, or by customers or employees of certain businesses."""
+    """A public toilet is a room or small building containing one or more toilets (and
+    possibly also urinals) which is available for use by the general public, or by
+    customers or employees of certain businesses."""
 
-    pass
+    type: str = Field(default="PublicToilet", alias="@type")
 
 class PublicationVolume(CreativeWork):
-    """A part of a successively published publication such as a periodical or multi-volume work, often numbered. It may represent a time span, such as a year.\n\nSee also [blog post](https://blog-schema.org/2014/09/02/schema-org-support-for-bibliographic-relationships-and-periodicals/)."""
+    """A part of a successively published publication such as a periodical or multi-volume
+    work, often numbered. It may represent a time span, such as a year.nnSee also [blog
+    post](https://blog-schema.org/2014/09/02/schema-org-support-for-bibliographic-
+    relationships-and-periodicals/)."""
 
+    type: str = Field(default="PublicationVolume", alias="@type")
     pagination: Optional[str] = Field(default=None)
     volumeNumber: Optional[int | str] = Field(default=None)
     pageEnd: Optional[int | str] = Field(default=None)
@@ -5439,16 +6544,19 @@ class PublicationVolume(CreativeWork):
 class PurchaseType(Enumeration):
     """Enumerates a purchase type for an item."""
 
-    pass
+    type: str = Field(default="PurchaseType", alias="@type")
 
 class QAPage(WebPage):
-    """A QAPage is a WebPage focussed on a specific Question and its Answer(s), e.g. in a question answering site or documenting Frequently Asked Questions (FAQs)."""
+    """A QAPage is a WebPage focussed on a specific Question and its Answer(s), e.g. in a
+    question answering site or documenting Frequently Asked Questions (FAQs)."""
 
-    pass
+    type: str = Field(default="QAPage", alias="@type")
 
 class Question(Comment):
-    """A specific question - e.g. from a user seeking answers online, or collected in a Frequently Asked Questions (FAQ) document."""
+    """A specific question - e.g. from a user seeking answers online, or collected in a
+    Frequently Asked Questions (FAQ) document."""
 
+    type: str = Field(default="Question", alias="@type")
     acceptedAnswer: Optional[ItemList | Answer | str] = Field(default=None)
     answerCount: Optional[int | str] = Field(default=None)
     suggestedAnswer: Optional[ItemList | Answer | str] = Field(default=None)
@@ -5457,51 +6565,59 @@ class Question(Comment):
 class Quiz(LearningResource):
     """Quiz: A test of knowledge, skills and abilities."""
 
-    pass
+    type: str = Field(default="Quiz", alias="@type")
 
 class Quotation(CreativeWork):
-    """A quotation. Often but not necessarily from some written work, attributable to a real world author and - if associated with a fictional character - to any fictional Person. Use [[isBasedOn]] to link to source/origin. The [[recordedIn]] property can be used to reference a Quotation from an [[Event]]."""
+    """A quotation. Often but not necessarily from some written work, attributable to a
+    real world author and - if associated with a fictional character - to any fictional
+    Person. Use isBasedOn to link to source/origin. The recordedIn property can be used
+    to reference a Quotation from an Event."""
 
+    type: str = Field(default="Quotation", alias="@type")
     spokenByCharacter: Optional[Organization | Person | str] = Field(default=None)
 
 class QuoteAction(TradeAction):
-    """An agent quotes/estimates/appraises an object/product/service with a price at a location/store."""
+    """An agent quotes/estimates/appraises an object/product/service with a price at a
+    location/store."""
 
-    pass
+    type: str = Field(default="QuoteAction", alias="@type")
 
 class RVPark(CivicStructure):
-    """A place offering space for "Recreational Vehicles", Caravans, mobile homes and the like."""
+    """A place offering space for "Recreational Vehicles", Caravans, mobile homes and the
+    like."""
 
-    pass
+    type: str = Field(default="RVPark", alias="@type")
 
 class RadiationTherapy(MedicalTherapy):
     """A process of care using radiation aimed at improving a health condition."""
 
-    pass
+    type: str = Field(default="RadiationTherapy", alias="@type")
 
 class RadioBroadcastService(BroadcastService):
-    """A delivery service through which radio content is provided via broadcast over the air or online."""
+    """A delivery service through which radio content is provided via broadcast over the
+    air or online."""
 
-    pass
+    type: str = Field(default="RadioBroadcastService", alias="@type")
 
 class RadioClip(Clip):
     """A short radio program or a segment/part of a radio program."""
 
-    pass
+    type: str = Field(default="RadioClip", alias="@type")
 
 class RadioEpisode(Episode):
     """A radio episode which can be part of a series or season."""
 
-    pass
+    type: str = Field(default="RadioEpisode", alias="@type")
 
 class RadioSeason(CreativeWorkSeason):
     """Season dedicated to radio broadcast and associated online delivery."""
 
-    pass
+    type: str = Field(default="RadioSeason", alias="@type")
 
 class RadioSeries(CreativeWorkSeries):
     """CreativeWorkSeries dedicated to radio broadcast and associated online delivery."""
 
+    type: str = Field(default="RadioSeries", alias="@type")
     episodes: Any = Field(default=None)
     numberOfSeasons: Optional[int | str] = Field(default=None)
     containsSeason: Optional[CreativeWorkSeason | str] = Field(default=None)
@@ -5520,35 +6636,46 @@ class RadioSeries(CreativeWorkSeries):
 class RadioStation(LocalBusiness):
     """A radio station."""
 
-    pass
+    type: str = Field(default="RadioStation", alias="@type")
 
 class ReadAction(ConsumeAction):
     """The act of consuming written content."""
 
-    pass
+    type: str = Field(default="ReadAction", alias="@type")
 
 class RealEstateAgent(LocalBusiness):
     """A real-estate agent."""
 
-    pass
+    type: str = Field(default="RealEstateAgent", alias="@type")
 
 class RealEstateListing(WebPage):
-    """A [[RealEstateListing]] is a listing that describes one or more real-estate [[Offer]]s (whose [[businessFunction]] is typically to lease out, or to sell).
-  The [[RealEstateListing]] type itself represents the overall listing, as manifested in some [[WebPage]].
-  """
+    """A RealEstateListing is a listing that describes one or more real-estate Offers
+    (whose businessFunction is typically to lease out, or to sell).
+      The RealEstateListing type itself represents the overall listing, as manifested in
+    some WebPage.
+    """
 
+    type: str = Field(default="RealEstateListing", alias="@type")
     datePosted: Optional[date | datetime | str] = Field(default=None)
     leaseLength: Optional[QuantitativeValue | timedelta | str] = Field(default=None)
 
 class ReceiveAction(TransferAction):
-    """The act of physically/electronically taking delivery of an object that has been transferred from an origin to a destination. Reciprocal of SendAction.\n\nRelated actions:\n\n* [[SendAction]]: The reciprocal of ReceiveAction.\n* [[TakeAction]]: Unlike TakeAction, ReceiveAction does not imply that the ownership has been transferred (e.g. I can receive a package, but it does not mean the package is now mine)."""
+    """The act of physically/electronically taking delivery of an object that has been
+    transferred from an origin to a destination. Reciprocal of SendAction.nnRelated
+    actions:nn* SendAction: The reciprocal of ReceiveAction.n* TakeAction: Unlike
+    TakeAction, ReceiveAction does not imply that the ownership has been transferred
+    (e.g. I can receive a package, but it does not mean the package is now mine)."""
 
+    type: str = Field(default="ReceiveAction", alias="@type")
     deliveryMethod: Any = Field(default=None)
     sender: Optional[Organization | Person | Audience | str] = Field(default=None)
 
 class Recipe(HowTo):
-    """A recipe. For dietary restrictions covered by the recipe, a few common restrictions are enumerated via [[suitableForDiet]]. The [[keywords]] property can also be used to add more detail."""
+    """A recipe. For dietary restrictions covered by the recipe, a few common restrictions
+    are enumerated via suitableForDiet. The keywords property can also be used to add
+    more detail."""
 
+    type: str = Field(default="Recipe", alias="@type")
     cookingMethod: Optional[str] = Field(default=None)
     recipeInstructions: Optional[CreativeWork | ItemList | str] = Field(default=None)
     recipeCategory: Optional[str] = Field(default=None)
@@ -5561,44 +6688,63 @@ class Recipe(HowTo):
     recipeCuisine: Optional[str] = Field(default=None)
 
 class Recommendation(Review):
-    """[[Recommendation]] is a type of [[Review]] that suggests or proposes something as the best option or best course of action. Recommendations may be for products or services, or other concrete things, as in the case of a ranked list or product guide. A [[Guide]] may list multiple recommendations for different categories. For example, in a [[Guide]] about which TVs to buy, the author may have several [[Recommendation]]s."""
+    """Recommendation is a type of Review that suggests or proposes something as the best
+    option or best course of action. Recommendations may be for products or services, or
+    other concrete things, as in the case of a ranked list or product guide. A Guide may
+    list multiple recommendations for different categories. For example, in a Guide
+    about which TVs to buy, the author may have several Recommendations."""
 
+    type: str = Field(default="Recommendation", alias="@type")
     category: Optional[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode] = Field(default=None)
 
 class RecommendedDoseSchedule(DoseSchedule):
-    """A recommended dosing schedule for a drug or supplement as prescribed or recommended by an authority or by the drug/supplement's manufacturer. Capture the recommending authority in the recognizingAuthority property of MedicalEntity."""
+    """A recommended dosing schedule for a drug or supplement as prescribed or recommended
+    by an authority or by the drug/supplement's manufacturer. Capture the recommending
+    authority in the recognizingAuthority property of MedicalEntity."""
 
-    pass
+    type: str = Field(default="RecommendedDoseSchedule", alias="@type")
 
 class RecyclingCenter(LocalBusiness):
     """A recycling center."""
 
-    pass
+    type: str = Field(default="RecyclingCenter", alias="@type")
 
 class RefundTypeEnumeration(Enumeration):
     """Enumerates several kinds of product return refund types."""
 
-    pass
+    type: str = Field(default="RefundTypeEnumeration", alias="@type")
 
 class RegisterAction(InteractAction):
-    """The act of registering to be a user of a service, product or web page.\n\nRelated actions:\n\n* [[JoinAction]]: Unlike JoinAction, RegisterAction implies you are registering to be a user of a service, *not* a group/team of people.\n* [[FollowAction]]: Unlike FollowAction, RegisterAction doesn't imply that the agent is expecting to poll for updates from the object.\n* [[SubscribeAction]]: Unlike SubscribeAction, RegisterAction doesn't imply that the agent is expecting updates from the object."""
+    """The act of registering to be a user of a service, product or web page.nnRelated
+    actions:nn* JoinAction: Unlike JoinAction, RegisterAction implies you are
+    registering to be a user of a service, *not* a group/team of people.n* FollowAction:
+    Unlike FollowAction, RegisterAction doesn't imply that the agent is expecting to
+    poll for updates from the object.n* SubscribeAction: Unlike SubscribeAction,
+    RegisterAction doesn't imply that the agent is expecting updates from the object."""
 
-    pass
+    type: str = Field(default="RegisterAction", alias="@type")
 
 class RejectAction(AllocateAction):
-    """The act of rejecting to/adopting an object.\n\nRelated actions:\n\n* [[AcceptAction]]: The antonym of RejectAction."""
+    """The act of rejecting to/adopting an object.nnRelated actions:nn* AcceptAction: The
+    antonym of RejectAction."""
 
-    pass
+    type: str = Field(default="RejectAction", alias="@type")
 
 class RentAction(TradeAction):
-    """The act of giving money in return for temporary use, but not ownership, of an object such as a vehicle or property. For example, an agent rents a property from a landlord in exchange for a periodic payment."""
+    """The act of giving money in return for temporary use, but not ownership, of an object
+    such as a vehicle or property. For example, an agent rents a property from a
+    landlord in exchange for a periodic payment."""
 
+    type: str = Field(default="RentAction", alias="@type")
     landlord: Optional[Organization | Person | str] = Field(default=None)
     realEstateAgent: Optional[RealEstateAgent | str] = Field(default=None)
 
 class RentalCarReservation(Reservation):
-    """A reservation for a rental car.\n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations."""
+    """A reservation for a rental car.nnNote: This type is for information about actual
+    reservations, e.g. in confirmation emails or HTML pages with individual
+    confirmations of reservations."""
 
+    type: str = Field(default="RentalCarReservation", alias="@type")
     dropoffTime: Optional[str | datetime] = Field(default=None)
     pickupTime: Optional[str | datetime] = Field(default=None)
     dropoffLocation: Optional[Place | str] = Field(default=None)
@@ -5607,6 +6753,7 @@ class RentalCarReservation(Reservation):
 class RepaymentSpecification(StructuredValue):
     """A structured value representing repayment."""
 
+    type: str = Field(default="RepaymentSpecification", alias="@type")
     earlyPrepaymentPenalty: Optional[MonetaryAmount | str] = Field(default=None)
     loanPaymentAmount: Optional[MonetaryAmount | str] = Field(default=None)
     downPayment: Optional[MonetaryAmount | float | str] = Field(default=None)
@@ -5616,172 +6763,216 @@ class RepaymentSpecification(StructuredValue):
 class ReplaceAction(UpdateAction):
     """The act of editing a recipient by replacing an old object with a new object."""
 
+    type: str = Field(default="ReplaceAction", alias="@type")
     replacee: Optional[Thing | str] = Field(default=None)
     replacer: Optional[Thing | str] = Field(default=None)
 
 class ReplyAction(CommunicateAction):
-    """The act of responding to a question/message asked/sent by the object. Related to [[AskAction]].\n\nRelated actions:\n\n* [[AskAction]]: Appears generally as an origin of a ReplyAction."""
+    """The act of responding to a question/message asked/sent by the object. Related to
+    AskAction.nnRelated actions:nn* AskAction: Appears generally as an origin of a
+    ReplyAction."""
 
+    type: str = Field(default="ReplyAction", alias="@type")
     resultComment: Optional[Comment | str] = Field(default=None)
 
 class Report(Article):
     """A Report generated by governmental or non-governmental organization."""
 
+    type: str = Field(default="Report", alias="@type")
     reportNumber: Optional[str] = Field(default=None)
 
 class ReportageNewsArticle(NewsArticle):
-    """The [[ReportageNewsArticle]] type is a subtype of [[NewsArticle]] representing
- news articles which are the result of journalistic news reporting conventions.
+    """The ReportageNewsArticle type is a subtype of NewsArticle representing
+     news articles which are the result of journalistic news reporting conventions.
+    
+    In practice many news publishers produce a wide variety of article types, many of
+    which might be considered a NewsArticle but not a ReportageNewsArticle. For example,
+    opinion pieces, reviews, analysis, sponsored or satirical articles, or articles that
+    combine several of these elements.
+    
+    The ReportageNewsArticle type is based on a stricter ideal for "news" as a work of
+    journalism, with articles based on factual information either observed or verified
+    by the author, or reported and verified from knowledgeable sources.  This often
+    includes perspectives from multiple viewpoints on a particular issue (distinguishing
+    news reports from public relations or propaganda).  News reports in the
+    ReportageNewsArticle sense de-emphasize the opinion of the author, with commentary
+    and value judgements typically expressed elsewhere.
+    
+    A ReportageNewsArticle which goes deeper into analysis can also be marked with an
+    additional type of AnalysisNewsArticle.
+    """
 
-In practice many news publishers produce a wide variety of article types, many of which might be considered a [[NewsArticle]] but not a [[ReportageNewsArticle]]. For example, opinion pieces, reviews, analysis, sponsored or satirical articles, or articles that combine several of these elements.
-
-The [[ReportageNewsArticle]] type is based on a stricter ideal for "news" as a work of journalism, with articles based on factual information either observed or verified by the author, or reported and verified from knowledgeable sources.  This often includes perspectives from multiple viewpoints on a particular issue (distinguishing news reports from public relations or propaganda).  News reports in the [[ReportageNewsArticle]] sense de-emphasize the opinion of the author, with commentary and value judgements typically expressed elsewhere.
-
-A [[ReportageNewsArticle]] which goes deeper into analysis can also be marked with an additional type of [[AnalysisNewsArticle]].
-"""
-
-    pass
+    type: str = Field(default="ReportageNewsArticle", alias="@type")
 
 class ReportedDoseSchedule(DoseSchedule):
     """A patient-reported or observed dosing schedule for a drug or supplement."""
 
-    pass
+    type: str = Field(default="ReportedDoseSchedule", alias="@type")
 
 class ResearchOrganization(Organization):
     """A Research Organization (e.g. scientific institute, research company)."""
 
-    pass
+    type: str = Field(default="ResearchOrganization", alias="@type")
 
 class ResearchProject(Project):
     """A Research project."""
 
-    pass
+    type: str = Field(default="ResearchProject", alias="@type")
 
 class Researcher(Audience):
     """Researchers."""
 
-    pass
+    type: str = Field(default="Researcher", alias="@type")
 
 class ReservationPackage(Reservation):
     """A group of multiple reservations with common values for all sub-reservations."""
 
+    type: str = Field(default="ReservationPackage", alias="@type")
     subReservation: Optional[Reservation | str] = Field(default=None)
 
 class ReservationStatusType(StatusEnumeration):
     """Enumerated status values for Reservation."""
 
-    pass
+    type: str = Field(default="ReservationStatusType", alias="@type")
 
 class ReserveAction(PlanAction):
-    """Reserving a concrete object.\n\nRelated actions:\n\n* [[ScheduleAction]]: Unlike ScheduleAction, ReserveAction reserves concrete objects (e.g. a table, a hotel) towards a time slot / spatial allocation."""
+    """Reserving a concrete object.nnRelated actions:nn* ScheduleAction: Unlike
+    ScheduleAction, ReserveAction reserves concrete objects (e.g. a table, a hotel)
+    towards a time slot / spatial allocation."""
 
-    pass
+    type: str = Field(default="ReserveAction", alias="@type")
 
 class Reservoir(BodyOfWater):
-    """A reservoir of water, typically an artificially created lake, like the Lake Kariba reservoir."""
+    """A reservoir of water, typically an artificially created lake, like the Lake Kariba
+    reservoir."""
 
-    pass
+    type: str = Field(default="Reservoir", alias="@type")
 
 class ResetPasswordAction(ControlAction):
     """The action of resetting the password of a device or application."""
 
-    pass
+    type: str = Field(default="ResetPasswordAction", alias="@type")
 
 class Resort(LodgingBusiness):
-    """A resort is a place used for relaxation or recreation, attracting visitors for holidays or vacations. Resorts are places, towns or sometimes commercial establishments operated by a single company (source: Wikipedia, the free encyclopedia, see <a href="http://en.wikipedia.org/wiki/Resort">http://en.wikipedia.org/wiki/Resort</a>).
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
+    """A resort is a place used for relaxation or recreation, attracting visitors for
+    holidays or vacations. Resorts are places, towns or sometimes commercial
+    establishments operated by a single company (source: Wikipedia, the free
+    encyclopedia, see <a
+    href="http://en.wikipedia.org/wiki/Resort">http://en.wikipedia.org/wiki/Resort</a>).
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
     """
 
-    pass
+    type: str = Field(default="Resort", alias="@type")
 
 class Restaurant(FoodEstablishment):
     """A restaurant."""
 
-    pass
+    type: str = Field(default="Restaurant", alias="@type")
 
 class RestrictedDiet(Enumeration):
-    """A diet restricted to certain foods or preparations for cultural, religious, health or lifestyle reasons. """
+    """A diet restricted to certain foods or preparations for cultural, religious, health
+    or lifestyle reasons."""
 
-    pass
+    type: str = Field(default="RestrictedDiet", alias="@type")
 
 class ResumeAction(ControlAction):
-    """The act of resuming a device or application which was formerly paused (e.g. resume music playback or resume a timer)."""
+    """The act of resuming a device or application which was formerly paused (e.g. resume
+    music playback or resume a timer)."""
 
-    pass
+    type: str = Field(default="ResumeAction", alias="@type")
 
 class ReturnAction(TransferAction):
-    """The act of returning to the origin that which was previously received (concrete objects) or taken (ownership)."""
+    """The act of returning to the origin that which was previously received (concrete
+    objects) or taken (ownership)."""
 
+    type: str = Field(default="ReturnAction", alias="@type")
     recipient: Optional[Organization | Person | ContactPoint | Audience | str] = Field(default=None)
 
 class ReturnFeesEnumeration(Enumeration):
     """Enumerates several kinds of policies for product return fees."""
 
-    pass
+    type: str = Field(default="ReturnFeesEnumeration", alias="@type")
 
 class ReturnLabelSourceEnumeration(Enumeration):
     """Enumerates several types of return labels for product returns."""
 
-    pass
+    type: str = Field(default="ReturnLabelSourceEnumeration", alias="@type")
 
 class ReturnMethodEnumeration(Enumeration):
     """Enumerates several types of product return methods."""
 
-    pass
+    type: str = Field(default="ReturnMethodEnumeration", alias="@type")
 
 class ReviewAction(AssessAction):
-    """The act of producing a balanced opinion about the object for an audience. An agent reviews an object with participants resulting in a review."""
+    """The act of producing a balanced opinion about the object for an audience. An agent
+    reviews an object with participants resulting in a review."""
 
+    type: str = Field(default="ReviewAction", alias="@type")
     resultReview: Optional[Review | str] = Field(default=None)
 
 class ReviewNewsArticle(CriticReview):
-    """A [[NewsArticle]] and [[CriticReview]] providing a professional critic's assessment of a service, product, performance, or artistic or literary work."""
+    """A NewsArticle and CriticReview providing a professional critic's assessment of a
+    service, product, performance, or artistic or literary work."""
 
-    pass
+    type: str = Field(default="ReviewNewsArticle", alias="@type")
 
 class RiverBodyOfWater(BodyOfWater):
     """A river (for example, the broad majestic Shannon)."""
 
-    pass
+    type: str = Field(default="RiverBodyOfWater", alias="@type")
 
 class RoofingContractor(HomeAndConstructionBusiness):
     """A roofing contractor."""
 
-    pass
+    type: str = Field(default="RoofingContractor", alias="@type")
 
 class RsvpAction(InformAction):
-    """The act of notifying an event organizer as to whether you expect to attend the event."""
+    """The act of notifying an event organizer as to whether you expect to attend the
+    event."""
 
+    type: str = Field(default="RsvpAction", alias="@type")
     comment: Optional[Comment | str] = Field(default=None)
     rsvpResponse: Optional[RsvpResponseType | str] = Field(default=None)
     additionalNumberOfGuests: Optional[float | str] = Field(default=None)
 
 class RsvpResponseType(Enumeration):
-    """RsvpResponseType is an enumeration type whose instances represent responding to an RSVP request."""
+    """RsvpResponseType is an enumeration type whose instances represent responding to an
+    RSVP request."""
 
-    pass
+    type: str = Field(default="RsvpResponseType", alias="@type")
 
 class RuntimePlatform(SoftwareApplication):
-    """Specialized software environment that provides the essential infrastructure, libraries, and services required to execute a program."""
+    """Specialized software environment that provides the essential infrastructure,
+    libraries, and services required to execute a program."""
 
-    pass
+    type: str = Field(default="RuntimePlatform", alias="@type")
 
 class SaleEvent(Event):
     """Event type: Sales event."""
 
-    pass
+    type: str = Field(default="SaleEvent", alias="@type")
 
 class SatiricalArticle(Article):
-    """An [[Article]] whose content is primarily [[satirical]](https://en.wikipedia.org/wiki/Satire) in nature, i.e. unlikely to be literally true. A satirical article is sometimes but not necessarily also a [[NewsArticle]]. [[ScholarlyArticle]]s are also sometimes satirized."""
+    """An Article whose content is primarily
+    satirical(https://en.wikipedia.org/wiki/Satire) in nature, i.e. unlikely to be
+    literally true. A satirical article is sometimes but not necessarily also a
+    NewsArticle. ScholarlyArticles are also sometimes satirized."""
 
-    pass
+    type: str = Field(default="SatiricalArticle", alias="@type")
 
 class Schedule(Intangible):
-    """A schedule defines a repeating time period used to describe a regularly occurring [[Event]]. At a minimum a schedule will specify [[repeatFrequency]] which describes the interval between occurrences of the event. Additional information can be provided to specify the schedule more precisely.
-      This includes identifying the day(s) of the week or month when the recurring event will take place, in addition to its start and end time. Schedules may also
-      have start and end dates to indicate when they are active, e.g. to define a limited calendar of events."""
+    """A schedule defines a repeating time period used to describe a regularly occurring
+    Event. At a minimum a schedule will specify repeatFrequency which describes the
+    interval between occurrences of the event. Additional information can be provided to
+    specify the schedule more precisely.
+          This includes identifying the day(s) of the week or month when the recurring
+    event will take place, in addition to its start and end time. Schedules may also
+          have start and end dates to indicate when they are active, e.g. to define a
+    limited calendar of events."""
 
+    type: str = Field(default="Schedule", alias="@type")
     endTime: Optional[datetime | time | str] = Field(default=None)
     byMonth: Optional[int | str] = Field(default=None)
     byMonthDay: Optional[int | str] = Field(default=None)
@@ -5797,23 +6988,26 @@ class Schedule(Intangible):
     startTime: Optional[datetime | time | str] = Field(default=None)
 
 class ScheduleAction(PlanAction):
-    """Scheduling future actions, events, or tasks.\n\nRelated actions:\n\n* [[ReserveAction]]: Unlike ReserveAction, ScheduleAction allocates future actions (e.g. an event, a task, etc) towards a time slot / spatial allocation."""
+    """Scheduling future actions, events, or tasks.nnRelated actions:nn* ReserveAction:
+    Unlike ReserveAction, ScheduleAction allocates future actions (e.g. an event, a
+    task, etc) towards a time slot / spatial allocation."""
 
-    pass
+    type: str = Field(default="ScheduleAction", alias="@type")
 
 class School(EducationalOrganization):
     """A school."""
 
-    pass
+    type: str = Field(default="School", alias="@type")
 
 class SchoolDistrict(AdministrativeArea):
     """A School District is an administrative area for the administration of schools."""
 
-    pass
+    type: str = Field(default="SchoolDistrict", alias="@type")
 
 class ScreeningEvent(Event):
     """A screening of a movie or other video."""
 
+    type: str = Field(default="ScreeningEvent", alias="@type")
     workPresented: Any = Field(default=None)
     subtitleLanguage: Optional[str | Language] = Field(default=None)
     videoFormat: Optional[str] = Field(default=None)
@@ -5821,71 +7015,89 @@ class ScreeningEvent(Event):
 class Sculpture(CreativeWork):
     """A piece of sculpture."""
 
-    pass
+    type: str = Field(default="Sculpture", alias="@type")
 
 class SeaBodyOfWater(BodyOfWater):
     """A sea (for example, the Caspian sea)."""
 
-    pass
+    type: str = Field(default="SeaBodyOfWater", alias="@type")
 
 class SearchAction(Action):
-    """The act of searching for an object.\n\nRelated actions:\n\n* [[FindAction]]: SearchAction generally leads to a FindAction, but not necessarily."""
+    """The act of searching for an object.nnRelated actions:nn* FindAction: SearchAction
+    generally leads to a FindAction, but not necessarily."""
 
+    type: str = Field(default="SearchAction", alias="@type")
     query: Optional[str] = Field(default=None)
 
 class SearchRescueOrganization(Organization):
     """A Search and Rescue organization of some kind."""
 
-    pass
+    type: str = Field(default="SearchRescueOrganization", alias="@type")
 
 class SearchResultsPage(WebPage):
     """Web page type: Search results page."""
 
-    pass
+    type: str = Field(default="SearchResultsPage", alias="@type")
 
 class Season(CreativeWork):
     """A media season, e.g. TV, radio, video game etc."""
 
-    pass
+    type: str = Field(default="Season", alias="@type")
 
 class Seat(Intangible):
     """Used to describe a seat, such as a reserved seat in an event reservation."""
 
+    type: str = Field(default="Seat", alias="@type")
     seatNumber: Optional[str] = Field(default=None)
     seatSection: Optional[str] = Field(default=None)
     seatRow: Optional[str] = Field(default=None)
     seatingType: Optional[str | QualitativeValue] = Field(default=None)
 
 class SeekToAction(Action):
-    """This is the [[Action]] of navigating to a specific [[startOffset]] timestamp within a [[VideoObject]], typically represented with a URL template structure."""
+    """This is the Action of navigating to a specific startOffset timestamp within a
+    VideoObject, typically represented with a URL template structure."""
 
+    type: str = Field(default="SeekToAction", alias="@type")
     startOffset: Optional[float | HyperTocEntry | str] = Field(default=None)
 
 class SelfStorage(LocalBusiness):
     """A self-storage facility."""
 
-    pass
+    type: str = Field(default="SelfStorage", alias="@type")
 
 class SellAction(TradeAction):
-    """The act of taking money from a buyer in exchange for goods or services rendered. An agent sells an object, product, or service to a buyer for a price. Reciprocal of BuyAction."""
+    """The act of taking money from a buyer in exchange for goods or services rendered. An
+    agent sells an object, product, or service to a buyer for a price. Reciprocal of
+    BuyAction."""
 
+    type: str = Field(default="SellAction", alias="@type")
     warrantyPromise: Optional[WarrantyPromise | str] = Field(default=None)
     buyer: Optional[Organization | Person | str] = Field(default=None)
 
 class SendAction(TransferAction):
-    """The act of physically/electronically dispatching an object for transfer from an origin to a destination. Related actions:\n\n* [[ReceiveAction]]: The reciprocal of SendAction.\n* [[GiveAction]]: Unlike GiveAction, SendAction does not imply the transfer of ownership (e.g. I can send you my laptop, but I'm not necessarily giving it to you)."""
+    """The act of physically/electronically dispatching an object for transfer from an
+    origin to a destination. Related actions:nn* ReceiveAction: The reciprocal of
+    SendAction.n* GiveAction: Unlike GiveAction, SendAction does not imply the transfer
+    of ownership (e.g. I can send you my laptop, but I'm not necessarily giving it to
+    you)."""
 
+    type: str = Field(default="SendAction", alias="@type")
     deliveryMethod: Any = Field(default=None)
     recipient: Optional[Organization | Person | ContactPoint | Audience | str] = Field(default=None)
 
 class SequentialArt(Book):
-    """An art forms that use images deployed in a specific order for the purpose of graphic storytelling (i.e., narration of graphic stories) or conveying information. Examples of SequentialArt are Franco-Belgian Bande Dessinée, Comics in the USA and 漫画 (Manga) in Japan."""
+    """An art forms that use images deployed in a specific order for the purpose of graphic
+    storytelling (i.e., narration of graphic stories) or conveying information. Examples
+    of SequentialArt are Franco-Belgian Bande Dessinée, Comics in the USA and 漫画 (Manga)
+    in Japan."""
 
-    pass
+    type: str = Field(default="SequentialArt", alias="@type")
 
 class ServiceChannel(Intangible):
-    """A means for accessing a service, e.g. a government office location, web site, or phone number."""
+    """A means for accessing a service, e.g. a government office location, web site, or
+    phone number."""
 
+    type: str = Field(default="ServiceChannel", alias="@type")
     availableLanguage: Optional[str | Language] = Field(default=None)
     serviceSmsNumber: Any = Field(default=None)
     servicePhone: Any = Field(default=None)
@@ -5896,8 +7108,10 @@ class ServiceChannel(Intangible):
     processingTime: Optional[timedelta | str] = Field(default=None)
 
 class ServicePeriod(StructuredValue):
-    """ServicePeriod represents a duration with some constraints about cutoff time and business days. This is used e.g. in shipping for handling times or transit time."""
+    """ServicePeriod represents a duration with some constraints about cutoff time and
+    business days. This is used e.g. in shipping for handling times or transit time."""
 
+    type: str = Field(default="ServicePeriod", alias="@type")
     cutoffTime: Optional[time | str] = Field(default=None)
     businessDays: Any = Field(default=None)
     duration: Optional[QuantitativeValue | timedelta | str] = Field(default=None)
@@ -5905,16 +7119,21 @@ class ServicePeriod(StructuredValue):
 class ShareAction(CommunicateAction):
     """The act of distributing content to people for their amusement or edification."""
 
-    pass
+    type: str = Field(default="ShareAction", alias="@type")
 
 class SheetMusic(CreativeWork):
     """Printed music, as opposed to performed or recorded music."""
 
-    pass
+    type: str = Field(default="SheetMusic", alias="@type")
 
 class ShippingConditions(StructuredValue):
-    """ShippingConditions represent a set of constraints and information about the conditions of shipping a product. Such conditions may apply to only a subset of the products being shipped, depending on aspects of the product like weight, size, price, destination, and others. All the specified conditions must be met for this ShippingConditions to apply."""
+    """ShippingConditions represent a set of constraints and information about the
+    conditions of shipping a product. Such conditions may apply to only a subset of the
+    products being shipped, depending on aspects of the product like weight, size,
+    price, destination, and others. All the specified conditions must be met for this
+    ShippingConditions to apply."""
 
+    type: str = Field(default="ShippingConditions", alias="@type")
     doesNotShip: Optional[bool | str] = Field(default=None)
     width: Any = Field(default=None)
     depth: Any = Field(default=None)
@@ -5929,16 +7148,23 @@ class ShippingConditions(StructuredValue):
     height: Any = Field(default=None)
 
 class ShippingDeliveryTime(StructuredValue):
-    """ShippingDeliveryTime provides various pieces of information about delivery times for shipping."""
+    """ShippingDeliveryTime provides various pieces of information about delivery times for
+    shipping."""
 
+    type: str = Field(default="ShippingDeliveryTime", alias="@type")
     cutoffTime: Optional[time | str] = Field(default=None)
     handlingTime: Optional[QuantitativeValue | str] = Field(default=None)
     transitTime: Optional[QuantitativeValue | str] = Field(default=None)
     businessDays: Any = Field(default=None)
 
 class ShippingRateSettings(StructuredValue):
-    """A ShippingRateSettings represents re-usable pieces of shipping information. It is designed for publication on an URL that may be referenced via the [[shippingSettingsLink]] property of an [[OfferShippingDetails]]. Several occurrences can be published, distinguished and matched (i.e. identified/referenced) by their different values for [[shippingLabel]]."""
+    """A ShippingRateSettings represents re-usable pieces of shipping information. It is
+    designed for publication on an URL that may be referenced via the
+    shippingSettingsLink property of an OfferShippingDetails. Several occurrences can be
+    published, distinguished and matched (i.e. identified/referenced) by their different
+    values for shippingLabel."""
 
+    type: str = Field(default="ShippingRateSettings", alias="@type")
     orderPercentage: Optional[str | float] = Field(default=None)
     freeShippingThreshold: Optional[MonetaryAmount | str] = Field(default=None)
     doesNotShip: Optional[bool | str] = Field(default=None)
@@ -5948,8 +7174,10 @@ class ShippingRateSettings(StructuredValue):
     shippingDestination: Any = Field(default=None)
 
 class ShippingService(StructuredValue):
-    """ShippingService represents the criteria used to determine if and how an offer could be shipped to a customer."""
+    """ShippingService represents the criteria used to determine if and how an offer could
+    be shipped to a customer."""
 
+    type: str = Field(default="ShippingService", alias="@type")
     validForMemberTier: Any = Field(default=None)
     handlingTime: Optional[QuantitativeValue | str] = Field(default=None)
     fulfillmentType: Any = Field(default=None)
@@ -5958,42 +7186,47 @@ class ShippingService(StructuredValue):
 class ShoeStore(Store):
     """A shoe store."""
 
-    pass
+    type: str = Field(default="ShoeStore", alias="@type")
 
 class ShoppingCenter(LocalBusiness):
     """A shopping center or mall."""
 
-    pass
+    type: str = Field(default="ShoppingCenter", alias="@type")
 
 class ShortStory(CreativeWork):
     """Short story or tale. A brief work of literature, usually written in narrative prose."""
 
-    pass
+    type: str = Field(default="ShortStory", alias="@type")
 
 class SingleFamilyResidence(House):
     """Residence type: Single-family home."""
 
-    pass
+    type: str = Field(default="SingleFamilyResidence", alias="@type")
 
 class WebPageElement(CreativeWork):
     """A web page element, like a table or an image."""
 
+    type: str = Field(default="WebPageElement", alias="@type")
     xpath: Optional[str] = Field(default=None)
     cssSelector: Optional[str] = Field(default=None)
 
 class SiteNavigationElement(WebPageElement):
     """A navigation element of the page."""
 
-    pass
+    type: str = Field(default="SiteNavigationElement", alias="@type")
 
 class SizeGroupEnumeration(Enumeration):
     """Enumerates common size groups for various product categories."""
 
-    pass
+    type: str = Field(default="SizeGroupEnumeration", alias="@type")
 
 class SizeSpecification(QualitativeValue):
-    """Size related properties of a product, typically a size code ([[name]]) and optionally a [[sizeSystem]], [[sizeGroup]], and product measurements ([[hasMeasurement]]). In addition, the intended audience can be defined through [[suggestedAge]], [[suggestedGender]], and suggested body measurements ([[suggestedMeasurement]])."""
+    """Size related properties of a product, typically a size code (name) and optionally a
+    sizeSystem, sizeGroup, and product measurements (hasMeasurement). In addition, the
+    intended audience can be defined through suggestedAge, suggestedGender, and
+    suggested body measurements (suggestedMeasurement)."""
 
+    type: str = Field(default="SizeSpecification", alias="@type")
     suggestedMeasurement: Optional[QuantitativeValue | str] = Field(default=None)
     suggestedGender: Optional[str | GenderType] = Field(default=None)
     sizeSystem: Optional[str | SizeSystemEnumeration] = Field(default=None)
@@ -6002,23 +7235,26 @@ class SizeSpecification(QualitativeValue):
     hasMeasurement: Optional[QuantitativeValue | str] = Field(default=None)
 
 class SizeSystemEnumeration(Enumeration):
-    """Enumerates common size systems for different categories of products, for example "EN-13402" or "UK" for wearables or "Imperial" for screws."""
+    """Enumerates common size systems for different categories of products, for example
+    "EN-13402" or "UK" for wearables or "Imperial" for screws."""
 
-    pass
+    type: str = Field(default="SizeSystemEnumeration", alias="@type")
 
 class SkiResort(Resort):
     """A ski resort."""
 
-    pass
+    type: str = Field(default="SkiResort", alias="@type")
 
 class SocialEvent(Event):
     """Event type: Social event."""
 
-    pass
+    type: str = Field(default="SocialEvent", alias="@type")
 
 class SoftwareSourceCode(CreativeWork):
-    """Computer programming source code. Example: Full (compile ready) solutions, code snippet samples, scripts, templates."""
+    """Computer programming source code. Example: Full (compile ready) solutions, code
+    snippet samples, scripts, templates."""
 
+    type: str = Field(default="SoftwareSourceCode", alias="@type")
     programmingLanguage: Optional[str] = Field(default=None)
     targetProduct: Optional[SoftwareApplication | str] = Field(default=None)
     codeSampleType: Optional[str] = Field(default=None)
@@ -6028,59 +7264,105 @@ class SoftwareSourceCode(CreativeWork):
     sampleType: Optional[str] = Field(default=None)
 
 class SolveMathAction(Action):
-    """The action that takes in a math expression and directs users to a page potentially capable of solving/simplifying that expression."""
+    """The action that takes in a math expression and directs users to a page potentially
+    capable of solving/simplifying that expression."""
 
+    type: str = Field(default="SolveMathAction", alias="@type")
     eduQuestionType: Optional[str] = Field(default=None)
 
 class SomeProducts(Product):
     """A placeholder for multiple similar products of the same kind."""
 
+    type: str = Field(default="SomeProducts", alias="@type")
     inventoryLevel: Optional[QuantitativeValue | str] = Field(default=None)
 
 class SpeakableSpecification(Intangible):
-    """A SpeakableSpecification indicates (typically via [[xpath]] or [[cssSelector]]) sections of a document that are highlighted as particularly [[speakable]]. Instances of this type are expected to be used primarily as values of the [[speakable]] property."""
+    """A SpeakableSpecification indicates (typically via xpath or cssSelector) sections of
+    a document that are highlighted as particularly speakable. Instances of this type
+    are expected to be used primarily as values of the speakable property."""
 
+    type: str = Field(default="SpeakableSpecification", alias="@type")
     xpath: Optional[str] = Field(default=None)
     cssSelector: Optional[str] = Field(default=None)
 
 class SpecialAnnouncement(CreativeWork):
     """A SpecialAnnouncement combines a simple date-stamped textual information update
-      with contextualized Web links and other structured data.  It represents an information update made by a
-      locally-oriented organization, for example schools, pharmacies, healthcare providers,  community groups, police,
-      local government.
+          with contextualized Web links and other structured data.  It represents an
+    information update made by a
+          locally-oriented organization, for example schools, pharmacies, healthcare
+    providers,  community groups, police,
+          local government.
+    
+    For work in progress guidelines on Coronavirus-related markup see [this doc](https:/
+    /docs.google.com/document/d/14ikaGCKxo50rRM7nvKSlbUpjyIk2WMQd3IkB1lItlrM/edit#).
+    
+    The motivating scenario for SpecialAnnouncement is the [Coronavirus
+    pandemic](https://en.wikipedia.org/wiki/2019%E2%80%9320_coronavirus_pandemic), and
+    the initial vocabulary is oriented to this urgent situation. Schema.org
+    expect to improve the markup iteratively as it is deployed and as feedback emerges
+    from use. In addition to our
+    usual [Github entry](https://github.com/schemaorg/schemaorg/issues/2490), feedback
+    comments can also be provided in [this document](https://docs.google.com/document/d/
+    1fpdFFxk8s87CWwACs53SGkYv3aafSxz_DTtOQxMrBJQ/edit#).
+    
+    
+    While this schema is designed to communicate urgent crisis-related information, it
+    is not the same as an emergency warning technology like
+    [CAP](https://en.wikipedia.org/wiki/Common_Alerting_Protocol), although there may be
+    overlaps. The intent is to cover
+    the kinds of everyday practical information being posted to existing websites during
+    an emergency situation.
+    
+    Several kinds of information can be provided:
+    
+    We encourage the provision of "name", "text", "datePosted", "expires" (if
+    appropriate), "category" and
+    "url" as a simple baseline. It is important to provide a value for "category" where
+    possible, most ideally as a well known
+    URL from Wikipedia or Wikidata. In the case of the 2019-2020 Coronavirus pandemic,
+    this should be
+    "https://en.wikipedia.org/w/index.php?title=2019-20_coronavirus_pandemic" or
+    "https://www.wikidata.org/wiki/Q81068910".
+    
+    For many of the possible properties, values can either be simple links or an inline
+    description, depending on whether a summary is available. For a link, provide just
+    the URL of the appropriate page as the property's value. For an inline description,
+    use a WebContent type, and provide the url as a property of that, alongside at least
+    a simple "text" summary of the page. It is
+    unlikely that a single SpecialAnnouncement will need all of the possible properties
+    simultaneously.
+    
+    We expect that in many cases the page referenced might contain more specialized
+    structured data, e.g. contact info, openingHours, Event, FAQPage etc. By linking to
+    those pages from a SpecialAnnouncement you can help make it clearer that the events
+    are related to the situation (e.g. Coronavirus) indicated by the category property
+    of the SpecialAnnouncement.
+    
+    Many SpecialAnnouncements will relate to particular regions and to identifiable
+    local organizations. Use spatialCoverage for the region, and announcementLocation to
+    indicate specific LocalBusinesses and CivicStructures. If the announcement affects
+    both a particular region and a specific location (for example, a library closure
+    that serves an entire region), use both spatialCoverage and announcementLocation.
+    
+    The about property can be used to indicate entities that are the focus of the
+    announcement. We now recommend using about only
+    for representing non-location entities (e.g. a Course or a RadioStation). For
+    places, use announcementLocation and spatialCoverage. Consumers of this markup
+    should be aware that the initial design encouraged the use of about for locations
+    too.
+    
+    The basic content of SpecialAnnouncement is similar to that of an
+    [RSS](https://en.wikipedia.org/wiki/RSS) or
+    [Atom](https://en.wikipedia.org/wiki/Atom_(Web_standard)) feed. For publishers
+    without such feeds, basic feed-like information can be shared by posting
+    SpecialAnnouncement updates in a page, e.g. using JSON-LD. For sites with Atom/RSS
+    functionality, you can point to a feed
+    with the webFeed property. This can be a simple URL, or an inline DataFeed object,
+    with encodingFormat providing
+    media type information, e.g. "application/rss+xml" or "application/atom+xml".
+    """
 
-For work in progress guidelines on Coronavirus-related markup see [this doc](https://docs.google.com/document/d/14ikaGCKxo50rRM7nvKSlbUpjyIk2WMQd3IkB1lItlrM/edit#).
-
-The motivating scenario for SpecialAnnouncement is the [Coronavirus pandemic](https://en.wikipedia.org/wiki/2019%E2%80%9320_coronavirus_pandemic), and the initial vocabulary is oriented to this urgent situation. Schema.org
-expect to improve the markup iteratively as it is deployed and as feedback emerges from use. In addition to our
-usual [Github entry](https://github.com/schemaorg/schemaorg/issues/2490), feedback comments can also be provided in [this document](https://docs.google.com/document/d/1fpdFFxk8s87CWwACs53SGkYv3aafSxz_DTtOQxMrBJQ/edit#).
-
-
-While this schema is designed to communicate urgent crisis-related information, it is not the same as an emergency warning technology like [CAP](https://en.wikipedia.org/wiki/Common_Alerting_Protocol), although there may be overlaps. The intent is to cover
-the kinds of everyday practical information being posted to existing websites during an emergency situation.
-
-Several kinds of information can be provided:
-
-We encourage the provision of "name", "text", "datePosted", "expires" (if appropriate), "category" and
-"url" as a simple baseline. It is important to provide a value for "category" where possible, most ideally as a well known
-URL from Wikipedia or Wikidata. In the case of the 2019-2020 Coronavirus pandemic, this should be "https://en.wikipedia.org/w/index.php?title=2019-20\_coronavirus\_pandemic" or "https://www.wikidata.org/wiki/Q81068910".
-
-For many of the possible properties, values can either be simple links or an inline description, depending on whether a summary is available. For a link, provide just the URL of the appropriate page as the property's value. For an inline description, use a [[WebContent]] type, and provide the url as a property of that, alongside at least a simple "[[text]]" summary of the page. It is
-unlikely that a single SpecialAnnouncement will need all of the possible properties simultaneously.
-
-We expect that in many cases the page referenced might contain more specialized structured data, e.g. contact info, [[openingHours]], [[Event]], [[FAQPage]] etc. By linking to those pages from a [[SpecialAnnouncement]] you can help make it clearer that the events are related to the situation (e.g. Coronavirus) indicated by the [[category]] property of the [[SpecialAnnouncement]].
-
-Many [[SpecialAnnouncement]]s will relate to particular regions and to identifiable local organizations. Use [[spatialCoverage]] for the region, and [[announcementLocation]] to indicate specific [[LocalBusiness]]es and [[CivicStructure]]s. If the announcement affects both a particular region and a specific location (for example, a library closure that serves an entire region), use both [[spatialCoverage]] and [[announcementLocation]].
-
-The [[about]] property can be used to indicate entities that are the focus of the announcement. We now recommend using [[about]] only
-for representing non-location entities (e.g. a [[Course]] or a [[RadioStation]]). For places, use [[announcementLocation]] and [[spatialCoverage]]. Consumers of this markup should be aware that the initial design encouraged the use of [[about]] for locations too.
-
-The basic content of [[SpecialAnnouncement]] is similar to that of an [RSS](https://en.wikipedia.org/wiki/RSS) or [Atom](https://en.wikipedia.org/wiki/Atom_(Web_standard)) feed. For publishers without such feeds, basic feed-like information can be shared by posting
-[[SpecialAnnouncement]] updates in a page, e.g. using JSON-LD. For sites with Atom/RSS functionality, you can point to a feed
-with the [[webFeed]] property. This can be a simple URL, or an inline [[DataFeed]] object, with [[encodingFormat]] providing
-media type information, e.g. "application/rss+xml" or "application/atom+xml".
-"""
-
+    type: str = Field(default="SpecialAnnouncement", alias="@type")
     datePosted: Optional[datetime | date | str] = Field(default=None)
     webFeed: Optional[AnyUrl | DataFeed | str] = Field(default=None)
     announcementLocation: Optional[LocalBusiness | CivicStructure | str] = Field(default=None)
@@ -6096,23 +7378,25 @@ media type information, e.g. "application/rss+xml" or "application/atom+xml".
     diseaseSpreadStatistics: Optional[Dataset | AnyUrl | str] = Field(default=None)
 
 class Specialty(Enumeration):
-    """Any branch of a field in which people typically develop specific expertise, usually after significant study, time, and effort."""
+    """Any branch of a field in which people typically develop specific expertise, usually
+    after significant study, time, and effort."""
 
-    pass
+    type: str = Field(default="Specialty", alias="@type")
 
 class SportingGoodsStore(Store):
     """A sporting goods store."""
 
-    pass
+    type: str = Field(default="SportingGoodsStore", alias="@type")
 
 class SportsClub(SportsActivityLocation):
     """A sports club."""
 
-    pass
+    type: str = Field(default="SportsClub", alias="@type")
 
 class SportsEvent(Event):
     """Event type: Sports event."""
 
+    type: str = Field(default="SportsEvent", alias="@type")
     referee: Optional[Person | str] = Field(default=None)
     homeTeam: Optional[SportsTeam | Person | str] = Field(default=None)
     awayTeam: Optional[SportsTeam | Person | str] = Field(default=None)
@@ -6120,13 +7404,16 @@ class SportsEvent(Event):
     sport: Optional[AnyUrl | str] = Field(default=None)
 
 class SportsOrganization(Organization):
-    """Represents the collection of all sports organizations, including sports teams, governing bodies, and sports associations."""
+    """Represents the collection of all sports organizations, including sports teams,
+    governing bodies, and sports associations."""
 
+    type: str = Field(default="SportsOrganization", alias="@type")
     sport: Optional[AnyUrl | str] = Field(default=None)
 
 class SportsTeam(SportsOrganization):
     """Organization: Sports team."""
 
+    type: str = Field(default="SportsTeam", alias="@type")
     gender: Optional[str] = Field(default=None)
     coach: Any = Field(default=None)
     athlete: Any = Field(default=None)
@@ -6134,33 +7421,65 @@ class SportsTeam(SportsOrganization):
 class SpreadsheetDigitalDocument(DigitalDocument):
     """A spreadsheet file."""
 
-    pass
+    type: str = Field(default="SpreadsheetDigitalDocument", alias="@type")
 
 class StadiumOrArena(CivicStructure):
     """A stadium."""
 
-    pass
+    type: str = Field(default="StadiumOrArena", alias="@type")
 
 class State(AdministrativeArea):
     """A state or province of a country."""
 
-    pass
+    type: str = Field(default="State", alias="@type")
 
 class Statement(CreativeWork):
-    """A statement about something, for example a fun or interesting fact. If known, the main entity this statement is about can be indicated using mainEntity. For more formal claims (e.g. in Fact Checking), consider using [[Claim]] instead. Use the [[text]] property to capture the text of the statement."""
+    """A statement about something, for example a fun or interesting fact. If known, the
+    main entity this statement is about can be indicated using mainEntity. For more
+    formal claims (e.g. in Fact Checking), consider using Claim instead. Use the text
+    property to capture the text of the statement."""
 
-    pass
+    type: str = Field(default="Statement", alias="@type")
 
 class StatisticalPopulation(Intangible):
-    """A StatisticalPopulation is a set of instances of a certain given type that satisfy some set of constraints. The property [[populationType]] is used to specify the type. Any property that can be used on instances of that type can appear on the statistical population. For example, a [[StatisticalPopulation]] representing all [[Person]]s with a [[homeLocation]] of East Podunk California would be described by applying the appropriate [[homeLocation]] and [[populationType]] properties to a [[StatisticalPopulation]] item that stands for that set of people.
-The properties [[numConstraints]] and [[constraintProperty]] are used to specify which of the populations properties are used to specify the population. Note that the sense of "population" used here is the general sense of a statistical
-population, and does not imply that the population consists of people. For example, a [[populationType]] of [[Event]] or [[NewsArticle]] could be used. See also [[Observation]], where a [[populationType]] such as [[Person]] or [[Event]] can be indicated directly. In most cases it may be better to use [[StatisticalVariable]] instead of [[StatisticalPopulation]]."""
+    """A StatisticalPopulation is a set of instances of a certain given type that satisfy
+    some set of constraints. The property populationType is used to specify the type.
+    Any property that can be used on instances of that type can appear on the
+    statistical population. For example, a StatisticalPopulation representing all
+    Persons with a homeLocation of East Podunk California would be described by applying
+    the appropriate homeLocation and populationType properties to a
+    StatisticalPopulation item that stands for that set of people.
+    The properties numConstraints and constraintProperty are used to specify which of
+    the populations properties are used to specify the population. Note that the sense
+    of "population" used here is the general sense of a statistical
+    population, and does not imply that the population consists of people. For example,
+    a populationType of Event or NewsArticle could be used. See also Observation, where
+    a populationType such as Person or Event can be indicated directly. In most cases it
+    may be better to use StatisticalVariable instead of StatisticalPopulation."""
 
+    type: str = Field(default="StatisticalPopulation", alias="@type")
     populationType: Optional[Class | str] = Field(default=None)
 
 class StatisticalVariable(ConstraintNode):
-    """[[StatisticalVariable]] represents any type of statistical metric that can be measured at a place and time. The usage pattern for [[StatisticalVariable]] is typically expressed using [[Observation]] with an explicit [[populationType]], which is a type, typically drawn from Schema.org. Each [[StatisticalVariable]] is marked as a [[ConstraintNode]], meaning that some properties (those listed using [[constraintProperty]]) serve in this setting solely to define the statistical variable rather than literally describe a specific person, place or thing. For example, a [[StatisticalVariable]] Median_Height_Person_Female representing the median height of women, could be written as follows: the population type is [[Person]]; the measuredProperty [[height]]; the [[statType]] [[median]]; the [[gender]] [[Female]]. It is important to note that there are many kinds of scientific quantitative observation which are not fully, perfectly or unambiguously described following this pattern, or with solely Schema.org terminology. The approach taken here is designed to allow partial, incremental or minimal description of [[StatisticalVariable]]s, and the use of detailed sets of entity and property IDs from external repositories. The [[measurementMethod]], [[unitCode]] and [[unitText]] properties can also be used to clarify the specific nature and notation of an observed measurement. """
+    """StatisticalVariable represents any type of statistical metric that can be measured
+    at a place and time. The usage pattern for StatisticalVariable is typically
+    expressed using Observation with an explicit populationType, which is a type,
+    typically drawn from Schema.org. Each StatisticalVariable is marked as a
+    ConstraintNode, meaning that some properties (those listed using constraintProperty)
+    serve in this setting solely to define the statistical variable rather than
+    literally describe a specific person, place or thing. For example, a
+    StatisticalVariable Median_Height_Person_Female representing the median height of
+    women, could be written as follows: the population type is Person; the
+    measuredProperty height; the statType median; the gender Female. It is important to
+    note that there are many kinds of scientific quantitative observation which are not
+    fully, perfectly or unambiguously described following this pattern, or with solely
+    Schema.org terminology. The approach taken here is designed to allow partial,
+    incremental or minimal description of StatisticalVariables, and the use of detailed
+    sets of entity and property IDs from external repositories. The measurementMethod,
+    unitCode and unitText properties can also be used to clarify the specific nature and
+    notation of an observed measurement."""
 
+    type: str = Field(default="StatisticalVariable", alias="@type")
     populationType: Optional[Class | str] = Field(default=None)
     measurementQualifier: Optional[Enumeration | str] = Field(default=None)
     measuredProperty: Any = Field(default=None)
@@ -6172,35 +7491,64 @@ class StatisticalVariable(ConstraintNode):
 class SteeringPositionValue(QualitativeValue):
     """A value indicating a steering position."""
 
-    pass
+    type: str = Field(default="SteeringPositionValue", alias="@type")
 
 class SubscribeAction(InteractAction):
-    """The act of forming a personal connection with someone/something (object) unidirectionally/asymmetrically to get updates pushed to.\n\nRelated actions:\n\n* [[FollowAction]]: Unlike FollowAction, SubscribeAction implies that the subscriber acts as a passive agent being constantly/actively pushed for updates.\n* [[RegisterAction]]: Unlike RegisterAction, SubscribeAction implies that the agent is interested in continuing receiving updates from the object.\n* [[JoinAction]]: Unlike JoinAction, SubscribeAction implies that the agent is interested in continuing receiving updates from the object."""
+    """The act of forming a personal connection with someone/something (object)
+    unidirectionally/asymmetrically to get updates pushed to.nnRelated actions:nn*
+    FollowAction: Unlike FollowAction, SubscribeAction implies that the subscriber acts
+    as a passive agent being constantly/actively pushed for updates.n* RegisterAction:
+    Unlike RegisterAction, SubscribeAction implies that the agent is interested in
+    continuing receiving updates from the object.n* JoinAction: Unlike JoinAction,
+    SubscribeAction implies that the agent is interested in continuing receiving updates
+    from the object."""
 
-    pass
+    type: str = Field(default="SubscribeAction", alias="@type")
 
 class Substance(MedicalEntity):
-    """Any matter of defined composition that has discrete existence, whose origin may be biological, mineral or chemical."""
+    """Any matter of defined composition that has discrete existence, whose origin may be
+    biological, mineral or chemical."""
 
+    type: str = Field(default="Substance", alias="@type")
     activeIngredient: Optional[str] = Field(default=None)
     maximumIntake: Any = Field(default=None)
 
 class SubwayStation(CivicStructure):
     """A subway station."""
 
-    pass
+    type: str = Field(default="SubwayStation", alias="@type")
 
 class Suite(Accommodation):
-    """A suite in a hotel or other public accommodation, denotes a class of luxury accommodations, the key feature of which is multiple rooms (source: Wikipedia, the free encyclopedia, see <a href="http://en.wikipedia.org/wiki/Suite_(hotel)">http://en.wikipedia.org/wiki/Suite_(hotel)</a>).
-<br /><br />
-See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org for marking up hotels and other forms of accommodations</a>.
-"""
+    """A suite in a hotel or other public accommodation, denotes a class of luxury
+    accommodations, the key feature of which is multiple rooms (source: Wikipedia, the
+    free encyclopedia, see <a href="http://en.wikipedia.org/wiki/Suite_(hotel)">http://e
+    n.wikipedia.org/wiki/Suite_(hotel)</a>).
+    <br /><br />
+    See also the <a href="/docs/hotels.html">dedicated document on the use of schema.org
+    for marking up hotels and other forms of accommodations</a>.
+    """
 
-    pass
+    type: str = Field(default="Suite", alias="@type")
 
 class SuperficialAnatomy(MedicalEntity):
-    """Anatomical features that can be observed by sight (without dissection), including the form and proportions of the human body as well as surface landmarks that correspond to deeper subcutaneous structures. Superficial anatomy plays an important role in sports medicine, phlebotomy, and other medical specialties as underlying anatomical structures can be identified through surface palpation. For example, during back surgery, superficial anatomy can be used to palpate and count vertebrae to find the site of incision. Or in phlebotomy, superficial anatomy can be used to locate an underlying vein; for example, the median cubital vein can be located by palpating the borders of the cubital fossa (such as the epicondyles of the humerus) and then looking for the superficial signs of the vein, such as size, prominence, ability to refill after depression, and feel of surrounding tissue support. As another example, in a subluxation (dislocation) of the glenohumeral joint, the bony structure becomes pronounced with the deltoid muscle failing to cover the glenohumeral joint allowing the edges of the scapula to be superficially visible. Here, the superficial anatomy is the visible edges of the scapula, implying the underlying dislocation of the joint (the related anatomical structure)."""
+    """Anatomical features that can be observed by sight (without dissection), including
+    the form and proportions of the human body as well as surface landmarks that
+    correspond to deeper subcutaneous structures. Superficial anatomy plays an important
+    role in sports medicine, phlebotomy, and other medical specialties as underlying
+    anatomical structures can be identified through surface palpation. For example,
+    during back surgery, superficial anatomy can be used to palpate and count vertebrae
+    to find the site of incision. Or in phlebotomy, superficial anatomy can be used to
+    locate an underlying vein; for example, the median cubital vein can be located by
+    palpating the borders of the cubital fossa (such as the epicondyles of the humerus)
+    and then looking for the superficial signs of the vein, such as size, prominence,
+    ability to refill after depression, and feel of surrounding tissue support. As
+    another example, in a subluxation (dislocation) of the glenohumeral joint, the bony
+    structure becomes pronounced with the deltoid muscle failing to cover the
+    glenohumeral joint allowing the edges of the scapula to be superficially visible.
+    Here, the superficial anatomy is the visible edges of the scapula, implying the
+    underlying dislocation of the joint (the related anatomical structure)."""
 
+    type: str = Field(default="SuperficialAnatomy", alias="@type")
     significance: Optional[str] = Field(default=None)
     associatedPathophysiology: Optional[str] = Field(default=None)
     relatedAnatomy: Optional[AnatomicalSystem | AnatomicalStructure | str] = Field(default=None)
@@ -6208,33 +7556,39 @@ class SuperficialAnatomy(MedicalEntity):
     relatedCondition: Optional[MedicalCondition | str] = Field(default=None)
 
 class SurgicalProcedure(MedicalProcedure):
-    """A medical procedure involving an incision with instruments; performed for diagnose, or therapeutic purposes."""
+    """A medical procedure involving an incision with instruments; performed for diagnose,
+    or therapeutic purposes."""
 
-    pass
+    type: str = Field(default="SurgicalProcedure", alias="@type")
 
 class SuspendAction(ControlAction):
-    """The act of momentarily pausing a device or application (e.g. pause music playback or pause a timer)."""
+    """The act of momentarily pausing a device or application (e.g. pause music playback or
+    pause a timer)."""
 
-    pass
+    type: str = Field(default="SuspendAction", alias="@type")
 
 class Syllabus(LearningResource):
-    """A syllabus that describes the material covered in a course, often with several such sections per [[Course]] so that a distinct [[timeRequired]] can be provided for that section of the [[Course]]."""
+    """A syllabus that describes the material covered in a course, often with several such
+    sections per Course so that a distinct timeRequired can be provided for that section
+    of the Course."""
 
-    pass
+    type: str = Field(default="Syllabus", alias="@type")
 
 class Synagogue(PlaceOfWorship):
     """A synagogue."""
 
-    pass
+    type: str = Field(default="Synagogue", alias="@type")
 
 class TVClip(Clip):
     """A short TV program or a segment/part of a TV program."""
 
+    type: str = Field(default="TVClip", alias="@type")
     partOfTVSeries: Any = Field(default=None)
 
 class TVEpisode(Episode):
     """A TV episode which can be part of a series or season."""
 
+    type: str = Field(default="TVEpisode", alias="@type")
     partOfTVSeries: Any = Field(default=None)
     subtitleLanguage: Optional[str | Language] = Field(default=None)
     titleEIDR: Optional[AnyUrl | str] = Field(default=None)
@@ -6242,12 +7596,14 @@ class TVEpisode(Episode):
 class TVSeason(CreativeWork):
     """Season dedicated to TV broadcast and associated online delivery."""
 
+    type: str = Field(default="TVSeason", alias="@type")
     partOfTVSeries: Any = Field(default=None)
     titleEIDR: Optional[AnyUrl | str] = Field(default=None)
 
 class TVSeries(CreativeWorkSeries):
     """CreativeWorkSeries dedicated to TV broadcast and associated online delivery."""
 
+    type: str = Field(default="TVSeries", alias="@type")
     episodes: Optional[Episode | str] = Field(default=None)
     numberOfSeasons: Optional[int | str] = Field(default=None)
     countryOfOrigin: Optional[Country | str] = Field(default=None)
@@ -6268,91 +7624,104 @@ class TVSeries(CreativeWorkSeries):
 class Table(WebPageElement):
     """A table on a Web page."""
 
-    pass
+    type: str = Field(default="Table", alias="@type")
 
 class TakeAction(TransferAction):
-    """The act of gaining ownership of an object from an origin. Reciprocal of GiveAction.\n\nRelated actions:\n\n* [[GiveAction]]: The reciprocal of TakeAction.\n* [[ReceiveAction]]: Unlike ReceiveAction, TakeAction implies that ownership has been transferred."""
+    """The act of gaining ownership of an object from an origin. Reciprocal of
+    GiveAction.nnRelated actions:nn* GiveAction: The reciprocal of TakeAction.n*
+    ReceiveAction: Unlike ReceiveAction, TakeAction implies that ownership has been
+    transferred."""
 
-    pass
+    type: str = Field(default="TakeAction", alias="@type")
 
 class TattooParlor(HealthAndBeautyBusiness):
     """A tattoo parlor."""
 
-    pass
+    type: str = Field(default="TattooParlor", alias="@type")
 
 class Taxi(Service):
     """A taxi."""
 
-    pass
+    type: str = Field(default="Taxi", alias="@type")
 
 class TaxiReservation(Reservation):
-    """A reservation for a taxi.\n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations. For offers of tickets, use [[Offer]]."""
+    """A reservation for a taxi.nnNote: This type is for information about actual
+    reservations, e.g. in confirmation emails or HTML pages with individual
+    confirmations of reservations. For offers of tickets, use Offer."""
 
+    type: str = Field(default="TaxiReservation", alias="@type")
     partySize: Optional[int | QuantitativeValue | str] = Field(default=None)
     pickupTime: Optional[str | datetime] = Field(default=None)
     pickupLocation: Optional[Place | str] = Field(default=None)
 
 class TaxiService(Service):
-    """A service for a vehicle for hire with a driver for local travel. Fares are usually calculated based on distance traveled."""
+    """A service for a vehicle for hire with a driver for local travel. Fares are usually
+    calculated based on distance traveled."""
 
-    pass
+    type: str = Field(default="TaxiService", alias="@type")
 
 class TaxiStand(CivicStructure):
     """A taxi stand."""
 
-    pass
+    type: str = Field(default="TaxiStand", alias="@type")
 
 class Taxon(Thing):
     """A set of organisms asserted to represent a natural cohesive biological unit."""
 
+    type: str = Field(default="Taxon", alias="@type")
     hasDefinedTerm: Any = Field(default=None)
     taxonRank: Optional[AnyUrl | str] = Field(default=None)
     childTaxon: Optional[AnyUrl | str] = Field(default=None)
     parentTaxon: Optional[AnyUrl | str] = Field(default=None)
 
 class TelevisionChannel(BroadcastChannel):
-    """A unique instance of a television BroadcastService on a CableOrSatelliteService lineup."""
+    """A unique instance of a television BroadcastService on a CableOrSatelliteService
+    lineup."""
 
-    pass
+    type: str = Field(default="TelevisionChannel", alias="@type")
 
 class TelevisionStation(LocalBusiness):
     """A television station."""
 
-    pass
+    type: str = Field(default="TelevisionStation", alias="@type")
 
 class TennisComplex(SportsActivityLocation):
     """A tennis complex."""
 
-    pass
+    type: str = Field(default="TennisComplex", alias="@type")
 
 class TextDigitalDocument(DigitalDocument):
     """A file composed primarily of text."""
 
-    pass
+    type: str = Field(default="TextDigitalDocument", alias="@type")
 
 class TextObject(MediaObject):
     """A text file. The text can be unformatted or contain markup, html, etc."""
 
-    pass
+    type: str = Field(default="TextObject", alias="@type")
 
 class TheaterEvent(Event):
     """Event type: Theater performance."""
 
-    pass
+    type: str = Field(default="TheaterEvent", alias="@type")
 
 class TheaterGroup(PerformingGroup):
-    """A theater group or company, for example, the Royal Shakespeare Company or Druid Theatre."""
+    """A theater group or company, for example, the Royal Shakespeare Company or Druid
+    Theatre."""
 
-    pass
+    type: str = Field(default="TheaterGroup", alias="@type")
 
 class Thesis(CreativeWork):
-    """A thesis or dissertation document submitted in support of candidature for an academic degree or professional qualification."""
+    """A thesis or dissertation document submitted in support of candidature for an
+    academic degree or professional qualification."""
 
+    type: str = Field(default="Thesis", alias="@type")
     inSupportOf: Optional[str] = Field(default=None)
 
 class Ticket(Intangible):
     """Used to describe a ticket to an event, a flight, a bus ride, etc."""
 
+    type: str = Field(default="Ticket", alias="@type")
     ticketedSeat: Optional[Seat | str] = Field(default=None)
     totalPrice: Optional[PriceSpecification | str | float] = Field(default=None)
     ticketNumber: Optional[str] = Field(default=None)
@@ -6365,75 +7734,102 @@ class Ticket(Intangible):
 class TieAction(AchieveAction):
     """The act of reaching a draw in a competitive activity."""
 
-    pass
+    type: str = Field(default="TieAction", alias="@type")
 
 class TierBenefitEnumeration(Enumeration):
     """An enumeration of possible benefits as part of a loyalty (members) program."""
 
-    pass
+    type: str = Field(default="TierBenefitEnumeration", alias="@type")
 
 class Time(SchemaOrgBase):
-    """A point in time recurring on multiple days in the form hh:mm:ss[Z|(+|-)hh:mm] (see [XML schema for details](http://www.w3.org/TR/xmlschema-2/#time))."""
+    """A point in time recurring on multiple days in the form hh:mm:ss[Z|(+|-)hh:mm] (see
+    [XML schema for details](http://www.w3.org/TR/xmlschema-2/#time))."""
 
-    pass
+    type: str = Field(default="Time", alias="@type")
 
 class TipAction(TradeAction):
-    """The act of giving money voluntarily to a beneficiary in recognition of services rendered."""
+    """The act of giving money voluntarily to a beneficiary in recognition of services
+    rendered."""
 
+    type: str = Field(default="TipAction", alias="@type")
     recipient: Optional[Organization | Audience | str] = Field(default=None)
 
 class TireShop(Store):
     """A tire shop."""
 
-    pass
+    type: str = Field(default="TireShop", alias="@type")
 
 class TouristAttraction(Place):
-    """A tourist attraction.  In principle any Thing can be a [[TouristAttraction]], from a [[Mountain]] and [[LandmarksOrHistoricalBuildings]] to a [[LocalBusiness]].  This Type can be used on its own to describe a general [[TouristAttraction]], or be used as an [[additionalType]] to add tourist attraction properties to any other type.  (See examples below)"""
+    """A tourist attraction.  In principle any Thing can be a TouristAttraction, from a
+    Mountain and LandmarksOrHistoricalBuildings to a LocalBusiness.  This Type can be
+    used on its own to describe a general TouristAttraction, or be used as an
+    additionalType to add tourist attraction properties to any other type.  (See
+    examples below)"""
 
+    type: str = Field(default="TouristAttraction", alias="@type")
     availableLanguage: Optional[str | Language] = Field(default=None)
     touristType: Optional[Audience | str] = Field(default=None)
 
 class TouristDestination(Place):
-    """A tourist destination. In principle any [[Place]] can be a [[TouristDestination]] from a [[City]], Region or [[Country]] to an [[AmusementPark]] or [[Hotel]]. This Type can be used on its own to describe a general [[TouristDestination]], or be used as an [[additionalType]] to add tourist relevant properties to any other [[Place]].  A [[TouristDestination]] is defined as a [[Place]] that contains, or is colocated with, one or more [[TouristAttraction]]s, often linked by a similar theme or interest to a particular [[touristType]]. The [UNWTO](http://www2.unwto.org/) defines Destination (main destination of a tourism trip) as the place visited that is central to the decision to take the trip.
-  (See examples below.)"""
+    """A tourist destination. In principle any Place can be a TouristDestination from a
+    City, Region or Country to an AmusementPark or Hotel. This Type can be used on its
+    own to describe a general TouristDestination, or be used as an additionalType to add
+    tourist relevant properties to any other Place.  A TouristDestination is defined as
+    a Place that contains, or is colocated with, one or more TouristAttractions, often
+    linked by a similar theme or interest to a particular touristType. The
+    [UNWTO](http://www2.unwto.org/) defines Destination (main destination of a tourism
+    trip) as the place visited that is central to the decision to take the trip.
+      (See examples below.)"""
 
+    type: str = Field(default="TouristDestination", alias="@type")
     includesAttraction: Optional[TouristAttraction | str] = Field(default=None)
     touristType: Optional[Audience | str] = Field(default=None)
 
 class TouristInformationCenter(LocalBusiness):
     """A tourist information center."""
 
-    pass
+    type: str = Field(default="TouristInformationCenter", alias="@type")
 
 class TouristTrip(Trip):
-    """A tourist trip. A created itinerary of visits to one or more places of interest ([[TouristAttraction]]/[[TouristDestination]]) often linked by a similar theme, geographic area, or interest to a particular [[touristType]]. The [UNWTO](http://www2.unwto.org/) defines tourism trip as the Trip taken by visitors.
-  (See examples below.)"""
+    """A tourist trip. A created itinerary of visits to one or more places of interest
+    (TouristAttraction/TouristDestination) often linked by a similar theme, geographic
+    area, or interest to a particular touristType. The [UNWTO](http://www2.unwto.org/)
+    defines tourism trip as the Trip taken by visitors.
+      (See examples below.)"""
 
+    type: str = Field(default="TouristTrip", alias="@type")
     touristType: Optional[Audience | str] = Field(default=None)
 
 class ToyStore(Store):
     """A toy store."""
 
-    pass
+    type: str = Field(default="ToyStore", alias="@type")
 
 class TrackAction(FindAction):
-    """An agent tracks an object for updates.\n\nRelated actions:\n\n* [[FollowAction]]: Unlike FollowAction, TrackAction refers to the interest on the location of innanimates objects.\n* [[SubscribeAction]]: Unlike SubscribeAction, TrackAction refers to  the interest on the location of innanimate objects."""
+    """An agent tracks an object for updates.nnRelated actions:nn* FollowAction: Unlike
+    FollowAction, TrackAction refers to the interest on the location of innanimates
+    objects.n* SubscribeAction: Unlike SubscribeAction, TrackAction refers to  the
+    interest on the location of innanimate objects."""
 
+    type: str = Field(default="TrackAction", alias="@type")
     deliveryMethod: Any = Field(default=None)
 
 class TrainReservation(Reservation):
-    """A reservation for train travel.\n\nNote: This type is for information about actual reservations, e.g. in confirmation emails or HTML pages with individual confirmations of reservations. For offers of tickets, use [[Offer]]."""
+    """A reservation for train travel.nnNote: This type is for information about actual
+    reservations, e.g. in confirmation emails or HTML pages with individual
+    confirmations of reservations. For offers of tickets, use Offer."""
 
-    pass
+    type: str = Field(default="TrainReservation", alias="@type")
 
 class TrainStation(CivicStructure):
     """A train station."""
 
-    pass
+    type: str = Field(default="TrainStation", alias="@type")
 
 class TrainTrip(Trip):
     """A trip on a commercial train line."""
 
+    type: str = Field(default="TrainTrip", alias="@type")
     departurePlatform: Optional[str] = Field(default=None)
     arrivalPlatform: Optional[str] = Field(default=None)
     trainNumber: Optional[str] = Field(default=None)
@@ -6442,23 +7838,27 @@ class TrainTrip(Trip):
     departureStation: Optional[TrainStation | str] = Field(default=None)
 
 class TravelAction(MoveAction):
-    """The act of traveling from a fromLocation to a destination by a specified mode of transport, optionally with participants."""
+    """The act of traveling from a fromLocation to a destination by a specified mode of
+    transport, optionally with participants."""
 
+    type: str = Field(default="TravelAction", alias="@type")
     distance: Optional[Distance | str] = Field(default=None)
 
 class TravelAgency(LocalBusiness):
     """A travel agency."""
 
-    pass
+    type: str = Field(default="TravelAgency", alias="@type")
 
 class TreatmentIndication(MedicalIndication):
     """An indication for treating an underlying condition, symptom, etc."""
 
-    pass
+    type: str = Field(default="TreatmentIndication", alias="@type")
 
 class TypeAndQuantityNode(StructuredValue):
-    """A structured value indicating the quantity, unit of measurement, and business function of goods included in a bundle offer."""
+    """A structured value indicating the quantity, unit of measurement, and business
+    function of goods included in a bundle offer."""
 
+    type: str = Field(default="TypeAndQuantityNode", alias="@type")
     unitCode: Optional[AnyUrl | str] = Field(default=None)
     amountOfThisGood: Optional[str | float] = Field(default=None)
     businessFunction: Any = Field(default=None)
@@ -6468,26 +7868,30 @@ class TypeAndQuantityNode(StructuredValue):
 class UKNonprofitType(NonprofitType):
     """UKNonprofitType: Non-profit organization type originating from the United Kingdom."""
 
-    pass
+    type: str = Field(default="UKNonprofitType", alias="@type")
 
 class URL(Text):
     """Data type: URL."""
 
-    pass
+    type: str = Field(default="URL", alias="@type")
 
 class USNonprofitType(NonprofitType):
     """USNonprofitType: Non-profit organization type originating from the United States."""
 
-    pass
+    type: str = Field(default="USNonprofitType", alias="@type")
 
 class UnRegisterAction(InteractAction):
-    """The act of un-registering from a service.\n\nRelated actions:\n\n* [[RegisterAction]]: antonym of UnRegisterAction.\n* [[LeaveAction]]: Unlike LeaveAction, UnRegisterAction implies that you are unregistering from a service you were previously registered, rather than leaving a team/group of people."""
+    """The act of un-registering from a service.nnRelated actions:nn* RegisterAction:
+    antonym of UnRegisterAction.n* LeaveAction: Unlike LeaveAction, UnRegisterAction
+    implies that you are unregistering from a service you were previously registered,
+    rather than leaving a team/group of people."""
 
-    pass
+    type: str = Field(default="UnRegisterAction", alias="@type")
 
 class UnitPriceSpecification(PriceSpecification):
     """The price asked for a given offer by the respective organization or person."""
 
+    type: str = Field(default="UnitPriceSpecification", alias="@type")
     unitCode: Optional[AnyUrl | str] = Field(default=None)
     billingStart: Optional[str | float] = Field(default=None)
     referenceQuantity: Optional[QuantitativeValue | str] = Field(default=None)
@@ -6500,26 +7904,35 @@ class UnitPriceSpecification(PriceSpecification):
 class UseAction(ConsumeAction):
     """The act of applying an object to its intended purpose."""
 
-    pass
+    type: str = Field(default="UseAction", alias="@type")
 
 class UserInteraction(Event):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserInteraction", alias="@type")
 
 class UserBlocks(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserBlocks", alias="@type")
 
 class UserCheckins(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserCheckins", alias="@type")
 
 class UserComments(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
+    type: str = Field(default="UserComments", alias="@type")
     creator: Optional[Organization | Person | str] = Field(default=None)
     commentText: Optional[str] = Field(default=None)
     replyToUrl: Optional[AnyUrl | str] = Field(default=None)
@@ -6527,48 +7940,63 @@ class UserComments(UserInteraction):
     discusses: Optional[CreativeWork | str] = Field(default=None)
 
 class UserDownloads(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserDownloads", alias="@type")
 
 class UserLikes(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserLikes", alias="@type")
 
 class UserPageVisits(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserPageVisits", alias="@type")
 
 class UserPlays(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserPlays", alias="@type")
 
 class UserPlusOnes(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserPlusOnes", alias="@type")
 
 class UserReview(Review):
-    """A review created by an end-user (e.g. consumer, purchaser, attendee etc.), in contrast with [[CriticReview]]."""
+    """A review created by an end-user (e.g. consumer, purchaser, attendee etc.), in
+    contrast with CriticReview."""
 
-    pass
+    type: str = Field(default="UserReview", alias="@type")
 
 class UserTweets(UserInteraction):
-    """UserInteraction and its subtypes is an old way of talking about users interacting with pages. It is generally better to use [[Action]]-based vocabulary, alongside types such as [[Comment]]."""
+    """UserInteraction and its subtypes is an old way of talking about users interacting
+    with pages. It is generally better to use Action-based vocabulary, alongside types
+    such as Comment."""
 
-    pass
+    type: str = Field(default="UserTweets", alias="@type")
 
 class VacationRental(LodgingBusiness):
-    """A kind of lodging business that focuses on renting single properties for limited time."""
+    """A kind of lodging business that focuses on renting single properties for limited
+    time."""
 
-    pass
+    type: str = Field(default="VacationRental", alias="@type")
 
 class Vein(Vessel):
     """A type of blood vessel that specifically carries blood to the heart."""
 
+    type: str = Field(default="Vein", alias="@type")
     tributary: Optional[AnatomicalStructure | str] = Field(default=None)
     regionDrained: Optional[AnatomicalStructure | str] = Field(default=None)
     drainsTo: Optional[Vessel | str] = Field(default=None)
@@ -6576,16 +8004,18 @@ class Vein(Vessel):
 class VeterinaryCare(MedicalOrganization):
     """A vet's office."""
 
-    pass
+    type: str = Field(default="VeterinaryCare", alias="@type")
 
 class VideoGallery(MediaGallery):
     """Web page type: Video gallery page."""
 
-    pass
+    type: str = Field(default="VideoGallery", alias="@type")
 
 class VideoGame(SoftwareApplication):
-    """A video game is an electronic game that involves human interaction with a user interface to generate visual feedback on a video device."""
+    """A video game is an electronic game that involves human interaction with a user
+    interface to generate visual feedback on a video device."""
 
+    type: str = Field(default="VideoGame", alias="@type")
     playMode: Any = Field(default=None)
     gameTip: Optional[CreativeWork | str] = Field(default=None)
     gamePlatform: Optional[str | AnyUrl | Thing] = Field(default=None)
@@ -6602,11 +8032,12 @@ class VideoGame(SoftwareApplication):
 class VideoGameClip(Clip):
     """A short segment/part of a video game."""
 
-    pass
+    type: str = Field(default="VideoGameClip", alias="@type")
 
 class VideoGameSeries(CreativeWorkSeries):
     """A video game series."""
 
+    type: str = Field(default="VideoGameSeries", alias="@type")
     episodes: Optional[Episode | str] = Field(default=None)
     numberOfPlayers: Optional[QuantitativeValue | str] = Field(default=None)
     gameLocation: Optional[Place | AnyUrl | PostalAddress | str] = Field(default=None)
@@ -6633,6 +8064,7 @@ class VideoGameSeries(CreativeWorkSeries):
 class VideoObject(MediaObject):
     """A video file."""
 
+    type: str = Field(default="VideoObject", alias="@type")
     embeddedTextCaption: Optional[str] = Field(default=None)
     videoQuality: Optional[str] = Field(default=None)
     caption: Optional[str | MediaObject] = Field(default=None)
@@ -6645,167 +8077,203 @@ class VideoObject(MediaObject):
     musicBy: Any = Field(default=None)
 
 class VideoObjectSnapshot(VideoObject):
-    """A specific and exact (byte-for-byte) version of a [[VideoObject]]. Two byte-for-byte identical files, for the purposes of this type, considered identical. If they have different embedded metadata the files will differ. Different external facts about the files, e.g. creator or dateCreated that aren't represented in their actual content, do not affect this notion of identity."""
+    """A specific and exact (byte-for-byte) version of a VideoObject. Two byte-for-byte
+    identical files, for the purposes of this type, considered identical. If they have
+    different embedded metadata the files will differ. Different external facts about
+    the files, e.g. creator or dateCreated that aren't represented in their actual
+    content, do not affect this notion of identity."""
 
-    pass
+    type: str = Field(default="VideoObjectSnapshot", alias="@type")
 
 class ViewAction(ConsumeAction):
     """The act of consuming static visual content."""
 
-    pass
+    type: str = Field(default="ViewAction", alias="@type")
 
 class VirtualLocation(Intangible):
-    """An online or virtual location for attending events. For example, one may attend an online seminar or educational event. While a virtual location may be used as the location of an event, virtual locations should not be confused with physical locations in the real world."""
+    """An online or virtual location for attending events. For example, one may attend an
+    online seminar or educational event. While a virtual location may be used as the
+    location of an event, virtual locations should not be confused with physical
+    locations in the real world."""
 
-    pass
+    type: str = Field(default="VirtualLocation", alias="@type")
 
 class VisualArtsEvent(Event):
     """Event type: Visual arts event."""
 
-    pass
+    type: str = Field(default="VisualArtsEvent", alias="@type")
 
 class VitalSign(MedicalSign):
-    """Vital signs are measures of various physiological functions in order to assess the most basic body functions."""
+    """Vital signs are measures of various physiological functions in order to assess the
+    most basic body functions."""
 
-    pass
+    type: str = Field(default="VitalSign", alias="@type")
 
 class Volcano(Landform):
     """A volcano, like Fujisan."""
 
-    pass
+    type: str = Field(default="Volcano", alias="@type")
 
 class VoteAction(ChooseAction):
-    """The act of expressing a preference from a fixed/finite/structured set of choices/options."""
+    """The act of expressing a preference from a fixed/finite/structured set of
+    choices/options."""
 
+    type: str = Field(default="VoteAction", alias="@type")
     candidate: Any = Field(default=None)
 
 class WPAdBlock(WebPageElement):
     """An advertising section of the page."""
 
-    pass
+    type: str = Field(default="WPAdBlock", alias="@type")
 
 class WPFooter(WebPageElement):
     """The footer section of the page."""
 
-    pass
+    type: str = Field(default="WPFooter", alias="@type")
 
 class WPHeader(WebPageElement):
     """The header section of the page."""
 
-    pass
+    type: str = Field(default="WPHeader", alias="@type")
 
 class WPSideBar(WebPageElement):
     """A sidebar section of the page."""
 
-    pass
+    type: str = Field(default="WPSideBar", alias="@type")
 
 class WantAction(ReactAction):
     """The act of expressing a desire about the object. An agent wants an object."""
 
-    pass
+    type: str = Field(default="WantAction", alias="@type")
 
 class WarrantyPromise(StructuredValue):
-    """A structured value representing the duration and scope of services that will be provided to a customer free of charge in case of a defect or malfunction of a product."""
+    """A structured value representing the duration and scope of services that will be
+    provided to a customer free of charge in case of a defect or malfunction of a
+    product."""
 
+    type: str = Field(default="WarrantyPromise", alias="@type")
     durationOfWarranty: Optional[QuantitativeValue | str] = Field(default=None)
     warrantyScope: Any = Field(default=None)
 
 class WarrantyScope(Enumeration):
-    """A range of services that will be provided to a customer free of charge in case of a defect or malfunction of a product.\n\nCommonly used values:\n\n* http://purl.org/goodrelations/v1#Labor-BringIn\n* http://purl.org/goodrelations/v1#PartsAndLabor-BringIn\n* http://purl.org/goodrelations/v1#PartsAndLabor-PickUp
-      """
+    """A range of services that will be provided to a customer free of charge in case of a
+    defect or malfunction of a product.nnCommonly used values:nn*
+    http://purl.org/goodrelations/v1#Labor-BringInn*
+    http://purl.org/goodrelations/v1#PartsAndLabor-BringInn*
+    http://purl.org/goodrelations/v1#PartsAndLabor-PickUp
+    """
 
-    pass
+    type: str = Field(default="WarrantyScope", alias="@type")
 
 class WatchAction(ConsumeAction):
     """The act of consuming dynamic/moving visual content."""
 
-    pass
+    type: str = Field(default="WatchAction", alias="@type")
 
 class Waterfall(BodyOfWater):
     """A waterfall, like Niagara."""
 
-    pass
+    type: str = Field(default="Waterfall", alias="@type")
 
 class WearAction(UseAction):
     """The act of dressing oneself in clothing."""
 
-    pass
+    type: str = Field(default="WearAction", alias="@type")
 
 class WearableMeasurementTypeEnumeration(MeasurementTypeEnumeration):
     """Enumerates common types of measurement for wearables products."""
 
-    pass
+    type: str = Field(default="WearableMeasurementTypeEnumeration", alias="@type")
 
 class WearableSizeGroupEnumeration(SizeGroupEnumeration):
     """Enumerates common size groups (also known as "size types") for wearable products."""
 
-    pass
+    type: str = Field(default="WearableSizeGroupEnumeration", alias="@type")
 
 class WearableSizeSystemEnumeration(SizeSystemEnumeration):
     """Enumerates common size systems specific for wearable products."""
 
-    pass
+    type: str = Field(default="WearableSizeSystemEnumeration", alias="@type")
 
 class WebAPI(Service):
     """An application programming interface accessible over Web/Internet technologies."""
 
+    type: str = Field(default="WebAPI", alias="@type")
     documentation: Optional[AnyUrl | CreativeWork | str] = Field(default=None)
 
 class WebApplication(SoftwareApplication):
     """Web applications."""
 
+    type: str = Field(default="WebApplication", alias="@type")
     browserRequirements: Optional[str] = Field(default=None)
 
 class WebSite(CreativeWork):
-    """A WebSite is a set of related web pages and other items typically served from a single web domain and accessible via URLs."""
+    """A WebSite is a set of related web pages and other items typically served from a
+    single web domain and accessible via URLs."""
 
+    type: str = Field(default="WebSite", alias="@type")
     issn: Optional[str] = Field(default=None)
 
 class WholesaleStore(Store):
     """A wholesale store."""
 
-    pass
+    type: str = Field(default="WholesaleStore", alias="@type")
 
 class WinAction(AchieveAction):
     """The act of achieving victory in a competitive activity."""
 
+    type: str = Field(default="WinAction", alias="@type")
     loser: Optional[Person | str] = Field(default=None)
 
 class Winery(FoodEstablishment):
     """A winery."""
 
-    pass
+    type: str = Field(default="Winery", alias="@type")
 
 class WorkBasedProgram(EducationalOccupationalProgram):
-    """A program with both an educational and employment component. Typically based at a workplace and structured around work-based learning, with the aim of instilling competencies related to an occupation. WorkBasedProgram is used to distinguish programs such as apprenticeships from school, college or other classroom based educational programs."""
+    """A program with both an educational and employment component. Typically based at a
+    workplace and structured around work-based learning, with the aim of instilling
+    competencies related to an occupation. WorkBasedProgram is used to distinguish
+    programs such as apprenticeships from school, college or other classroom based
+    educational programs."""
 
-    pass
+    type: str = Field(default="WorkBasedProgram", alias="@type")
 
 class WorkersUnion(Organization):
-    """A Workers Union (also known as a Labor Union, Labour Union, or Trade Union) is an organization that promotes the interests of its worker members by collectively bargaining with management, organizing, and political lobbying."""
+    """A Workers Union (also known as a Labor Union, Labour Union, or Trade Union) is an
+    organization that promotes the interests of its worker members by collectively
+    bargaining with management, organizing, and political lobbying."""
 
-    pass
+    type: str = Field(default="WorkersUnion", alias="@type")
 
 class WriteAction(CreateAction):
     """The act of authoring written creative content."""
 
+    type: str = Field(default="WriteAction", alias="@type")
     language: Optional[str | Language] = Field(default=None)
     inLanguage: Optional[str | Language] = Field(default=None)
 
 class XPathType(Text):
     """Text representing an XPath (typically but not necessarily version 1.0)."""
 
-    pass
+    type: str = Field(default="XPathType", alias="@type")
 
 class Zoo(CivicStructure):
     """A zoo."""
 
-    pass
+    type: str = Field(default="Zoo", alias="@type")
 
 class _3DModel(MediaObject):
-    """A 3D model represents some kind of 3D content, which may have [[encoding]]s in one or more [[MediaObject]]s. Many 3D formats are available (e.g. see [Wikipedia](https://en.wikipedia.org/wiki/Category:3D_graphics_file_formats)); specific encoding formats can be represented using the [[encodingFormat]] property applied to the relevant [[MediaObject]]. For the
-case of a single file published after Zip compression, the convention of appending '+zip' to the [[encodingFormat]] can be used. Geospatial, AR/VR, artistic/animation, gaming, engineering and scientific content can all be represented using [[3DModel]]."""
+    """A 3D model represents some kind of 3D content, which may have encodings in one or
+    more MediaObjects. Many 3D formats are available (e.g. see
+    [Wikipedia](https://en.wikipedia.org/wiki/Category:3D_graphics_file_formats));
+    specific encoding formats can be represented using the encodingFormat property
+    applied to the relevant MediaObject. For the
+    case of a single file published after Zip compression, the convention of appending
+    '+zip' to the encodingFormat can be used. Geospatial, AR/VR, artistic/animation,
+    gaming, engineering and scientific content can all be represented using 3DModel."""
 
+    type: str = Field(default="3DModel", alias="@type")
     isResizable: Optional[bool | str] = Field(default=None)
 
 
@@ -7749,10 +9217,8 @@ _3DModel.model_rebuild()
 # Dynamic lookup
 # ---------------------------------------------------------------------------
 
-import sys as _sys
 
-
-def get(type_name: str) -> type[SchemaOrgBase]:
+def get_schema(type_name: str) -> type[SchemaOrgBase]:
     """
     Return the Pydantic model class for a schema.org type name.
 
@@ -7778,10 +9244,10 @@ def get(type_name: str) -> type[SchemaOrgBase]:
     --------
     ::
 
-        cls = get(config["schema_type"])
+        cls = get_schema(config["schema_type"])
         instance = cls(**data)
     """
-    cls = getattr(_sys.modules[__name__], type_name, None)
+    cls = globals().get(type_name)
     if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
         raise KeyError(f"{type_name!r} is not a known schema.org type in this generated file.")
     return cls
