@@ -13,9 +13,7 @@ def extract_csv(file_path: Path, config: ExtractorConfigBase) -> pd.DataFrame:
 
 
 def extract_excel(file_path: Path, config: ExtractorConfigBase) -> pd.DataFrame:
-    return pd.read_excel(file_path, **config.model_dump(exclude={"type"})).dropna(
-        how="all"
-    )
+    return pd.read_excel(file_path, **config.model_dump(exclude={"type"}))
 
 
 EXTRACTOR_REGISTRY: dict[str, ExtractorFn] = {

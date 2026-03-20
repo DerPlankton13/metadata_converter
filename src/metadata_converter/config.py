@@ -26,10 +26,21 @@ ExtractorConfig = Annotated[
 ]
 
 
+class CleaningConfig(BaseModel):
+    strip_header_whitespace: bool = True
+    normalize_empty_to_nan: bool = True
+    placeholders_to_nan: bool = True
+    placeholder_pattern: str = r"^.*\[.*\]$"
+    strip_cell_whitespace: bool = True
+    drop_fully_empty_rows: bool = True
+    empty_sentinels: list[str] = Field(default_factory=lambda: ["", "N/A", "n/a", "-"])
+
+
 class InputConfig(BaseModel):
     file_path: Path
     exclude_headers: list[str] | None = None
     extractor: ExtractorConfig
+    cleaning: CleaningConfig
 
 
 class OutputConfig(BaseModel):

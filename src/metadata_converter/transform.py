@@ -4,19 +4,37 @@ import pandas as pd
 from nanoid import generate
 from pydantic import ValidationError
 
+from metadata_converter.config import CleaningConfig, Config
 from metadata_converter.schema_org_registry import SchemaOrgBase, SchemaRegistry
 
 
-def remove_newlines(df: pd.DataFrame) -> pd.DataFrame:
-    """removes the newline characters from a pandas dataframe header and values"""
-    df.columns = df.columns.str.replace("\n", "")
-    df = df.replace(r"\n", "", regex=True)
-    return df
+def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
 
+    if config.strip_header_whitespace:
+        df.columns = df.columns.str.replace(r"[\s\n]+", " ", regex=True).str.strip()
 
-def remove_whitespaces(df: pd.DataFrame) -> pd.DataFrame:
-    # strip leading/trailing whitespace from all column names
-    df.columns = df.columns.str.strip()
+    if config.strip_cell_whitespace:
+        str_cols = df.select_dtypes(include="object").columns
+        df[str_cols] = df[str_cols].apply(
+            lambda col: col.str.replace(r"[\s\n]+", " ", regex=True).str.strip()
+        )
+
+    if config.normalize_empty_to_nan:
+        df.replace({s: None for s in config.empty_sentinels}, inplace=True)
+
+    if config.placeholders_to_nan:
+        str_cols = df.select_dtypes(include="object").columns
+        df[str_cols] = df[str_cols].apply(
+            lambda col: col.where(
+                ~col.str.match(config.placeholder_pattern, na=False), other=pd.NA
+            )
+        )
+
+    df = df.convert_dtypes()  # after cleaning, infer best types
+
+    if config.drop_fully_empty_rows:
+        df.dropna(how="all", inplace=True)
+
     return df
 
 
@@ -44,13 +62,13 @@ def combine_columns(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
     return df
 
 
-def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrgBase]:
+def extract_schemas(df: pd.DataFrame, config: Config) -> list[SchemaOrgBase]:
 
-    registry = SchemaRegistry()
+    registry = SchemaRegistry(**config.schema_config.model_dump(exclude_none=True))
     schemas = []
     for _, row in df.iterrows():
         # go through all mappings defined in the toml
-        for schema_type, properties in mapping.items():
+        for schema_type, properties in config.mapping.items():
             schema_properties = {}
             for prop, header in properties.items():
                 schema_properties[prop] = row[header]
