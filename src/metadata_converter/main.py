@@ -1,48 +1,26 @@
-import argparse
-import tomllib
 from pathlib import Path
 
-from pydantic import ValidationError
-
-from metadata_converter.config import Config
+from metadata_converter.additional_cleaners import combine_month_year_rows
+from metadata_converter.parse import parse_cli
 from metadata_converter.transform import (
+    clean_dataframe,
     combine_columns,
     extract_schemas,
-    remove_newlines,
-    replace_nan_by_none,
 )
 from src.metadata_converter.extract import load_data
 from src.metadata_converter.load import load_to_jsonld
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Metadata Converter")
-    parser.add_argument("config", type=Path, help="Path to TOML config file")
-    args = parser.parse_args()
-
-    try:
-        with open(args.config, "rb") as f:
-            config = Config(**tomllib.load(f))
-    except FileNotFoundError:
-        print(f"Error: config file not found: {args.config}")
-        raise SystemExit(1)
-    except ValidationError as e:
-        print(f"Error: invalid config:\n{e}")
-        print(
-            e.errors()[0]["msg"],
-            e.errors()[0]["loc"],
-            "but input was:",
-            e.errors()[0]["input"],
-        )
-        raise SystemExit(1)
+    config = parse_cli()
 
     # Extract Step
     data = load_data(config)
 
     # Transform Step
-    data = remove_newlines(data)
+    data = combine_month_year_rows(data, "Month/ Year of publication")
+    data = clean_dataframe(data, config.input.cleaning)
     data = combine_columns(data, config.mapping)
-    data = replace_nan_by_none(data)
     schema_list = extract_schemas(data, config)
 
     # Load Step
