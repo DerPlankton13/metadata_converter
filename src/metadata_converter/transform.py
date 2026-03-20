@@ -55,7 +55,7 @@ def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrg
             for prop, header in properties.items():
                 schema_properties[prop] = row[header]
             # ensures that there is always an id
-            if "id" not in schema_properties.keys():
+            if "id" not in schema_properties.keys() or schema_properties["id"] is pd.NA:
                 # todo: think about other ways to generate the id
                 unique_id = generate()
                 schema_properties["id"] = schema_type + f"_{unique_id}"
