@@ -23,7 +23,6 @@ def main():
 
     # Load Step
     for schema in schema_list:
-        print(schema)
         load_to_jsonld(schema, output_path=Path("output"))
 
 
