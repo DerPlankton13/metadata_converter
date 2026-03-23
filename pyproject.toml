@@ -14,11 +14,18 @@ dependencies = [
     "requests>=2.32.5",
 ]
 
-
-[tool.ruff]
-line-length = 88
-
 [dependency-groups]
 dev = [
     "ruff>=0.15.5",
 ]
+
+[project.scripts]
+converter = "metadata_converter.main:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+
+[tool.ruff]
+line-length = 88
