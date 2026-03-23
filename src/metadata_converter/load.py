@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from metadata_converter.schema_org_registry import SchemaOrgBase
+from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 
 def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:
