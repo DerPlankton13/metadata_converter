@@ -3,6 +3,7 @@ name = "metadata-converter"
 version = "0.1.0"
 description = "This converter will help you create linked metadata as json-ld files from a flat input."
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "ipython>=9.11.0",
