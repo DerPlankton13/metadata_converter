@@ -215,7 +215,7 @@ wheels = [
 [[package]]
 name = "metadata-converter"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "ipython" },
     { name = "nanoid" },

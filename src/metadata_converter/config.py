@@ -1,7 +1,7 @@
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import AnyUrl, BaseModel, Field, model_validator
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 
 from metadata_converter.cleaning_plugin import CleaningPlugin, load_plugins
 
@@ -29,6 +29,7 @@ ExtractorConfig = Annotated[
 
 
 class CleaningConfig(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
     strip_header_whitespace: bool = True
     normalize_empty_to_nan: bool = True
     placeholders_to_nan: bool = True
