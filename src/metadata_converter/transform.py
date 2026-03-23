@@ -13,6 +13,9 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 
 def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
 
+    for plugin in config.plugins:
+        df = plugin.run(df)
+
     if config.strip_header_whitespace:
         df.columns = df.columns.str.replace(r"[\s\n]+", " ", regex=True).str.strip()
 
