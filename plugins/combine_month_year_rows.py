@@ -53,8 +53,13 @@ class CombineMonthYearRows(CleaningPlugin):
 
         for idx in df.index[is_year_row]:
             prev_idx = df.index[df.index.get_loc(idx) - 1]
-            df.at[prev_idx, self.DATE_COL] = (
-                f"{df.at[idx, self.DATE_COL]}-{df.at[prev_idx, self.DATE_COL]:02d}"
-            )
+            try:
+                df.at[prev_idx, self.DATE_COL] = (
+                    f"{df.at[idx, self.DATE_COL]}-{df.at[prev_idx, self.DATE_COL]:02d}"
+                )
+
+            except ValueError as e:
+                print("Could not convert data at idx ", idx)
+                print(e)
 
         return df.drop(index=df.index[is_year_row]).reset_index(drop=True)

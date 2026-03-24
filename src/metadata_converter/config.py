@@ -15,7 +15,6 @@ class ExcelExtractorConfig(ExtractorConfigBase):
     sheet_name: str
     header: int | None = None
     skiprows: list[int] | None = None
-    na_values: str | None = None
 
 
 class CSVExtractorConfig(ExtractorConfigBase):
