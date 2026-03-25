@@ -23,24 +23,30 @@ def _run_plugins(df: pd.DataFrame, plugins: list[CleaningPlugin]) -> pd.DataFram
     return df
 
 
-def _strip_header_whitespace(df: pd.DataFrame) -> pd.DataFrame:
-    """
-    Normalize column headers by collapsing internal whitespace and
-    removing leading and trailing whitespace and newlines.
-    """
-    df.columns = df.columns.str.replace(r"[\s\n]+", " ", regex=True).str.strip()
-    return df
-
-
 def _clean_string(value) -> str | None:
     """
-    Collapse internal whitespace and strip leading and trailing
-    whitespace from a single string value. Returns ``None`` if the
-    value is ``NaN`` or missing.
+    Normalize whitespace in a string value by replacing any sequence of
+    whitespace characters — including spaces, tabs and newlines — with a
+    single space, then removing leading and trailing whitespace.
+    Returns ``None`` if the value is ``NaN`` or missing.
+
+    Note that ``\\s`` in the regex matches any whitespace character
+    (space, tab, newline, carriage return), and the ``+`` quantifier
+    means one or more consecutive whitespace characters are collapsed
+    into a single space.
     """
     if pd.isna(value):
         return None
-    return re.sub(r"[\s\n]+", " ", str(value)).strip()
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def _strip_header_whitespace(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize column headers by applying ``_clean_string`` to each
+    header name.
+    """
+    df.columns = pd.Index([_clean_string(col) for col in df.columns])
+    return df
 
 
 def _strip_cell_whitespace(df: pd.DataFrame) -> pd.DataFrame:
