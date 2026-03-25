@@ -1,9 +1,11 @@
+import re
 from typing import Any
 
 import pandas as pd
 from nanoid import generate
 from pydantic import ValidationError
 
+from metadata_converter.cleaning_plugin import CleaningPlugin
 from metadata_converter.config import CleaningConfig, Config
 from metadata_converter.schema_org_models.schemaorg_models import (
     SchemaOrgBase,
@@ -11,51 +13,125 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 )
 
 
-def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
-
-    for plugin in config.plugins:
+def _run_plugins(df: pd.DataFrame, plugins: list[CleaningPlugin]) -> pd.DataFrame:
+    """
+    Run all user-defined cleaning plugins in order, passing the dataframe
+    through each plugin's ``run`` method sequentially.
+    """
+    for plugin in plugins:
         df = plugin.run(df)
+    return df
+
+
+def _clean_string(value) -> str | None:
+    """
+    Normalize whitespace in a string value by replacing any sequence of
+    whitespace characters — including spaces, tabs and newlines — with a
+    single space, then removing leading and trailing whitespace.
+    Returns ``None`` if the value is ``NaN`` or missing.
+
+    Note that ``\\s`` in the regex matches any whitespace character
+    (space, tab, newline, carriage return), and the ``+`` quantifier
+    means one or more consecutive whitespace characters are collapsed
+    into a single space.
+    """
+    if pd.isna(value):
+        return None
+    return re.sub(r"\s+", " ", str(value)).strip()
+
+
+def _strip_header_whitespace(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Normalize column headers by applying ``_clean_string`` to each
+    header name.
+    """
+    df.columns = pd.Index([_clean_string(col) for col in df.columns])
+    return df
+
+
+def _strip_cell_whitespace(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Apply ``_clean_string`` element-wise to all string (object dtype)
+    columns in the dataframe.
+    """
+    str_cols = df.select_dtypes(include="object").columns
+    df[str_cols] = df[str_cols].apply(lambda col: col.map(_clean_string))
+    return df
+
+
+def _normalize_empty_to_nan(df: pd.DataFrame, sentinels: list[str]) -> pd.DataFrame:
+    """
+    Replace all occurrences of sentinel values with ``None``, which
+    pandas treats as ``NaN``. Sentinel values are user-defined strings
+    that represent missing or empty data, such as ``"N/A"`` or ``"-"``.
+    """
+    return df.replace({s: None for s in sentinels})
+
+
+def _placeholders_to_nan(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
+    """
+    Replace cell values matching ``pattern`` with ``NaN`` in all string
+    (object dtype) columns. Intended for bracketed placeholder values
+    such as ``"[Please enter value]"``.
+    """
+    str_cols = df.select_dtypes(include="object").columns
+    df[str_cols] = df[str_cols].apply(
+        lambda col: col.where(~col.str.match(pattern, na=False), other=pd.NA)
+    )
+    return df
+
+
+def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
+    """
+    Apply a configurable sequence of cleaning steps to a dataframe.
+
+    Cleaning steps are applied in the following order:
+
+    1. User-defined plugins
+    2. Strip header whitespace
+    3. Strip cell whitespace
+    4. Normalize empty sentinels to ``NaN``
+    5. Replace bracketed placeholders with ``NaN``
+    6. Infer best column dtypes
+    7. Drop fully empty rows
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        The raw input dataframe to clean.
+    config : CleaningConfig
+        Configuration controlling which cleaning steps are applied
+        and their parameters.
+
+    Returns
+    -------
+    pd.DataFrame
+        The cleaned dataframe with reset index.
+    """
+    df = _run_plugins(df, config.plugins)
 
     if config.strip_header_whitespace:
-        df.columns = df.columns.str.replace(r"[\s\n]+", " ", regex=True).str.strip()
+        df = _strip_header_whitespace(df)
 
     if config.strip_cell_whitespace:
-        str_cols = df.select_dtypes(include="object").columns
-        df[str_cols] = df[str_cols].apply(
-            lambda col: col.str.replace(r"[\s\n]+", " ", regex=True).str.strip()
-        )
+        df = _strip_cell_whitespace(df)
 
     if config.normalize_empty_to_nan:
-        df.replace({s: None for s in config.empty_sentinels}, inplace=True)
+        df = _normalize_empty_to_nan(df, config.empty_sentinels)
 
     if config.placeholders_to_nan:
-        str_cols = df.select_dtypes(include="object").columns
-        df[str_cols] = df[str_cols].apply(
-            lambda col: col.where(
-                ~col.str.match(config.placeholder_pattern, na=False), other=pd.NA
-            )
-        )
+        df = _placeholders_to_nan(df, config.placeholder_pattern)
 
-    df = df.convert_dtypes()  # after cleaning, infer best types
+    df = df.convert_dtypes()
 
     if config.drop_fully_empty_rows:
         df.dropna(how="all", inplace=True)
 
-    return df
+    return df.reset_index(drop=True)
 
 
 def combine_columns(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
-    """Adds new combined columns to the dataframe
-
-    Parameters
-    ----------
-    df
-    mapping
-
-    Returns
-    -------
-
-    """
+    """Adds new combined columns to the dataframe"""
     for model, props in mapping.items():
         if type(props) is dict:
             for key, value in props.items():
