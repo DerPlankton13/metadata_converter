@@ -37,10 +37,9 @@ import textwrap
 import urllib.request
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
-from functools import reduce
 from keyword import iskeyword
 from pathlib import Path
-from typing import Any, Optional, get_args
+from typing import Any, Optional
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, create_model
 from pydantic.fields import FieldInfo
@@ -105,15 +104,8 @@ class SchemaOrgBase(BaseModel):
     id: Optional[str] = Field(default=None, alias="@id")
 
 
-# Source for the get() lookup function written into the generated module.
-_GET_FUNCTION_SOURCE = """\
-# ---------------------------------------------------------------------------
-# Dynamic lookup
-# ---------------------------------------------------------------------------
-
-
-def get_schema(type_name: str) -> type[SchemaOrgBase]:
-    \"\"\"
+def get_schema(type_name: str) -> "type[SchemaOrgBase]":
+    """
     Return the Pydantic model class for a schema.org type name.
 
     Useful when the type name is not known until runtime, e.g. when
@@ -140,14 +132,17 @@ def get_schema(type_name: str) -> type[SchemaOrgBase]:
 
         cls = get_schema(config["schema_type"])
         instance = cls(**data)
-    \"\"\"
+    """
     cls = globals().get(type_name)
     if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
-        raise KeyError(f"{type_name!r} is not a known schema.org type in this generated file.")
+        raise KeyError(
+            f"{type_name!r} is not a known schema.org type in this generated file."
+        )
     return cls
-"""
 
-TYPE_TO_SOURCE: dict[Any, str] = {
+
+# Maps each primitive Python type to its source-code name for the rendered module.
+PRIMITIVE_SOURCE: dict[Any, str] = {
     str: "str",
     bool: "bool",
     float: "float",
@@ -356,9 +351,18 @@ def _resolve_type(
     allowed_types: list[str],
     model_cache: dict[str, type[BaseModel] | None],
     strict: bool,
-) -> Any:
+) -> tuple[Any, str]:
     """
-    Translate a list of schema.org allowed type names into a Python type.
+    Translate a list of schema.org allowed type names into a Python type and
+    its source-code string representation, returned together as a pair.
+
+    Returning both avoids the need to reflect on the constructed type object
+    later when rendering the generated module — the string is built here
+    directly from the same information used to build the type itself.
+
+    Each property is wrapped as ``Optional[T | list[T]]`` so callers may
+    supply either a single value or a list, reflecting the reality that all
+    schema.org properties are potentially multi-valued.
 
     Parameters
     ----------
@@ -375,31 +379,49 @@ def _resolve_type(
 
     Returns
     -------
-    Any
-        A Python type annotation. Returns ``Any`` when ``allowed_types``
-        is empty or all resolved types are circular-reference placeholders.
+    tuple[Any, str]
+        ``(python_type, source_string)`` — e.g.
+        ``(Optional[date | list[date]], "Optional[date | list[date]]")``.
+        Falls back to ``(Optional[Any], "Optional[Any]")`` when
+        ``allowed_types`` is empty or all types are circular-ref placeholders.
     """
-    if not allowed_types:
-        return Any
+    fallback = (Optional[Any], "Optional[Any]")
 
-    python_types = []
+    if not allowed_types:
+        return fallback
+
+    python_types: list[Any] = []
+    source_names: list[str] = []
     for type_name in allowed_types:
         if type_name in PRIMITIVE_TYPE_MAP:
-            python_types.append(PRIMITIVE_TYPE_MAP[type_name])
+            tp = PRIMITIVE_TYPE_MAP[type_name]
+            python_types.append(tp)
+            source_names.append(PRIMITIVE_SOURCE[tp])
         else:
             # Another schema.org class. May be None if currently being built
             # due to a circular reference — skip it in that case.
             resolved = model_cache.get(type_name)
             if resolved is not None:
                 python_types.append(resolved)
+                source_names.append(type_name)
 
     if not python_types:
-        return Any
+        return fallback
 
     if not strict and str not in python_types:
         python_types.append(str)
+        source_names.append("str")
 
-    return Optional[reduce(lambda a, b: a | b, python_types)]
+    # Build T1 | T2 | ... then produce Optional[T1 | T2 | ... | list[T1 | T2 | ...]]
+    # so every property accepts either a single value or a list of values.
+    scalar_union = python_types[0]
+    for t in python_types[1:]:
+        scalar_union |= t
+
+    scalar_source = " | ".join(source_names)
+    full_source = f"Optional[{scalar_source} | list[{scalar_source}]]"
+
+    return Optional[scalar_union | list[scalar_union]], full_source
 
 
 def build_models(
@@ -450,17 +472,15 @@ def build_models(
 
         field_defs: dict[str, Any] = {}
         for field in class_fields.get(class_name, []):
-            py_type = _resolve_type(field["allowed_types"], cache, strict)
+            py_type, source = _resolve_type(field["allowed_types"], cache, strict)
             schema_name = field["schema_name"]
             # If the property was renamed, add an alias so Pydantic uses
             # the original schema.org name for serialisation.
-            if field["name"] != schema_name:
-                field_defs[field["name"]] = (
-                    py_type,
-                    Field(default=None, alias=schema_name),
-                )
-            else:
-                field_defs[field["name"]] = (py_type, None)
+            alias = schema_name if field["name"] != schema_name else None
+            field_defs[field["name"]] = (
+                py_type,
+                Field(default=None, alias=alias, json_schema_extra={"source": source}),
+            )
 
         # The type field default is always the original schema.org class name.
         field_defs["type"] = (
@@ -490,73 +510,35 @@ def build_models(
 # ---------------------------------------------------------------------------
 
 
-def _type_to_source(tp: Any) -> str:
+def _render_field(name: str, field_info: FieldInfo) -> str:
     """
-    Render a Python type object as its source code string.
+    Render a single schema.org property field as a source code line.
 
-    Parameters
-    ----------
-    tp : Any
-        A Python type such as ``str``, ``Optional[date | str]``, or a
-        Pydantic model class.
-
-    Returns
-    -------
-    str
-        Source code representation, e.g. ``"Optional[date | str]"``.
-    """
-    if tp is type(None):
-        return "None"
-    if tp in TYPE_TO_SOURCE:
-        return TYPE_TO_SOURCE[tp]
-
-    args = get_args(tp)
-    if args:
-        type_args = [type_arg for type_arg in args if type_arg is not type(None)]
-        is_optional = len(type_args) < len(args)
-        inner_source = (
-            _type_to_source(type_args[0])
-            if len(type_args) == 1
-            else " | ".join(_type_to_source(type_arg) for type_arg in type_args)
-        )
-        return f"Optional[{inner_source}]" if is_optional else inner_source
-
-    if hasattr(tp, "__name__"):
-        return tp.__name__
-
-    return repr(tp)
-
-
-def _render_field(name: str, field_info: FieldInfo, annotation: Any) -> str:
-    """
-    Render a single field as a source code line.
+    The type annotation string was computed by ``_resolve_type`` at build
+    time and stored in ``field_info.json_schema_extra["source"]``, so no
+    type reflection is needed here.
 
     Parameters
     ----------
     name : str
         The Python attribute name.
     field_info : FieldInfo
-        Pydantic field info carrying alias and default.
-    annotation : Any
-        The field's type annotation.
+        Pydantic field info carrying alias, default, and the pre-rendered
+        type annotation string in ``json_schema_extra["source"]``.
 
     Returns
     -------
     str
-        A source line such as ``'birthDate: Optional[date | str] = Field(default=None)'``.
+        A source line such as
+        ``'birthDate: Optional[date | list[date]] = Field(default=None)'``.
     """
-    annotation_source = _type_to_source(annotation)
+    source = field_info.json_schema_extra["source"]
 
-    field_args = []
-    if field_info.default not in (None, ...):
-        field_args.append(f"default={field_info.default!r}")
-    else:
-        field_args.append("default=None")
-
+    field_args = ["default=None"]
     if field_info.alias:
         field_args.append(f'alias="{field_info.alias}"')
 
-    return f"{name}: {annotation_source} = Field({', '.join(field_args)})"
+    return f"{name}: {source} = Field({', '.join(field_args)})"
 
 
 def _topological_sort(models: dict[str, type[BaseModel]]) -> list[str]:
@@ -667,7 +649,7 @@ def render_module(
         lines.append(f'    type: str = Field(default="{schema_name}", alias="@type")')
 
         for field_name, field_info in own_fields.items():
-            rendered = _render_field(field_name, field_info, field_info.annotation)
+            rendered = _render_field(field_name, field_info)
             lines.append(f"    {rendered}")
 
         lines.append("")
@@ -677,7 +659,15 @@ def render_module(
     lines.extend(f"{class_name}.model_rebuild()" for class_name in order)
     lines.append("")
     lines.append("")
-    lines.append(_GET_FUNCTION_SOURCE)
+    lines.append(
+        "# ---------------------------------------------------------------------------"
+    )
+    lines.append("# Dynamic lookup")
+    lines.append(
+        "# ---------------------------------------------------------------------------"
+    )
+    lines.append("")
+    lines.append(inspect.getsource(get_schema))
 
     return "\n".join(lines)
 
