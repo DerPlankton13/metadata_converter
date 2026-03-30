@@ -1,12 +1,7 @@
 """
-schema.org Pydantic model generator
-=====================================
-Generates a self-contained Python module of Pydantic v2 models directly
-from the schema.org JSON-LD vocabulary.
+Generate Pydantic v2 models from schema.org JSON-LD.
 
-Run this script once to produce a static ``schemaorg_models.py`` file that
-can be imported instantly in any subsequent run with no network access and
-no runtime overhead.
+Run once to produce a static `schemaorg_models.py` file with no runtime cost.
 
 Usage
 -----
@@ -24,7 +19,7 @@ Write to a custom path::
 
 Then in your application::
 
-    from schemaorg_models import Person, Product
+    from schemaorg_models import Person
 
     person = Person(name="Ada Lovelace", email="ada@example.com")
 """
@@ -44,18 +39,11 @@ from typing import Any, Optional
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, create_model
 from pydantic.fields import FieldInfo
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
 SCHEMA_URL = "https://schema.org/version/latest/schemaorg-current-https.jsonld"
 SCHEMA_PREFIX = "https://schema.org/"
-
 DEFAULT_OUTPUT_PATH = Path(__file__).parent / "schemaorg_models.py"
 
 # Maps primitive schema.org type names to Python types.
-# Class names like "Person" or "Organization" are not listed here —
-# those are resolved recursively during model construction.
 PRIMITIVE_TYPE_MAP: dict[str, Any] = {
     "Text": str,
     "URL": AnyUrl,
@@ -72,76 +60,6 @@ PRIMITIVE_TYPE_MAP: dict[str, Any] = {
     "PronounceableText": str,
 }
 
-# ---------------------------------------------------------------------------
-# Base model
-# ---------------------------------------------------------------------------
-# Defined as real Python code so there is a single source of truth.
-# render_module() extracts the source with inspect.getsource() and writes
-# it verbatim into the generated file.
-
-
-class SchemaOrgBase(BaseModel):
-    """
-    Base class for all schema.org Pydantic models.
-
-    Provides the two fields common to all JSON-LD nodes and configures
-    Pydantic to accept both Python attribute names and JSON-LD @-prefixed
-    aliases interchangeably.
-
-    Note: ``@context`` is intentionally omitted here. When serialising a
-    top-level JSON-LD document, add it at that point rather than on every
-    nested node — including it on nested objects produces invalid JSON-LD.
-    """
-
-    model_config = ConfigDict(
-        extra="forbid",
-        populate_by_name=True,
-    )
-
-    # The schema.org class name. Set automatically by each generated subclass.
-    type: str = Field(alias="@type")
-    # Optional IRI that uniquely identifies this node.
-    id: Optional[str] = Field(default=None, alias="@id")
-
-
-def get_schema(type_name: str) -> "type[SchemaOrgBase]":
-    """
-    Return the Pydantic model class for a schema.org type name.
-
-    Useful when the type name is not known until runtime, e.g. when
-    it comes from a config file or user input.
-
-    Parameters
-    ----------
-    type_name : str
-        A schema.org class name, e.g. "Person" or "Product".
-
-    Returns
-    -------
-    type[SchemaOrgBase]
-        The corresponding Pydantic model class.
-
-    Raises
-    ------
-    KeyError
-        If type_name was not included when this file was generated.
-
-    Examples
-    --------
-    ::
-
-        cls = get_schema(config["schema_type"])
-        instance = cls(**data)
-    """
-    cls = globals().get(type_name)
-    if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
-        raise KeyError(
-            f"{type_name!r} is not a known schema.org type in this generated file."
-        )
-    return cls
-
-
-# Maps each primitive Python type to its source-code name for the rendered module.
 PRIMITIVE_SOURCE: dict[Any, str] = {
     str: "str",
     bool: "bool",
@@ -155,26 +73,57 @@ PRIMITIVE_SOURCE: dict[Any, str] = {
 }
 
 
-# ---------------------------------------------------------------------------
-# Parse classes and properties from the @graph
-# ---------------------------------------------------------------------------
-
-
-def _local(iri: str) -> str:
+class SchemaOrgBase(BaseModel):
     """
-    Strip the schema.org namespace prefix from a fully-qualified IRI.
+    Base class for all schema.org Pydantic models.
+
+    Provides the two fields common to all JSON-LD nodes and configures
+    Pydantic to accept both Python attribute names and JSON-LD @-prefixed
+    aliases interchangeably.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+
+    # The schema.org class name, will be set automatically by each generated subclass.
+    type: str = Field(alias="@type")
+    id: Optional[str] = Field(default=None, alias="@id")
+
+
+def get_schema(type_name: str) -> "type[SchemaOrgBase]":
+    """
+    Return the Pydantic model class for a schema.org type name.
 
     Parameters
     ----------
-    iri : str
-        A schema.org IRI such as ``"https://schema.org/Person"`` or
-        ``"schema:Person"``.
+    type_name : str
+        Schema.org class name (e.g. "Person").
 
     Returns
     -------
-    str
-        The local name, e.g. ``"Person"``.
+    type[SchemaOrgBase]
+
+    Raises
+    ------
+    KeyError
+        If the type_name is not available.
+
+    Examples
+    --------
+    ::
+
+        cls = get_schema("Person")
+        instance = cls(**data)
     """
+    cls = globals().get(type_name)
+    if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
+        raise KeyError(
+            f"{type_name!r} is not a known schema.org type. Ensure that it is available in schema.org and update the Pydantic models if necessary."
+        )
+    return cls
+
+
+def _local(iri: str) -> str:
+    """Extract local name from a schema.org IRI."""
     return iri.removeprefix(SCHEMA_PREFIX).removeprefix("schema:")
 
 
@@ -191,8 +140,8 @@ def _safe_name(name: str) -> str:
       ``"yield"`` → ``"yield_"``, following PEP 8 convention).
     - Names that are already valid are returned unchanged.
 
-    When the safe name differs from the original, callers should store the
-    original as a Pydantic ``alias`` so serialisation uses the correct
+    When the safe name differs from the original, it needs to be stored
+    as a Pydantic ``alias`` so serialisation uses the correct
     schema.org name.
 
     Parameters
@@ -247,29 +196,22 @@ def _clean_comment(comment: str) -> str:
 
 def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
     """
-    Walk the schema.org JSON-LD ``@graph`` and extract classes and a
-    class-to-fields index in a single pass.
+    Extract classes and properties from schema.org JSON-LD.
 
     Parameters
     ----------
     data : dict
-        The fully parsed JSON-LD document.
+        Parsed JSON-LD document.
 
     Returns
     -------
     tuple[dict, dict]
-        A ``(classes, class_fields)`` pair.
+        (classes, class_fields)
 
-        ``classes`` is keyed by the safe Python class name; each value
-        contains:
-
-        - ``"parents"``       -- list of safe Python names of direct superclasses
-        - ``"schema_name"``   -- original schema.org name (may differ from key)
-        - ``"comment"``       -- the rdfs:comment string, or ""
-
-        ``class_fields`` maps each safe class name to the list of its
-        property dicts, each with ``"name"``, ``"schema_name"``,
-        ``"allowed_types"``, and ``"comment"``.
+    Notes
+    -----
+    - `classes` contains metadata per class
+    - `class_fields` maps class → list of property definitions
     """
     graph = data.get("@graph", [])
     classes: dict[str, dict] = {}
@@ -277,41 +219,37 @@ def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
 
     def _ids(node: dict, key: str) -> list[str]:
         val = node.get(key, [])
-        # Normalise single dict to list so the comprehension always works
         if isinstance(val, dict):
             val = [val]
+
         return [
-            _safe_name(_local(item["@id"])) for item in val if isinstance(item, dict)
+            _safe_name(_local(item["@id"]))
+            for item in val
+            if isinstance(item, dict)
+            and item.get("@id", "").startswith("schema:")  # ✅ only schema.org types
         ]
 
     for node in graph:
-        node_id: str = node.get("@id", "")
+        node_id = node.get("@id", "")
         if not node_id.startswith("schema:"):
             continue
 
         schema_name = _local(node_id)
         py_name = _safe_name(schema_name)
+
         rdf_types = node.get("@type", [])
         if isinstance(rdf_types, str):
             rdf_types = [rdf_types]
 
         comment_raw = node.get("rdfs:comment", "")
-        comment = _clean_comment(
-            comment_raw.get("@value", "")
-            if isinstance(comment_raw, dict)
-            else str(comment_raw)
-        )
+        if isinstance(comment_raw, dict):
+            comment_text = comment_raw.get("@value", "")
+        else:
+            comment_text = str(comment_raw)
+        comment = _clean_comment(comment_text)
 
         if "rdfs:Class" in rdf_types:
-            subclass_of = node.get("rdfs:subClassOf", [])
-            if isinstance(subclass_of, dict):
-                subclass_of = [subclass_of]
-            parents = [
-                _safe_name(_local(parent_dict["@id"]))
-                for parent_dict in subclass_of
-                if isinstance(parent_dict, dict)
-                and parent_dict.get("@id", "").startswith("schema:")
-            ]
+            parents = _ids(node, "rdfs:subClassOf")
             classes[py_name] = {
                 "parents": parents,
                 "schema_name": schema_name,
@@ -342,11 +280,6 @@ def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
     return classes, class_fields
 
 
-# ---------------------------------------------------------------------------
-# Build Pydantic model classes in memory
-# ---------------------------------------------------------------------------
-
-
 def _resolve_type(
     allowed_types: list[str],
     model_cache: dict[str, type[BaseModel] | None],
@@ -355,14 +288,6 @@ def _resolve_type(
     """
     Translate a list of schema.org allowed type names into a Python type and
     its source-code string representation, returned together as a pair.
-
-    Returning both avoids the need to reflect on the constructed type object
-    later when rendering the generated module — the string is built here
-    directly from the same information used to build the type itself.
-
-    Each property is wrapped as ``Optional[T | list[T]]`` so callers may
-    supply either a single value or a list, reflecting the reality that all
-    schema.org properties are potentially multi-valued.
 
     Parameters
     ----------
@@ -373,17 +298,9 @@ def _resolve_type(
         for classes currently being built (circular references) — these
         are filtered out.
     strict : bool
-        When ``False``, ``str`` is appended as a fallback type, reflecting
-        the reality that schema.org publishers often use plain strings for
-        typed fields.
+        When ``False``, ``str`` is appended as a fallback type.
 
-    Returns
-    -------
-    tuple[Any, str]
-        ``(python_type, source_string)`` — e.g.
-        ``(Optional[date | list[date]], "Optional[date | list[date]]")``.
-        Falls back to ``(Optional[Any], "Optional[Any]")`` when
-        ``allowed_types`` is empty or all types are circular-ref placeholders.
+    Returns Optional[T | list[T]] to allow single or multiple values.
     """
     fallback = (Optional[Any], "Optional[Any]")
 
@@ -412,16 +329,30 @@ def _resolve_type(
         python_types.append(str)
         source_names.append("str")
 
-    # Build T1 | T2 | ... then produce Optional[T1 | T2 | ... | list[T1 | T2 | ...]]
-    # so every property accepts either a single value or a list of values.
-    scalar_union = python_types[0]
+    type_union = python_types[0]
     for t in python_types[1:]:
-        scalar_union |= t
+        type_union |= t
 
-    scalar_source = " | ".join(source_names)
-    full_source = f"Optional[{scalar_source} | list[{scalar_source}]]"
+    src = " | ".join(source_names)
+    full = f"Optional[{src} | list[{src}]]"
 
-    return Optional[scalar_union | list[scalar_union]], full_source
+    return Optional[type_union | list[type_union]], full
+
+
+def _build_fields(class_name, class_fields, cache, strict):
+    field_defs = {}
+
+    for field in class_fields.get(class_name, []):
+        python_types, source = _resolve_type(field["allowed_types"], cache, strict)
+
+        alias = field["schema_name"] if field["name"] != field["schema_name"] else None
+
+        field_defs[field["name"]] = (
+            python_types,
+            Field(default=None, alias=alias, json_schema_extra={"source": source}),
+        )
+
+    return field_defs
 
 
 def build_models(
@@ -430,7 +361,7 @@ def build_models(
     strict: bool,
 ) -> dict[str, type[BaseModel]]:
     """
-    Construct all Pydantic model classes in memory, respecting inheritance.
+    Build all Pydantic models from parsed schema data.
 
     Uses a ``None`` placeholder in the cache to handle circular references —
     any class currently being built returns ``None`` when referenced as a
@@ -444,7 +375,6 @@ def build_models(
     class_fields : dict[str, list[dict]]
         Inverted property index from ``parse_schema``.
     strict : bool
-        Passed through to ``_resolve_type``.
 
     Returns
     -------
@@ -470,17 +400,7 @@ def build_models(
                     parents.append(parent_model)
         base = parents[0] if parents else SchemaOrgBase
 
-        field_defs: dict[str, Any] = {}
-        for field in class_fields.get(class_name, []):
-            py_type, source = _resolve_type(field["allowed_types"], cache, strict)
-            schema_name = field["schema_name"]
-            # If the property was renamed, add an alias so Pydantic uses
-            # the original schema.org name for serialisation.
-            alias = schema_name if field["name"] != schema_name else None
-            field_defs[field["name"]] = (
-                py_type,
-                Field(default=None, alias=alias, json_schema_extra={"source": source}),
-            )
+        field_defs = _build_fields(class_name, class_fields, cache, strict)
 
         # The type field default is always the original schema.org class name.
         field_defs["type"] = (
@@ -505,56 +425,19 @@ def build_models(
     }
 
 
-# ---------------------------------------------------------------------------
-# Render the generated Python module
-# ---------------------------------------------------------------------------
-
-
 def _render_field(name: str, field_info: FieldInfo) -> str:
-    """
-    Render a single schema.org property field as a source code line.
-
-    The type annotation string was computed by ``_resolve_type`` at build
-    time and stored in ``field_info.json_schema_extra["source"]``, so no
-    type reflection is needed here.
-
-    Parameters
-    ----------
-    name : str
-        The Python attribute name.
-    field_info : FieldInfo
-        Pydantic field info carrying alias, default, and the pre-rendered
-        type annotation string in ``json_schema_extra["source"]``.
-
-    Returns
-    -------
-    str
-        A source line such as
-        ``'birthDate: Optional[date | list[date]] = Field(default=None)'``.
-    """
+    """Render a single schema.org property field as a source code line."""
     source = field_info.json_schema_extra["source"]
 
-    field_args = ["default=None"]
+    args = ["default=None"]
     if field_info.alias:
-        field_args.append(f'alias="{field_info.alias}"')
+        args.append(f'alias="{field_info.alias}"')
 
-    return f"{name}: {source} = Field({', '.join(field_args)})"
+    return f"{name}: {source} = Field({', '.join(args)})"
 
 
 def _topological_sort(models: dict[str, type[BaseModel]]) -> list[str]:
-    """
-    Return model names sorted so every parent appears before its children.
-
-    Parameters
-    ----------
-    models : dict[str, type[BaseModel]]
-        Built model classes to sort.
-
-    Returns
-    -------
-    list[str]
-        Names in dependency order.
-    """
+    """Return model names sorted so every parent appears before its children."""
     visited: set[str] = set()
     order: list[str] = []
 
@@ -572,12 +455,9 @@ def _topological_sort(models: dict[str, type[BaseModel]]) -> list[str]:
     return order
 
 
-def render_module(
-    models: dict[str, type[BaseModel]],
-    strict: bool,
-) -> str:
+def render_module(models: dict[str, type[BaseModel]], strict: bool) -> str:
     """
-    Render all model classes as a complete Python module source string.
+    Render all models into a Python module string.
 
     Parameters
     ----------
@@ -693,33 +573,26 @@ def generate(
     out : Path, optional
         Destination path for the generated Python module.
     """
-    # Download
     print(f"Downloading schema.org from {SCHEMA_URL} ...")
     with urllib.request.urlopen(SCHEMA_URL) as resp:
         data = json.loads(resp.read().decode("utf-8"))
 
-    # Parse
     print("Parsing schema.org vocabulary ...")
     classes, class_fields = parse_schema(data)
     print(f"  Found {len(classes)} classes")
 
-    # Build
     print(f"Building {len(classes)} Pydantic model classes ...")
     models = build_models(classes, class_fields, strict)
 
-    # Render and write
-    print("Rendering source ...")
+    print("Rendering source code...")
     source = render_module(models, strict)
+
     out.write_text(source, encoding="utf-8")
-    size_kb = out.stat().st_size // 1024
-    print(f"Written to {out}  ({size_kb} KB, {len(models)} classes)")
-    print()
-    print("Import in your application:")
-    print(f"    from {out.stem} import Person, Product  # etc.")
+    print(f"Written to {out} ({len(models)} models)")
 
 
 def main() -> None:
-    """Parse command-line arguments and run the generator."""
+    """CLI entrypoint."""
     parser = argparse.ArgumentParser(
         description="Generate static Pydantic models from schema.org"
     )
@@ -735,11 +608,7 @@ def main() -> None:
         help=f"Output file (default: {DEFAULT_OUTPUT_PATH})",
     )
     args = parser.parse_args()
-
-    generate(
-        strict=args.strict,
-        out=args.out,
-    )
+    generate(strict=args.strict, out=args.out)
 
 
 if __name__ == "__main__":
