@@ -85,9 +85,13 @@ class SchemaOrgBase(BaseModel):
     """
     Base class for all schema.org Pydantic models.
 
-    Provides the three fields common to all JSON-LD nodes and configures
+    Provides the two fields common to all JSON-LD nodes and configures
     Pydantic to accept both Python attribute names and JSON-LD @-prefixed
     aliases interchangeably.
+
+    Note: ``@context`` is intentionally omitted here. When serialising a
+    top-level JSON-LD document, add it at that point rather than on every
+    nested node — including it on nested objects produces invalid JSON-LD.
     """
 
     model_config = ConfigDict(
@@ -95,8 +99,6 @@ class SchemaOrgBase(BaseModel):
         populate_by_name=True,
     )
 
-    # Fixed JSON-LD context -- always schema.org.
-    context: str = Field(default="https://schema.org", alias="@context")
     # The schema.org class name. Set automatically by each generated subclass.
     type: str = Field(alias="@type")
     # Optional IRI that uniquely identifies this node.
