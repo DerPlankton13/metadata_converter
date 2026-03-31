@@ -338,10 +338,9 @@ def _resolve_type(
     Returns ``T | list[T] | None`` to allow single or multiple values.
     Falls back to ``Any | None`` when types cannot be resolved.
     """
-    fallback = (Optional[Any], "Optional[Any]")
-
     if not allowed_types:
-        return fallback
+        # No rangeIncludes declared in schema.org — type is unknown.
+        return Any, "Optional[Any]"
 
     python_types: list[Any] = []
     source_names: list[str] = []
@@ -351,15 +350,15 @@ def _resolve_type(
             python_types.append(tp)
             source_names.append(PRIMITIVE_SOURCE[tp])
         else:
-            # Another schema.org class. May be None if currently being built
-            # due to a circular reference — skip it in that case.
             resolved = model_cache.get(type_name)
             if resolved is not None:
                 python_types.append(resolved)
                 source_names.append(type_name)
 
     if not python_types:
-        return fallback
+        # All referenced types are None placeholders (circular references in progress).
+        # build_models will warn after the full build if this remains unresolved.
+        return Any, "Optional[Any]"
 
     if not strict and str not in python_types:
         python_types.append(str)
@@ -370,7 +369,7 @@ def _resolve_type(
         type_union |= t
 
     src = " | ".join(source_names)
-    full = f"{src} | list[{src}] | None"
+    full = f"Optional[{src} | list[{src}]]"
 
     return type_union | list[type_union] | None, full
 
@@ -523,8 +522,10 @@ def render_module(models: dict[str, type[BaseModel]], strict: bool) -> str:
         "--------",
         f"strict : {strict}",
         '"""',
+        "from __future__ import annotations",
+        "",
         "from datetime import date, datetime, time, timedelta",
-        "from typing import Any",
+        "from typing import Any, Optional",
         "",
         "from pydantic import AnyUrl, BaseModel, ConfigDict, Field",
         "",
