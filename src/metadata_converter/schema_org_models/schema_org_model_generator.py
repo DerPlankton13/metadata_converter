@@ -194,6 +194,36 @@ def _clean_comment(comment: str) -> str:
     return "\n".join(wrapped)
 
 
+def _schema_ids(node: dict, key: str) -> list[str]:
+    """
+    Extract safe Python names from a JSON-LD node's @id references.
+
+    Reads the value at ``key`` from ``node``, normalises it to a list,
+    filters to schema.org IRIs only, and returns the local name of each
+    as a safe Python identifier.
+
+    Parameters
+    ----------
+    node : dict
+        A single entry from the JSON-LD ``@graph``.
+    key : str
+        The predicate to read, e.g. ``"schema:domainIncludes"``.
+
+    Returns
+    -------
+    list[str]
+        Safe Python identifiers for each referenced schema.org type.
+    """
+    val = node.get(key, [])
+    if isinstance(val, dict):
+        val = [val]
+    return [
+        _safe_name(_local(item["@id"]))
+        for item in val
+        if isinstance(item, dict) and item.get("@id", "").startswith("schema:")
+    ]
+
+
 def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
     """
     Extract classes and properties from schema.org JSON-LD.
@@ -217,18 +247,6 @@ def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
     classes: dict[str, dict] = {}
     class_fields: dict[str, list[dict]] = defaultdict(list)
 
-    def _ids(node: dict, key: str) -> list[str]:
-        val = node.get(key, [])
-        if isinstance(val, dict):
-            val = [val]
-
-        return [
-            _safe_name(_local(item["@id"]))
-            for item in val
-            if isinstance(item, dict)
-            and item.get("@id", "").startswith("schema:")  # ✅ only schema.org types
-        ]
-
     for node in graph:
         node_id = node.get("@id", "")
         if not node_id.startswith("schema:"):
@@ -249,7 +267,7 @@ def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
         comment = _clean_comment(comment_text)
 
         if "rdfs:Class" in rdf_types:
-            parents = _ids(node, "rdfs:subClassOf")
+            parents = _schema_ids(node, "rdfs:subClassOf")
             classes[py_name] = {
                 "parents": parents,
                 "schema_name": schema_name,
@@ -257,8 +275,8 @@ def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
             }
 
         elif "rdf:Property" in rdf_types:
-            owner_classes = _ids(node, "schema:domainIncludes")
-            allowed_types = _ids(node, "schema:rangeIncludes")
+            owner_classes = _schema_ids(node, "schema:domainIncludes")
+            allowed_types = _schema_ids(node, "schema:rangeIncludes")
 
             for owner_class in owner_classes:
                 class_fields[owner_class].append(
