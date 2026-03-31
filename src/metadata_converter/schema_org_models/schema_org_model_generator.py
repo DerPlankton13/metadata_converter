@@ -34,7 +34,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from keyword import iskeyword
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, TypedDict
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, create_model
 from pydantic.fields import FieldInfo
@@ -71,6 +71,23 @@ PRIMITIVE_SOURCE: dict[Any, str] = {
     timedelta: "timedelta",
     AnyUrl: "AnyUrl",
 }
+
+
+class ClassDef(TypedDict):
+    """Parsed metadata for a single schema.org class."""
+
+    parents: list[str]
+    schema_name: str
+    comment: str
+
+
+class FieldDef(TypedDict):
+    """Parsed metadata for a single schema.org property."""
+
+    name: str
+    schema_name: str
+    allowed_types: list[str]
+    comment: str
 
 
 class SchemaOrgBase(BaseModel):
@@ -224,7 +241,7 @@ def _schema_ids(node: dict, key: str) -> list[str]:
     ]
 
 
-def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
+def parse_schema(data: dict) -> tuple[dict[str, ClassDef], dict[str, list[FieldDef]]]:
     """
     Extract classes and properties from schema.org JSON-LD.
 
@@ -235,7 +252,7 @@ def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
 
     Returns
     -------
-    tuple[dict, dict]
+    tuple[dict[str, ClassDef], dict[str, list[FieldDef]]]
         (classes, class_fields)
 
     Notes
@@ -244,8 +261,8 @@ def parse_schema(data: dict) -> tuple[dict[str, dict], dict[str, list[dict]]]:
     - `class_fields` maps class → list of property definitions
     """
     graph = data.get("@graph", [])
-    classes: dict[str, dict] = {}
-    class_fields: dict[str, list[dict]] = defaultdict(list)
+    classes: dict[str, ClassDef] = {}
+    class_fields: dict[str, list[FieldDef]] = defaultdict(list)
 
     for node in graph:
         node_id = node.get("@id", "")
@@ -359,7 +376,7 @@ def _resolve_type(
 
 def _build_fields(
     class_name: str,
-    class_fields: dict[str, list[dict]],
+    class_fields: dict[str, list[FieldDef]],
     cache: dict[str, type[BaseModel] | None],
     strict: bool,
 ) -> dict[str, Any]:
@@ -378,8 +395,8 @@ def _build_fields(
 
 
 def build_models(
-    classes: dict[str, dict],
-    class_fields: dict[str, list[dict]],
+    classes: dict[str, ClassDef],
+    class_fields: dict[str, list[FieldDef]],
     strict: bool,
 ) -> dict[str, type[BaseModel]]:
     """
@@ -392,9 +409,9 @@ def build_models(
 
     Parameters
     ----------
-    classes : dict[str, dict]
+    classes : dict[str, ClassDef]
         Parsed class metadata from ``parse_schema``.
-    class_fields : dict[str, list[dict]]
+    class_fields : dict[str, list[FieldDef]]
         Inverted property index from ``parse_schema``.
     strict : bool
 
