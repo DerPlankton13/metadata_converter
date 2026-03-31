@@ -357,14 +357,18 @@ def _resolve_type(
     return Optional[type_union | list[type_union]], full
 
 
-def _build_fields(class_name, class_fields, cache, strict):
-    field_defs = {}
+def _build_fields(
+    class_name: str,
+    class_fields: dict[str, list[dict]],
+    cache: dict[str, type[BaseModel] | None],
+    strict: bool,
+) -> dict[str, Any]:
+    """Build the Pydantic field definitions for a single class."""
+    field_defs: dict[str, Any] = {}
 
     for field in class_fields.get(class_name, []):
         python_types, source = _resolve_type(field["allowed_types"], cache, strict)
-
         alias = field["schema_name"] if field["name"] != field["schema_name"] else None
-
         field_defs[field["name"]] = (
             python_types,
             Field(default=None, alias=alias, json_schema_extra={"source": source}),
@@ -528,7 +532,6 @@ def render_module(models: dict[str, type[BaseModel]], strict: bool) -> str:
         lines.append(f"class {class_name}({parent}):")
 
         doc = cls.__doc__ or f"schema.org/{class_name}"
-        # Indent continuation lines so the docstring is valid Python
         indented_doc = doc.replace("\n", "\n    ")
         lines.append(f'    """{indented_doc}"""')
         lines.append("")
@@ -568,11 +571,6 @@ def render_module(models: dict[str, type[BaseModel]], strict: bool) -> str:
     lines.append(inspect.getsource(get_schema))
 
     return "\n".join(lines)
-
-
-# ---------------------------------------------------------------------------
-# Entry point
-# ---------------------------------------------------------------------------
 
 
 def generate(
