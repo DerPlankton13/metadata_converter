@@ -103,10 +103,10 @@ class SchemaOrgBase(BaseModel):
 
     # The schema.org class name, will be set automatically by each generated subclass.
     type: str = Field(alias="@type")
-    id: Optional[str] = Field(default=None, alias="@id")
+    id: str | None = Field(default=None, alias="@id")
 
 
-def get_schema(type_name: str) -> "type[SchemaOrgBase]":
+def get_schema(type_name: str) -> type[SchemaOrgBase]:
     """
     Return the Pydantic model class for a schema.org type name.
 
@@ -335,7 +335,8 @@ def _resolve_type(
     strict : bool
         When ``False``, ``str`` is appended as a fallback type.
 
-    Returns Optional[T | list[T]] to allow single or multiple values.
+    Returns ``T | list[T] | None`` to allow single or multiple values.
+    Falls back to ``Any | None`` when types cannot be resolved.
     """
     fallback = (Optional[Any], "Optional[Any]")
 
@@ -369,9 +370,9 @@ def _resolve_type(
         type_union |= t
 
     src = " | ".join(source_names)
-    full = f"Optional[{src} | list[{src}]]"
+    full = f"{src} | list[{src}] | None"
 
-    return Optional[type_union | list[type_union]], full
+    return type_union | list[type_union] | None, full
 
 
 def _build_fields(
@@ -522,10 +523,8 @@ def render_module(models: dict[str, type[BaseModel]], strict: bool) -> str:
         "--------",
         f"strict : {strict}",
         '"""',
-        "from __future__ import annotations",
-        "",
         "from datetime import date, datetime, time, timedelta",
-        "from typing import Any, Optional",
+        "from typing import Any",
         "",
         "from pydantic import AnyUrl, BaseModel, ConfigDict, Field",
         "",
