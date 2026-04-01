@@ -528,7 +528,7 @@ def generate(
     print(f"Written to {out} ({len(models)} models)")
 
     print("Verifying all classes can be instantiated ...")
-    verify_script = Path(__file__).parent / "verify_schemaorg_models.py"
+    verify_script = Path(__file__).parent / "check_schemaorg_models.py"
     subprocess.run([sys.executable, str(verify_script)], check=True)
 
 
