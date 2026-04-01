@@ -188,12 +188,7 @@ def build_schema(row, schema_type: str, properties: dict):
                     f"Available columns are {list(row.index)}."
                 )
 
-            try:
-                is_na = pd.isna(field_value)
-            except (TypeError, ValueError):
-                is_na = False
-
-            if not is_na:
+            if not pd.isna(field_value):
                 schema_properties[prop] = field_value
 
         # --- Case 2: nested schema ---
