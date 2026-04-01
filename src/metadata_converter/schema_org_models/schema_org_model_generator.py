@@ -28,6 +28,8 @@ import argparse
 import inspect
 import json
 import re
+import subprocess
+import sys
 import textwrap
 import urllib.request
 from collections import defaultdict
@@ -36,7 +38,7 @@ from keyword import iskeyword
 from pathlib import Path
 from typing import Any, TypedDict
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, create_model
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field
 from pydantic.fields import FieldInfo
 
 SCHEMA_URL = "https://schema.org/version/latest/schemaorg-current-https.jsonld"
@@ -60,6 +62,7 @@ PRIMITIVE_TYPE_MAP: dict[str, Any] = {
     "PronounceableText": str,
 }
 
+# Maps Python type objects to their source-code names for the generated module.
 PRIMITIVE_SOURCE: dict[Any, str] = {
     str: "str",
     bool: "bool",
@@ -316,7 +319,7 @@ def parse_schema(data: dict) -> tuple[dict[str, ClassDef], dict[str, list[FieldD
 
 def _resolve_type(allowed_types: list[str], strict: bool) -> str:
     """
-    Translate a list of schema.org allowed type names into a type string for code generation.
+    Translate a list of schema.org allowed type names into a type annotation string.
 
     Parameters
     ----------
@@ -328,80 +331,73 @@ def _resolve_type(allowed_types: list[str], strict: bool) -> str:
     Returns
     -------
     str
-        type string for code
+        A type annotation string for the generated module, e.g.
+        ``"str | list[str] | None"``. Falls back to ``"Any | None"``
+        when ``allowed_types`` is empty.
     """
     if not allowed_types:
-        return "Any"
+        # No rangeIncludes declared in schema.org — type is unknown.
+        return "Any | None"
 
     source_names: list[str] = []
     for type_name in allowed_types:
-        if type_name in PRIMITIVE_SOURCE:
-            source_names.append(PRIMITIVE_SOURCE[type_name])
+        if type_name in PRIMITIVE_TYPE_MAP:
+            source_names.append(PRIMITIVE_SOURCE[PRIMITIVE_TYPE_MAP[type_name]])
         else:
             source_names.append(type_name)
 
     if not strict and "str" not in source_names:
         source_names.append("str")
 
-    type_union = " | ".join(source_names)
-    full_type = f"{type_union} | list[{type_union}] | None"
-    return full_type
-
-
-def _build_fields(
-    class_fields: dict[str, list[FieldDef]], class_name: str, strict: bool
-) -> dict[str, tuple[str, FieldInfo]]:
-    """
-    Build field definitions for a class.
-
-    Parameters
-    ----------
-    class_fields : dict[str, list[FieldDef]]
-        Mapping from class names to their properties.
-    class_name : str
-        The Python-safe name of the class to build fields for.
-    strict : bool
-        Whether to enforce exact schema.org types (no str fallback).
-
-    Returns
-    -------
-    dict[str, tuple[str, FieldInfo]]
-        Mapping from field name → (type string, Pydantic FieldInfo)
-    """
-    fields: dict[str, tuple[str, FieldInfo]] = {}
-    for field in class_fields.get(class_name, []):
-        type_str = _resolve_type(field["allowed_types"], strict)
-
-        alias = field["schema_name"] if field["name"] != field["schema_name"] else None
-        field_info = Field(
-            default=None,
-            alias=alias,
-            json_schema_extra={"source": " | ".join(field["allowed_types"])},
-        )
-
-        fields[field["name"]] = (type_str, field_info)
-
-    return fields
+    src = " | ".join(source_names)
+    return f"{src} | list[{src}] | None"
 
 
 def build_models(
-    classes: dict[str, ClassDef], class_fields: dict[str, list[FieldDef]], strict: bool
+    classes: dict[str, ClassDef],
+    class_fields: dict[str, list[FieldDef]],
+    strict: bool,
 ) -> dict[str, dict]:
-    """Build metadata for models (no actual Pydantic instantiation)."""
-    models: dict[str, dict] = {}
-    for class_name, class_def in classes.items():
-        fields = _build_fields(class_fields, class_name, strict)
-        models[class_name] = {
-            "parents": class_def["parents"] if class_def["parents"] else [],
+    """
+    Build metadata for all models to be rendered.
+
+    Parameters
+    ----------
+    classes : dict[str, ClassDef]
+        Parsed class metadata from ``parse_schema``.
+    class_fields : dict[str, list[FieldDef]]
+        Inverted property index from ``parse_schema``.
+    strict : bool
+
+    Returns
+    -------
+    dict[str, dict]
+        Metadata for each class, keyed by Python-safe name.
+    """
+    return {
+        class_name: {
+            "parents": class_def["parents"],
             "schema_name": class_def["schema_name"],
             "comment": class_def["comment"],
-            "fields": fields,
+            "fields": {
+                field["name"]: (
+                    _resolve_type(field["allowed_types"], strict),
+                    Field(
+                        default=None,
+                        alias=field["schema_name"]
+                        if field["name"] != field["schema_name"]
+                        else None,
+                    ),
+                )
+                for field in class_fields.get(class_name, [])
+            },
         }
-    return models
+        for class_name, class_def in classes.items()
+    }
 
 
 def _render_field(name: str, type_str: str, field_info: FieldInfo) -> str:
-    """Render a field line for the generated Python code."""
+    """Render a single schema.org property field as a source code line."""
     args = ["default=None"]
     if field_info.alias:
         args.append(f'alias="{field_info.alias}"')
@@ -428,12 +424,12 @@ def _topological_sort(models: dict[str, dict]) -> list[str]:
 
 def render_module(models: dict[str, dict], strict: bool) -> str:
     """
-    Render Python module with schema.org models and the get_schema function.
+    Render all models into a Python module string.
 
     Parameters
     ----------
     models : dict[str, dict]
-        Metadata for each model, as returned by `build_models`.
+        Model metadata as returned by ``build_models``.
     strict : bool
         Recorded in the module header for documentation purposes.
 
@@ -456,7 +452,7 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         "from __future__ import annotations",
         "",
         "from datetime import date, datetime, time, timedelta",
-        "from typing import Any, Optional",
+        "from typing import Any",
         "",
         "from pydantic import AnyUrl, BaseModel, ConfigDict, Field",
         "",
@@ -468,27 +464,22 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
     for class_name in order:
         cls = models[class_name]
 
-        # Choose parent: first from parents list, fallback to SchemaOrgBase
         parent = cls["parents"][0] if cls["parents"] else "SchemaOrgBase"
         lines.append(f"class {class_name}({parent}):")
 
-        # Indent docstring correctly
         doc = cls["comment"] or f"schema.org/{class_name}"
-        indented_doc = "\n    ".join(doc.splitlines())
+        indented_doc = doc.replace("\n", "\n    ")
         lines.append(f'    """{indented_doc}"""')
+        lines.append("")
 
-        # Emit the @type field explicitly
         schema_name = cls["schema_name"]
         lines.append(f'    type: str = Field(default="{schema_name}", alias="@type")')
 
-        # Render all other fields
         for field_name, (type_str, field_info) in cls["fields"].items():
             lines.append(f"    {_render_field(field_name, type_str, field_info)}")
 
-        # Add an empty line after each class
         lines.append("")
 
-    # Include get_schema function
     lines.append("")
     lines.append(
         "# ---------------------------------------------------------------------------"
@@ -527,7 +518,7 @@ def generate(
     classes, class_fields = parse_schema(data)
     print(f"  Found {len(classes)} classes")
 
-    print(f"Building {len(classes)} Pydantic model classes ...")
+    print(f"Building {len(classes)} model definitions ...")
     models = build_models(classes, class_fields, strict)
 
     print("Rendering source code...")
@@ -535,6 +526,10 @@ def generate(
 
     out.write_text(source, encoding="utf-8")
     print(f"Written to {out} ({len(models)} models)")
+
+    print("Verifying all classes can be instantiated ...")
+    verify_script = Path(__file__).parent / "verify_schemaorg_models.py"
+    subprocess.run([sys.executable, str(verify_script)], check=True)
 
 
 def main() -> None:
