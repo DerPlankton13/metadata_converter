@@ -144,33 +144,109 @@ def combine_columns(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
     return df
 
 
-def extract_schemas(df: pd.DataFrame, config: Config) -> list[SchemaOrgBase]:
+def generate_schema_id(schema_type: str) -> str:
+    """Generate a unique identifier for a schema instance."""
+    unique_id = generate()
+    return f"{schema_type}_{unique_id}"
 
-    schemas = []
-    for _, row in df.iterrows():
-        # go through all mappings defined in the toml
-        for schema_type, properties in config.mapping.items():
-            schema_properties = {}
-            for prop, header in properties.items():
-                # only add valid values to the dict
-                if not pd.isna(row[header]):
-                    schema_properties[prop] = row[header]
-            # ensures that there is always an id
-            if "id" not in schema_properties.keys():
-                # todo: think about other ways to generate the id
-                unique_id = generate()
-                schema_properties["id"] = schema_type + f"_{unique_id}"
+
+def build_schema(row, schema_type: str, properties: dict):
+    """
+    Recursively build a schema.org object from a row and mapping definition.
+
+    Parameters
+    ----------
+    row : pandas.Series
+        A row from a pandas DataFrame (from `iterrows`).
+    schema_type : str
+        The schema.org type to instantiate.
+    properties : dict
+        Mapping of schema properties. Values can be either:
+        - str: column name
+        - dict: nested schema definition (must include "type")
+
+    Returns
+    -------
+    SchemaOrgBase or None
+        Instantiated schema object, or None if no valid properties were found.
+
+    Raises
+    ------
+    KeyError
+        If a referenced column does not exist in the DataFrame.
+    """
+    schema_properties = {}
+
+    for prop, value in properties.items():
+        # --- Case 1: simple field ---
+        if isinstance(value, str):
             try:
-                schema = get_schema(schema_type)
-                schemas.append(schema(**schema_properties))
-            except ValidationError as e:
-                print(
-                    f"Could not create a class of {schema_type}:",
-                    e.errors()[0]["msg"],
-                    e.errors()[0]["loc"],
-                    "but input was:",
-                    e.errors()[0]["input"],
-                    f"The following properties were provided: {schema_properties}",
+                field_value = row[value]
+            except KeyError:
+                raise KeyError(
+                    f"Column '{value}' not found in DataFrame. "
+                    f"Available columns are {list(row.index)}."
                 )
-                continue
+
+            if not pd.isna(field_value):
+                schema_properties[prop] = field_value
+
+        # --- Case 2: nested schema ---
+        elif isinstance(value, dict):
+            nested_type = value.get("type")
+            if not nested_type:
+                raise ValueError(f"Missing 'type' in nested schema for '{prop}'")
+
+            nested_props = {k: v for k, v in value.items() if k != "type"}
+
+            nested_obj = build_schema(row, nested_type, nested_props)
+
+            if nested_obj is not None:
+                schema_properties[prop] = nested_obj
+
+    # ensure ID
+    if "id" not in schema_properties:
+        schema_properties["id"] = generate_schema_id(schema_type)
+
+    try:
+        schema_class = get_schema(schema_type)
+        return schema_class(**schema_properties)
+    except ValidationError as e:
+        for err in e.errors():
+            print(
+                f"Could not create a class of {schema_type}:",
+                err["msg"],
+                err["loc"],
+                "but input was:",
+                err.get("input"),
+            )
+        print(f"The following properties were provided: {schema_properties}")
+        return None
+
+
+def extract_schemas(df: pd.DataFrame, config: Config) -> list[SchemaOrgBase]:
+    """
+    Convert a pandas DataFrame into a list of schema.org objects,
+    including nested schemas.
+
+    Parameters
+    ----------
+    df : pandas.DataFrame
+        Input data containing structured records.
+    config : Config
+        Configuration object containing schema mappings.
+
+    Returns
+    -------
+    list of SchemaOrgBase
+        A list of instantiated schema.org objects validated via Pydantic.
+    """
+    schemas = []
+
+    for _, row in df.iterrows():
+        for schema_type, properties in config.mapping.items():
+            schema = build_schema(row, schema_type, properties)
+            if schema is not None:
+                schemas.append(schema)
+
     return schemas
