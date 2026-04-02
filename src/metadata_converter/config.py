@@ -30,12 +30,11 @@ ExtractorConfig = Annotated[
 class CleaningConfig(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
     strip_header_whitespace: bool = True
-    normalize_empty_to_nan: bool = True
-    placeholders_to_nan: bool = True
-    placeholder_pattern: str = r"^.*\[.*\]$"
     strip_cell_whitespace: bool = True
-    drop_fully_empty_rows: bool = True
+    sentinels_to_na: bool = True
     empty_sentinels: list[str] = Field(default_factory=lambda: ["", "N/A", "n/a", "-"])
+    placeholders_to_na: bool = True
+    placeholder_pattern: str = r"^.*\[.*\]$"
     plugin_dir: Path | None = None
     plugins: list[CleaningPlugin] = Field(default_factory=list)
 

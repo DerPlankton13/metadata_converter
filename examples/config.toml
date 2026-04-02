@@ -8,10 +8,9 @@ header = 0
 skiprows = [0, 1, 3, 4]
 [input.cleaning]
 strip_header_whitespace = true
+strip_cell_whitespace = true
 normalize_empty_to_nan = true
 placeholders_to_nan = true
-strip_cell_whitespace = true
-drop_fully_empty_rows = true
 empty_sentinels = ["", "N/A", "n/a", "-", "Please select"]
 
 [output]

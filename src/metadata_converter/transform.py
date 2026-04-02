@@ -59,18 +59,18 @@ def _strip_cell_whitespace(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _normalize_empty_to_nan(df: pd.DataFrame, sentinels: list[str]) -> pd.DataFrame:
+def _sentinels_to_na(df: pd.DataFrame, sentinels: list[str]) -> pd.DataFrame:
     """
-    Replace all occurrences of sentinel values with ``None``, which
-    pandas treats as ``NaN``. Sentinel values are user-defined strings
-    that represent missing or empty data, such as ``"N/A"`` or ``"-"``.
+    Replace all occurrences of sentinel values with ``pd.NA``.
+    Sentinel values are user-defined strings that represent missing or
+    empty data, such as ``"N/A"`` or ``"-"``.
     """
-    return df.replace({s: None for s in sentinels})
+    return df.replace({s: pd.NA for s in sentinels})
 
 
-def _placeholders_to_nan(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
+def _placeholders_to_na(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
     """
-    Replace cell values matching ``pattern`` with ``NaN`` in all string
+    Replace cell values matching ``pattern`` with ``pd.NA`` in all string
     (object dtype) columns. Intended for bracketed placeholder values
     such as ``"[Please enter value]"``.
     """
@@ -90,8 +90,8 @@ def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
     1. User-defined plugins
     2. Strip header whitespace
     3. Strip cell whitespace
-    4. Normalize empty sentinels to ``NaN``
-    5. Replace bracketed placeholders with ``NaN``
+    4. Replace sentinels for missing data with ``pd.NA``
+    5. Replace missing data ``pd.NA`` according to a regex pattern
     6. Infer best column dtypes
     7. Drop fully empty rows
 
@@ -116,16 +116,16 @@ def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
     if config.strip_cell_whitespace:
         df = _strip_cell_whitespace(df)
 
-    if config.normalize_empty_to_nan:
-        df = _normalize_empty_to_nan(df, config.empty_sentinels)
+    if config.sentinels_to_na:
+        df = _sentinels_to_na(df, config.empty_sentinels)
 
-    if config.placeholders_to_nan:
-        df = _placeholders_to_nan(df, config.placeholder_pattern)
+    if config.placeholders_to_na:
+        df = _placeholders_to_na(df, config.placeholder_pattern)
 
     df = df.convert_dtypes()
 
-    if config.drop_fully_empty_rows:
-        df.dropna(how="all", inplace=True)
+    # drop fully empty rows
+    df.dropna(how="all", inplace=True)
 
     return df.reset_index(drop=True)
 
