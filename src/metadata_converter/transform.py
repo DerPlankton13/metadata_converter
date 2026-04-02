@@ -23,21 +23,21 @@ def _run_plugins(df: pd.DataFrame, plugins: list[CleaningPlugin]) -> pd.DataFram
     return df
 
 
-def _clean_string(value) -> str | None:
+def _clean_string(value) -> str | Any:
     """
     Normalize whitespace in a string value by replacing any sequence of
     whitespace characters — including spaces, tabs and newlines — with a
     single space, then removing leading and trailing whitespace.
-    Returns ``None`` if the value is ``NaN`` or missing.
+    Returns ``value`` if the value is not a string.
 
     Note that ``\\s`` in the regex matches any whitespace character
     (space, tab, newline, carriage return), and the ``+`` quantifier
     means one or more consecutive whitespace characters are collapsed
     into a single space.
     """
-    if pd.isna(value):
-        return None
-    return re.sub(r"\s+", " ", str(value)).strip()
+    if not isinstance(value, str):
+        return value
+    return re.sub(r"\s+", " ", value).strip()
 
 
 def _strip_header_whitespace(df: pd.DataFrame) -> pd.DataFrame:
