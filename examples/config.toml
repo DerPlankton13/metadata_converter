@@ -1,6 +1,6 @@
 [input]
-file_path = "examples/ReportingContinuous_WP1.xlsx"
-exclude_headers = []
+file_path = "examples/ReportingContinuous_WP3.xlsx"
+
 [input.extractor]
 type = "excel"
 sheet_name = "Researchers"
@@ -16,13 +16,6 @@ empty_sentinels = ["", "N/A", "n/a", "-", "Please select"]
 
 [output]
 output_path = "output"
-
-[schema_config]
-force_update = false
-allow_extra_fields = false
-strict = false
-
-
 
 [mapping]
 [mapping.Person]
