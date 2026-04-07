@@ -6,6 +6,7 @@ from metadata_converter.parse import parse_cli
 from metadata_converter.transform import (
     clean_dataframe,
     combine_columns,
+    convert_to_long,
     extract_schemas,
 )
 
@@ -19,6 +20,7 @@ def main():
     # Transform Step
     data = clean_dataframe(data, config.input.cleaning)
     data = combine_columns(data, config.mapping)
+    data = convert_to_long(data)
     schema_list = extract_schemas(data, config)
 
     # Load Step
