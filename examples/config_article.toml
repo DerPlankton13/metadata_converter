@@ -1,0 +1,29 @@
+[input]
+file_path = "examples/ReportingContinuous_WP1.xlsx"
+
+[input.extractor]
+type = "excel"
+sheet_name = "Publications"
+header = 0
+skiprows = [0, 1, 2, 3, 5, 6]
+[input.cleaning]
+strip_header_whitespace = true
+strip_cell_whitespace = true
+sentinels_to_na = true
+empty_sentinels = ["", "N/A", "n/a", "-", "Please select"]
+placeholders_to_na = true
+plugin_dir = "plugins"
+
+[output]
+output_path = "output"
+
+[mapping]
+[mapping.ScholarlyArticle]
+identifier = "ISSN/ eSSN (if book insert ISBN)"
+archivedAt = "PID of deposited publication"
+name = "Title of the publication (for book chapters: title of chapter not of book)"
+author.type = "Person"
+author.name = "Authors"
+isPartOf = "Title of the journal or equivalent"
+publisher = "Publisher"
+datePublished = "Month/ Year of publication"
