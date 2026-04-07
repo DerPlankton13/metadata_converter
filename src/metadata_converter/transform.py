@@ -144,26 +144,40 @@ def combine_columns(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
     return df
 
 
+def convert_to_long(df: pd.DataFrame, sheet_name: str = None) -> pd.DataFrame:
+    """Converts the data into a long format"""
+    df["id"] = df.index.astype(str)
+    if sheet_name:
+        df.id = sheet_name + "_" + df.id
+    return df.melt(id_vars=["id"], var_name="header")
+
+
 def generate_schema_id(schema_type: str) -> str:
     """Generate a unique identifier for a schema instance."""
     unique_id = generate()
     return f"{schema_type}_{unique_id}"
 
 
-def build_schema(row, schema_type: str, properties: dict):
+def build_schema(
+    entity: pd.DataFrame, schema_type: str, properties: dict, nested: bool = False
+):
     """
     Recursively build a schema.org object from a row and mapping definition.
 
     Parameters
     ----------
-    row : pandas.Series
-        A row from a pandas DataFrame (from `iterrows`).
+
+    entity : pandas.DataFrame
+        ...
     schema_type : str
         The schema.org type to instantiate.
     properties : dict
         Mapping of schema properties. Values can be either:
         - str: column name
         - dict: nested schema definition (must include "type")
+
+    nested : bool
+        indicates whether we are in a nested dict, then we do not create a separate id
 
     Returns
     -------
@@ -177,35 +191,41 @@ def build_schema(row, schema_type: str, properties: dict):
     """
     schema_properties = {}
 
-    for prop, value in properties.items():
+    for property_name, header_name in properties.items():
         # --- Case 1: simple field ---
-        if isinstance(value, str):
-            try:
-                field_value = row[value]
-            except KeyError:
+        if isinstance(header_name, str):
+            field_value = entity[entity.header == header_name].value
+            if len(field_value) == 0:
                 raise KeyError(
-                    f"Column '{value}' not found in DataFrame. "
-                    f"Available columns are {list(row.index)}."
+                    f"Header '{header_name}' not found in DataFrame. "
+                    f"Available headers are {list(entity.header)}."
                 )
 
-            if not pd.isna(field_value):
-                schema_properties[prop] = field_value
+            # drop empty entries
+            field_value = field_value.dropna()
+
+            if len(field_value) == 1:
+                schema_properties[property_name] = field_value.values[0]
+            elif len(field_value) > 1:
+                schema_properties[property_name] = list(field_value)
 
         # --- Case 2: nested schema ---
-        elif isinstance(value, dict):
-            nested_type = value.get("type")
+        elif isinstance(header_name, dict):
+            nested_type = header_name.get("type")
             if not nested_type:
-                raise ValueError(f"Missing 'type' in nested schema for '{prop}'")
+                raise ValueError(
+                    f"Missing 'type' in nested schema for '{property_name}'"
+                )
 
-            nested_props = {k: v for k, v in value.items() if k != "type"}
+            nested_props = {k: v for k, v in header_name.items() if k != "type"}
 
-            nested_obj = build_schema(row, nested_type, nested_props)
+            nested_obj = build_schema(entity, nested_type, nested_props, nested=True)
 
             if nested_obj is not None:
-                schema_properties[prop] = nested_obj
+                schema_properties[property_name] = nested_obj
 
     # ensure ID
-    if "id" not in schema_properties:
+    if "id" not in schema_properties and not nested:
         schema_properties["id"] = generate_schema_id(schema_type)
 
     try:
@@ -243,9 +263,9 @@ def extract_schemas(df: pd.DataFrame, config: Config) -> list[SchemaOrgBase]:
     """
     schemas = []
 
-    for _, row in df.iterrows():
+    for _, entity in df.groupby("id"):
         for schema_type, properties in config.mapping.items():
-            schema = build_schema(row, schema_type, properties)
+            schema = build_schema(entity, schema_type, properties)
             if schema is not None:
                 schemas.append(schema)
 
