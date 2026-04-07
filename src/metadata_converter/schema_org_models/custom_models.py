@@ -10,7 +10,8 @@ ORCID_EXTRACT_PATTERN = re.compile(
 
 
 class Orcid(PropertyValue):
-    name: str = "ORCID"
+    name: str = "Open Researcher and Contributor ID"
+    alternateName: str = "ORCID"
     propertyID: AnyUrl = "https://registry.identifiers.org/registry/orcid"
 
     @model_validator(mode="before")
