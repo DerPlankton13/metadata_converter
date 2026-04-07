@@ -10,6 +10,8 @@ def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:
     output_path.mkdir(parents=True, exist_ok=True)
 
     jsonld_dict = schema.model_dump(by_alias=True, exclude_none=True)
+    # prepend context
+    jsonld_dict = {"@context": "https://schema.org", **jsonld_dict}
     jsonld_str = json.dumps(jsonld_dict, indent=2)
 
     output_path = output_path / (jsonld_dict["@id"] + ".jsonld")
