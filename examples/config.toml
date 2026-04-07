@@ -19,10 +19,8 @@ output_path = "output"
 [mapping]
 [mapping.Person]
 email = "Email"
-gender = "Gender"
-nationality = "Nationality"
 givenName = "First Name"
 familyName = "Surname"
-funder = "[Beneficiary No]"
-identifier = "Personal identifier e.g. ORCID (optional)"
+identifier.type = "Orcid"
+identifier.value = "Personal identifier e.g. ORCID (optional)"
 name = "First Name + Surname"
