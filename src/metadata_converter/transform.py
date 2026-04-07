@@ -7,9 +7,9 @@ from pydantic import ValidationError
 
 from metadata_converter.cleaning_plugin import CleaningPlugin
 from metadata_converter.config import CleaningConfig, Config
+from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (
     SchemaOrgBase,
-    get_schema,
 )
 
 
