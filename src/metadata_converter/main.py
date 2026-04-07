@@ -20,6 +20,15 @@ def main():
     # Transform Step
     data = clean_dataframe(data, config.input.cleaning)
     data = combine_columns(data, config.mapping)
+
+    # add funding and link to project
+    data["Grant ID"] = (
+        "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/grant_b5d.jsonld"
+    )
+    data["Project ID"] = (
+        "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld"
+    )
+
     data = convert_to_long(data)
     schema_list = extract_schemas(data, config)
 
