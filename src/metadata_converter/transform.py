@@ -155,7 +155,7 @@ def convert_to_long(df: pd.DataFrame, sheet_name: str = None) -> pd.DataFrame:
 def generate_schema_id(schema_type: str) -> str:
     """Generate a unique identifier for a schema instance."""
     unique_id = generate()
-    return f"{schema_type}_{unique_id}"
+    return f"{schema_type}_{unique_id}.jsonld"
 
 
 def build_schema(
