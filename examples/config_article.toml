@@ -19,8 +19,11 @@ output_path = "output"
 
 [mapping]
 [mapping.ScholarlyArticle]
-identifier = "ISSN/ eSSN (if book insert ISBN)"
-archivedAt = "PID of deposited publication"
+url = "Link to publication (if no PID of publication)"
+identifier = [
+    { type = "ISSN", value = "ISSN/ eSSN (if book insert ISBN)" },
+    { type = "PropertyValue", value = "PID of deposited publication" }
+]
 name = "Title of the publication (for book chapters: title of chapter not of book)"
 creator.type = "Person"
 creator.name = "Authors"
