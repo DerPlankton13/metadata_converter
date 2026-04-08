@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pandas as pd
+
 from metadata_converter.extract import load_data
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.parse import parse_cli
@@ -30,6 +32,17 @@ def main():
     )
 
     data = convert_to_long(data)
+
+    # split the authors
+    fields_to_split = ["Authors"]
+    for header in fields_to_split:
+        field_df = data[data.header == header].copy()
+        non_field_df = data[data.header != header]
+
+        field_df.value = field_df.value.str.split(r"\s*[,;&]\s*|\s+and\s+")
+        exploded_df = field_df.explode("value")
+        data = pd.concat([non_field_df, exploded_df], ignore_index=True)
+
     schema_list = extract_schemas(data, config)
 
     # Load Step
