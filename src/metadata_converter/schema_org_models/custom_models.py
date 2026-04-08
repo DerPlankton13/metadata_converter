@@ -1,12 +1,25 @@
 import re
 
-from pydantic import AnyUrl, Field, HttpUrl, model_validator
+from pydantic import (
+    field_validator,
+    model_validator,
+)
 
 from metadata_converter.schema_org_models.schemaorg_models import *
 
 ORCID_EXTRACT_PATTERN = re.compile(
     r"(?:https?://orcid\.org/)?(\d{4}-\d{4}-\d{4}-\d{3}[\dX])"
 )
+ISSN_PATTERN = re.compile(r"^\d{4}-\d{3}[\dX]$")
+ISBN_PATTERN = re.compile(
+    r"^(ISBN)?(-13|-10)?[:]?[ ]?(\d{2,3}[ -]?)?\d{1,5}[ -]?\d{1,7}[ -]?\d{1,6}[ -]?(\d|X)$"
+)
+
+
+def check_pattern(value: str, pattern: re.Pattern[str], type: str) -> str:
+    if not pattern.fullmatch(value):
+        raise ValueError(f"Invalid {type}: {value}")
+    return value
 
 
 class Orcid(PropertyValue):
@@ -30,6 +43,38 @@ class Orcid(PropertyValue):
             data["url"] = f"https://orcid.org/{orcid_id}"
 
         return data
+
+
+class ISSN(PropertyValue):
+    name: str = "International Standard Serial Number"
+    alternateName: str = "ISSN"
+    propertyID: AnyUrl = "https://registry.identifiers.org/registry/issn"
+
+    @field_validator("value")
+    @classmethod
+    def check_issn(cls, v: str) -> str:
+        return check_pattern(v, ISSN_PATTERN, "ISSN")
+
+    @model_validator(mode="after")
+    def set_url(self):
+        self.url = f"https://portal.issn.org/resource/ISSN/{self.value}"
+        return self
+
+
+class ISBN(PropertyValue):
+    name: str = "International Standard Book Number"
+    alternateName: str = "ISBN"
+    propertyID: AnyUrl = "https://registry.identifiers.org/registry/isbn"
+
+    @field_validator("value")
+    @classmethod
+    def check_isbn(cls, v: str) -> str:
+        return check_pattern(v, ISBN_PATTERN, "ISBN")
+
+    @model_validator(mode="after")
+    def set_url(self):
+        self.url = f"https://isbnsearch.org/isbn/{self.value}"
+        return self
 
 
 # ---------------------------------------------------------------------------
