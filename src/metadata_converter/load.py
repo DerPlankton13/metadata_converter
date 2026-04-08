@@ -12,7 +12,7 @@ def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:
     jsonld_dict = schema.model_dump(by_alias=True, exclude_none=True)
     # prepend context
     jsonld_dict = {"@context": "https://schema.org", **jsonld_dict}
-    jsonld_str = json.dumps(jsonld_dict, indent=2)
+    jsonld_str = json.dumps(jsonld_dict, indent=2, ensure_ascii=False)
 
     output_path = output_path / (jsonld_dict["@id"] + ".jsonld")
-    output_path.write_text(jsonld_str)
+    output_path.write_text(jsonld_str, encoding="utf-8")
