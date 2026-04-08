@@ -159,8 +159,8 @@ def generate_schema_id(schema_type: str) -> str:
 
 
 def build_schema(
-    entity: pd.DataFrame, schema_type: str, properties: dict, nested: bool = False
-):
+    entity: pd.DataFrame, schema_type: str, mapping: dict, nested: bool = False
+) -> SchemaOrgBase | None:
     """
     Recursively build a schema.org object from a row and mapping definition.
 
@@ -171,7 +171,7 @@ def build_schema(
         ...
     schema_type : str
         The schema.org type to instantiate.
-    properties : dict
+    mapping : dict
         Mapping of schema properties. Values can be either:
         - str: column name
         - dict: nested schema definition (must include "type")
@@ -191,13 +191,13 @@ def build_schema(
     """
     schema_properties = {}
 
-    for property_name, header_name in properties.items():
+    for key, value in mapping.items():
         # --- Case 1: simple field ---
-        if isinstance(header_name, str):
-            field_value = entity[entity.header == header_name].value
+        if isinstance(value, str):
+            field_value = entity[entity.header == value].value
             if len(field_value) == 0:
                 raise KeyError(
-                    f"Header '{header_name}' not found in DataFrame. "
+                    f"Header '{value}' not found in DataFrame. "
                     f"Available headers are {list(entity.header)}."
                 )
 
@@ -205,26 +205,45 @@ def build_schema(
             field_value = field_value.dropna()
 
             if len(field_value) == 1:
-                schema_properties[property_name] = field_value.values[0]
+                schema_properties[key] = field_value.values[0]
             elif len(field_value) > 1:
-                schema_properties[property_name] = list(field_value)
+                print("Did I expect this?")
+                schema_properties[key] = list(field_value)
 
         # --- Case 2: nested schema ---
-        elif isinstance(header_name, dict):
-            nested_type = header_name.get("type")
+        elif isinstance(value, dict):
+            nested_type = value.get("type")
             if not nested_type:
-                raise ValueError(
-                    f"Missing 'type' in nested schema for '{property_name}'"
-                )
+                raise ValueError(f"Missing 'type' in nested schema for '{key}'")
 
-            nested_props = {k: v for k, v in header_name.items() if k != "type"}
+            nested_props = {k: v for k, v in value.items() if k != "type"}
 
             nested_obj = build_schema(entity, nested_type, nested_props, nested=True)
 
             if nested_obj is not None:
-                schema_properties[property_name] = nested_obj
+                schema_properties[key] = nested_obj
 
-    # ensure ID
+        elif isinstance(value, list):
+            for schema_mapping in value:
+                if type(schema_mapping) is not dict:
+                    raise TypeError(
+                        f"The elements of an array should be a dict. "
+                        f"{schema_mapping} is not a dict."
+                    )
+                listed_type = schema_mapping.get("type")
+                if not listed_type:
+                    raise ValueError(f"Missing 'type' in listed schema for '{key}'")
+                listed_props = {k: v for k, v in schema_mapping.items() if k != "type"}
+
+                schema = build_schema(entity, listed_type, listed_props, nested=True)
+
+                if schema is not None:
+                    try:
+                        schema_properties[key].append(schema)
+                    except KeyError:
+                        schema_properties[key] = [schema]
+
+    # ensure ID for the base node
     if "id" not in schema_properties and not nested:
         schema_properties["id"] = generate_schema_id(schema_type)
 
