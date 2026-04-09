@@ -1,0 +1,28 @@
+[input]
+file_path = "examples/ReportingContinuous_WP1.xlsx"
+
+[input.extractor]
+type = "excel"
+sheet_name = "Dataset"
+header = 0
+skiprows = [0, 1, 2, 4]
+[input.cleaning]
+strip_header_whitespace = true
+strip_cell_whitespace = true
+sentinels_to_na = true
+empty_sentinels = ["", "N/A", "n/a", "-", "Please select"]
+placeholders_to_na = true
+
+[output]
+output_path = "output"
+
+[mapping]
+[mapping.Dataset]
+description = "Description of datasets"
+url = "URL to repository (if required by WP is the repository federated under EOSC?)"
+identifier = [{ type = "DOI", value = "PID of deposited dataset" }, { type = "UrlIdentifier", value = "PID of deposited dataset" }]
+license = "What license is the data licensed under?"
+funding.type = "Grant"
+funding.id = "Grant ID"
+sourceOrganization.type = "Project"
+sourceOrganization.id = "Project ID"

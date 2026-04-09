@@ -20,15 +20,19 @@ output_path = "output"
 [mapping]
 [mapping.ScholarlyArticle]
 url = "Link to publication (if no PID of publication)"
-identifier = [
-    { type = "ISSN", value = "ISSN/ eSSN (if book insert ISBN)" },
-    { type = "PropertyValue", value = "PID of deposited publication" }
-]
+identifier = { type = "DOI", value = "PID of deposited publication" }
 name = "Title of the publication (for book chapters: title of chapter not of book)"
 creator.type = "Person"
 creator.name = "Authors"
-isPartOf = "Title of the journal or equivalent"
+isPartOf.type = "Periodical"
+isPartOf.name = "Title of the journal or equivalent"
+isPartOf.identifier.type = "ISSN"
+isPartOf.identifier.value = "ISSN/ eSSN (if book insert ISBN)"
 publisher.type = "Organization"
 publisher.name = "Publisher"
 datePublished = "Month/ Year of publication"
 license = "License type"
+funding.type = "Grant"
+funding.id = "Grant ID"
+sourceOrganization.type = "Project"
+sourceOrganization.id = "Project ID"
