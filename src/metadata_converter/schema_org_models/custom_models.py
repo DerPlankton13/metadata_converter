@@ -101,6 +101,23 @@ class DOI(PropertyValue):
         return self
 
 
+class UrlIdentifier(PropertyValue):
+    name: str = "URL Identifier"
+    disambiguatingDescription: str = (
+        "This is not a standardised identifier but "
+        "rather a simple url. It should only be used "
+        "if no more suiting metadata could be found."
+    )
+
+    @field_validator("value")
+    @classmethod
+    def ensure_no_doi(cls, v: str) -> str:
+        if DOI_PATTERN.search(v):
+            raise ValueError("A valid DOI was given to the arbitrary UrlIdentifier.")
+        else:
+            return v
+
+
 # ---------------------------------------------------------------------------
 # Dynamic lookup
 # ---------------------------------------------------------------------------
