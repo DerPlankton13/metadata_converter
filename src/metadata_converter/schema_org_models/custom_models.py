@@ -10,9 +10,9 @@ from metadata_converter.schema_org_models.schemaorg_models import *
 ORCID_EXTRACT_PATTERN = re.compile(
     r"(?:https?://orcid\.org/)?(\d{4}-\d{4}-\d{4}-\d{3}[\dX])"
 )
-ISSN_PATTERN = re.compile(r"^\d{4}-\d{3}[\dX]$")
+ISSN_PATTERN = re.compile(r"^(ISSN)?[ :]?\d{4}[ -]\d{3}[\dX]$")
 ISBN_PATTERN = re.compile(
-    r"^(ISBN)?(-13|-10)?[:]?[ ]?(\d{2,3}[ -]?)?\d{1,5}[ -]?\d{1,7}[ -]?\d{1,6}[ -]?(\d|X)$"
+    r"^(ISBN)?(-13|-10)?[ :]?(\d{2,3}[ -]?)?\d{1,5}[ -]?\d{1,7}[ -]?\d{1,6}[ -]?(\d|X)$"
 )
 DOI_PATTERN = re.compile(r"10\.\d+/.*$")
 
