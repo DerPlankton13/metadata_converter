@@ -464,7 +464,14 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
     for class_name in order:
         cls = models[class_name]
 
-        parent = cls["parents"][0] if cls["parents"] else "SchemaOrgBase"
+        if not cls["parents"]:
+            parent = "SchemaOrgBase"
+        else:
+            # ensures that class inheritance is respecting subclass-before-superclass
+            parent_order = {p: order.index(p) for p in cls["parents"]}
+            parent = ", ".join(
+                sorted(cls["parents"], key=parent_order.get, reverse=True)
+            )
         lines.append(f"class {class_name}({parent}):")
 
         doc = cls["comment"] or f"schema.org/{class_name}"
