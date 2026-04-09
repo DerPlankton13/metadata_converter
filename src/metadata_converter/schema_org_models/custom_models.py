@@ -14,12 +14,20 @@ ISSN_PATTERN = re.compile(r"^\d{4}-\d{3}[\dX]$")
 ISBN_PATTERN = re.compile(
     r"^(ISBN)?(-13|-10)?[:]?[ ]?(\d{2,3}[ -]?)?\d{1,5}[ -]?\d{1,7}[ -]?\d{1,6}[ -]?(\d|X)$"
 )
+DOI_PATTERN = re.compile(r"10\.\d+/.*$")
 
 
 def check_pattern(value: str, pattern: re.Pattern[str], type: str) -> str:
     if not pattern.fullmatch(value):
         raise ValueError(f"Invalid {type}: {value}")
     return value
+
+
+def search_pattern(value: str, pattern: re.Pattern[str], type: str) -> str:
+    match = pattern.search(value)
+    if not match:
+        raise ValueError(f"Invalid {type}: {value}")
+    return match.group(0)
 
 
 class Orcid(PropertyValue):
@@ -74,6 +82,22 @@ class ISBN(PropertyValue):
     @model_validator(mode="after")
     def set_url(self):
         self.url = f"https://isbnsearch.org/isbn/{self.value}"
+        return self
+
+
+class DOI(PropertyValue):
+    name: str = "Digital Object Identifier"
+    alternateName: str = "DOI"
+    propertyID: AnyUrl = "https://registry.identifiers.org/registry/doi"
+
+    @field_validator("value")
+    @classmethod
+    def search_doi(cls, v: str) -> str:
+        return search_pattern(v, DOI_PATTERN, "DOI")
+
+    @model_validator(mode="after")
+    def set_url(self):
+        self.url = f"https://doi.org/{self.value}"
         return self
 
 
