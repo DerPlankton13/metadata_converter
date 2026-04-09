@@ -854,7 +854,7 @@ class Organization(Thing):
     ) = Field(default=None)
 
 
-class LocalBusiness(Place):
+class LocalBusiness(Organization, Place):
     """A particular physical business or branch of an organization. Examples of
     LocalBusiness include a restaurant, a particular branch of a restaurant chain, a
     branch of a bank, a medical practice, a club, a bowling alley, etc."""
@@ -1347,7 +1347,7 @@ class MediaObject(CreativeWork):
     )
 
 
-class AmpStory(CreativeWork):
+class AmpStory(MediaObject, CreativeWork):
     """A creative work with a visual storytelling format intended to be viewed online,
     particularly on mobile devices."""
 
@@ -1760,7 +1760,7 @@ class Book(CreativeWork):
     isbn: str | list[str] | None = Field(default=None)
 
 
-class Audiobook(AudioObject):
+class Audiobook(Book, AudioObject):
     """An audiobook."""
 
     type: str = Field(default="Audiobook", alias="@type")
@@ -1819,7 +1819,7 @@ class Store(LocalBusiness):
     type: str = Field(default="Store", alias="@type")
 
 
-class AutoPartsStore(Store):
+class AutoPartsStore(Store, AutomotiveBusiness):
     """An auto parts store."""
 
     type: str = Field(default="AutoPartsStore", alias="@type")
@@ -2419,7 +2419,7 @@ class Series(Intangible):
     type: str = Field(default="Series", alias="@type")
 
 
-class CreativeWorkSeries(Series):
+class CreativeWorkSeries(Series, CreativeWork):
     """A CreativeWorkSeries in schema.org is a group of related items, typically but not
     necessarily of the same kind. CreativeWorkSeries are usually organized into some
     order, often chronological. Unlike ItemList which is a general purpose data
@@ -3223,7 +3223,7 @@ class CafeOrCoffeeShop(FoodEstablishment):
     type: str = Field(default="CafeOrCoffeeShop", alias="@type")
 
 
-class Campground(LodgingBusiness):
+class Campground(LodgingBusiness, CivicStructure):
     """A camping site, campsite, or Campground is a place used for overnight stay in the
     outdoors, typically containing individual CampingPitch locations. nn
     In British English a campsite is an area, usually divided into a number of pitches,
@@ -3674,7 +3674,7 @@ class CollectionPage(WebPage):
     type: str = Field(default="CollectionPage", alias="@type")
 
 
-class EducationalOrganization(CivicStructure):
+class EducationalOrganization(CivicStructure, Organization):
     """An educational organization."""
 
     type: str = Field(default="EducationalOrganization", alias="@type")
@@ -3760,7 +3760,7 @@ class CoverArt(VisualArtwork):
     type: str = Field(default="CoverArt", alias="@type")
 
 
-class ComicCoverArt(ComicStory):
+class ComicCoverArt(CoverArt, ComicStory):
     """The artwork on the cover of a comic."""
 
     type: str = Field(default="ComicCoverArt", alias="@type")
@@ -4145,7 +4145,7 @@ class LearningResource(CreativeWork):
     ) = Field(default=None)
 
 
-class Course(LearningResource):
+class Course(LearningResource, CreativeWork):
     """A description of an educational course which may be offered as distinct instances
     which take place at different times or take place at different locations, or be
     offered through different media or modes of study. An educational course is a
@@ -4224,7 +4224,7 @@ class MedicalOrganization(Organization):
     isAcceptingNewPatients: bool | str | list[bool | str] | None = Field(default=None)
 
 
-class MedicalClinic(MedicalBusiness):
+class MedicalClinic(MedicalOrganization, MedicalBusiness):
     """A facility, often associated with a hospital or medical school, that is devoted to
     the specific diagnosis and/or healthcare. Previously limited to outpatients but with
     evolution it may be open to inpatients as well."""
@@ -4322,7 +4322,7 @@ class PaymentMethod(Intangible):
     ) = Field(default=None)
 
 
-class PaymentCard(PaymentMethod):
+class PaymentCard(PaymentMethod, FinancialProduct):
     """A payment method using a credit, debit, store or other card to associate the payment
     with an account."""
 
@@ -4359,7 +4359,7 @@ class LoanOrCredit(FinancialProduct):
     currency: str | list[str] | None = Field(default=None)
 
 
-class CreditCard(PaymentCard):
+class CreditCard(LoanOrCredit, PaymentCard):
     """A card payment method of a particular brand or name.  Used to mark up a particular
     payment method and/or the financial product/service that supplies the card
     account.nnCommonly used values:nn*
@@ -4591,7 +4591,7 @@ class DefenceEstablishment(GovernmentBuilding):
     type: str = Field(default="DefenceEstablishment", alias="@type")
 
 
-class DefinedRegion(Place):
+class DefinedRegion(StructuredValue, Place):
     """A DefinedRegion is a geographic area defined by potentially arbitrary (rather than
     political, administrative or natural geographical) criteria. Properties are provided
     for defining a region by reference to sets of postal codes.
@@ -4803,7 +4803,7 @@ class Demand(Intangible):
     ) = Field(default=None)
 
 
-class Dentist(MedicalBusiness):
+class Dentist(MedicalOrganization, MedicalBusiness, LocalBusiness):
     """A dentist."""
 
     type: str = Field(default="Dentist", alias="@type")
@@ -4822,7 +4822,7 @@ class DepartmentStore(Store):
     type: str = Field(default="DepartmentStore", alias="@type")
 
 
-class DepositAccount(InvestmentOrDeposit):
+class DepositAccount(InvestmentOrDeposit, BankAccount):
     """A type of Bank Account with a main purpose of depositing funds to gain interest or
     other benefits."""
 
@@ -4875,7 +4875,7 @@ class LifestyleModification(MedicalEntity):
     type: str = Field(default="LifestyleModification", alias="@type")
 
 
-class Diet(CreativeWork):
+class Diet(LifestyleModification, CreativeWork):
     """A strategy of regulating the intake of food to achieve or maintain a specific
     health-related goal."""
 
@@ -4900,7 +4900,7 @@ class Substance(MedicalEntity):
     ) = Field(default=None)
 
 
-class DietarySupplement(Product):
+class DietarySupplement(Substance, Product):
     """A product taken by mouth that contains a dietary ingredient intended to supplement
     the diet. Dietary ingredients may include vitamins, minerals, herbs or other
     botanicals, amino acids, and substances such as enzymes, organ tissues, glandulars
@@ -5085,7 +5085,7 @@ class DriveWheelConfigurationValue(QualitativeValue):
     type: str = Field(default="DriveWheelConfigurationValue", alias="@type")
 
 
-class Drug(Product):
+class Drug(Substance, Product):
     """A chemical or biologic substance, used as a medical therapy, that has a
     physiological effect on an organism. Here the term drug is used interchangeably with
     the term medicine although clinical knowledge makes a clear difference between them."""
@@ -5715,7 +5715,7 @@ class EventReservation(Reservation):
     type: str = Field(default="EventReservation", alias="@type")
 
 
-class EventSeries(Series):
+class EventSeries(Event, Series):
     """A series of Events. Included events can relate with the series using the superEvent
     property.
 
@@ -5840,7 +5840,7 @@ class PhysicalActivity(LifestyleModification):
     pathophysiology: str | list[str] | None = Field(default=None)
 
 
-class ExercisePlan(PhysicalActivity):
+class ExercisePlan(PhysicalActivity, CreativeWork):
     """Fitness-related activity designed for a specific health-related purpose, including
     defined exercise routines as well as activity prescribed by a clinician."""
 
@@ -5978,7 +5978,7 @@ class FinancialIncentive(Intangible):
     ) = Field(default=None)
 
 
-class FireStation(CivicStructure):
+class FireStation(EmergencyService, CivicStructure):
     """A fire station. With firemen."""
 
     type: str = Field(default="FireStation", alias="@type")
@@ -6569,7 +6569,7 @@ class HealthAspectEnumeration(Enumeration):
     type: str = Field(default="HealthAspectEnumeration", alias="@type")
 
 
-class HealthClub(HealthAndBeautyBusiness):
+class HealthClub(SportsActivityLocation, HealthAndBeautyBusiness):
     """A health club."""
 
     type: str = Field(default="HealthClub", alias="@type")
@@ -6696,7 +6696,7 @@ class HomeGoodsStore(Store):
     type: str = Field(default="HomeGoodsStore", alias="@type")
 
 
-class Hospital(CivicStructure):
+class Hospital(EmergencyService, MedicalOrganization, CivicStructure):
     """A hospital."""
 
     type: str = Field(default="Hospital", alias="@type")
@@ -6821,7 +6821,7 @@ class ListItem(Intangible):
     nextItem: ListItem | str | list[ListItem | str] | None = Field(default=None)
 
 
-class HowToDirection(ListItem):
+class HowToDirection(ListItem, CreativeWork):
     """A direction indicating a single action to do in the instructions for how to achieve
     a result."""
 
@@ -6852,7 +6852,7 @@ class HowToItem(ListItem):
     ) = Field(default=None)
 
 
-class HowToSection(CreativeWork):
+class HowToSection(ListItem, ItemList, CreativeWork):
     """A sub-grouping of steps in the instructions for how to achieve a result (e.g. steps
     for making a pie crust within a pie recipe)."""
 
@@ -6862,7 +6862,7 @@ class HowToSection(CreativeWork):
     ) = Field(default=None)
 
 
-class HowToStep(ListItem):
+class HowToStep(ListItem, ItemList, CreativeWork):
     """A step in the instructions for how to achieve a result. It is an ordered list with
     HowToDirection and/or HowToTip items."""
 
@@ -6878,7 +6878,7 @@ class HowToSupply(HowToItem):
     )
 
 
-class HowToTip(CreativeWork):
+class HowToTip(ListItem, CreativeWork):
     """An explanation in the instructions for how to achieve a result. It provides
     supplementary information about a technique, supply, author's preference, etc. It
     can explain what could be done, or what should not be done, but doesn't specify what
@@ -7022,7 +7022,7 @@ class IncentiveType(Enumeration):
     type: str = Field(default="IncentiveType", alias="@type")
 
 
-class Physician(MedicalBusiness):
+class Physician(MedicalOrganization, MedicalBusiness):
     """An individual physician or a physician's office considered as a MedicalOrganization."""
 
     type: str = Field(default="Physician", alias="@type")
@@ -7528,7 +7528,7 @@ class Legislation(CreativeWork):
     )
 
 
-class LegislationObject(Legislation):
+class LegislationObject(Legislation, MediaObject):
     """A specific object or file containing a Legislation. Note that the same Legislation
     can be published in multiple files. For example, a digitally signed PDF, a plain PDF
     and an HTML version."""
@@ -7905,7 +7905,7 @@ class PeopleAudience(Audience):
     requiredGender: str | list[str] | None = Field(default=None)
 
 
-class MedicalAudience(Audience):
+class MedicalAudience(PeopleAudience, Audience):
     """Target audiences for medical web pages."""
 
     type: str = Field(default="MedicalAudience", alias="@type")
@@ -7939,7 +7939,7 @@ class MedicalCause(MedicalEntity):
     )
 
 
-class MedicalCode(MedicalIntangible):
+class MedicalCode(MedicalIntangible, CategoryCode):
     """A code for a medical entity."""
 
     type: str = Field(default="MedicalCode", alias="@type")
@@ -8188,7 +8188,7 @@ class Specialty(Enumeration):
     type: str = Field(default="Specialty", alias="@type")
 
 
-class MedicalSpecialty(MedicalEnumeration):
+class MedicalSpecialty(Specialty, MedicalEnumeration):
     """Any specific branch of medical science or practice. Medical specialities include
     clinical specialties that pertain to particular organ systems and their respective
     disease states, as well as allied health specialties. Enumerated type."""
@@ -8793,7 +8793,7 @@ class MovieSeries(CreativeWorkSeries):
     trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
 
 
-class MovieTheater(EntertainmentBusiness):
+class MovieTheater(CivicStructure, EntertainmentBusiness):
     """A movie theater."""
 
     type: str = Field(default="MovieTheater", alias="@type")
@@ -9161,7 +9161,7 @@ class QuantitativeValue(StructuredValue):
     minValue: float | str | list[float | str] | None = Field(default=None)
 
 
-class Observation(QuantitativeValue):
+class Observation(QuantitativeValue, Intangible):
     """Instances of the class Observation are used to specify observations about an entity
     at a particular time. The principal properties of an Observation are
     observationAbout, measuredProperty, statType, [[value] and observationDate  and
@@ -9590,7 +9590,7 @@ class Painting(CreativeWork):
     type: str = Field(default="Painting", alias="@type")
 
 
-class PalliativeProcedure(MedicalProcedure):
+class PalliativeProcedure(MedicalTherapy, MedicalProcedure):
     """A medical procedure intended primarily for palliative purposes, aimed at relieving
     the symptoms of an underlying health condition."""
 
@@ -9801,7 +9801,7 @@ class Person(Thing):
     owns: Thing | str | list[Thing | str] | None = Field(default=None)
 
 
-class Patient(MedicalAudience):
+class Patient(Person, MedicalAudience):
     """A patient is any person recipient of health care services."""
 
     type: str = Field(default="Patient", alias="@type")
@@ -9854,7 +9854,7 @@ class PaymentMethodType(Enumeration):
     type: str = Field(default="PaymentMethodType", alias="@type")
 
 
-class PaymentService(PaymentMethod):
+class PaymentService(PaymentMethod, FinancialProduct):
     """A Service to transfer funds from a person or organization to a beneficiary person or
     organization."""
 
@@ -9908,7 +9908,7 @@ class PetStore(Store):
     type: str = Field(default="PetStore", alias="@type")
 
 
-class Pharmacy(MedicalBusiness):
+class Pharmacy(MedicalOrganization, MedicalBusiness):
     """A pharmacy or drugstore."""
 
     type: str = Field(default="Pharmacy", alias="@type")
@@ -9932,7 +9932,7 @@ class PhysicalActivityCategory(Enumeration):
     type: str = Field(default="PhysicalActivityCategory", alias="@type")
 
 
-class PhysicalExam(MedicalProcedure):
+class PhysicalExam(MedicalEnumeration, MedicalProcedure):
     """A type of physical examination of a patient performed by a physician."""
 
     type: str = Field(default="PhysicalExam", alias="@type")
@@ -10010,7 +10010,7 @@ class PodcastSeries(CreativeWorkSeries):
     ) = Field(default=None)
 
 
-class PoliceStation(CivicStructure):
+class PoliceStation(EmergencyService, CivicStructure):
     """A police station."""
 
     type: str = Field(default="PoliceStation", alias="@type")
@@ -10109,7 +10109,7 @@ class PriceTypeEnumeration(Enumeration):
     type: str = Field(default="PriceTypeEnumeration", alias="@type")
 
 
-class ProductCollection(Collection):
+class ProductCollection(Collection, Product):
     """A set of products (either ProductGroups or specific variants) that are listed
     together e.g. in an Offer."""
 
@@ -10791,7 +10791,7 @@ class ReviewAction(AssessAction):
     resultReview: Review | str | list[Review | str] | None = Field(default=None)
 
 
-class ReviewNewsArticle(CriticReview):
+class ReviewNewsArticle(CriticReview, NewsArticle):
     """A NewsArticle and CriticReview providing a professional critic's assessment of a
     service, product, performance, or artistic or literary work."""
 
@@ -11028,7 +11028,7 @@ class SendAction(TransferAction):
     ) = Field(default=None)
 
 
-class SequentialArt(Book):
+class SequentialArt(VisualArtwork, Book):
     """An art forms that use images deployed in a specific order for the purpose of graphic
     storytelling (i.e., narration of graphic stories) or conveying information. Examples
     of SequentialArt are Franco-Belgian Bande Dessinée, Comics in the USA and 漫画 (Manga)
@@ -11325,7 +11325,7 @@ class SizeSystemEnumeration(Enumeration):
     type: str = Field(default="SizeSystemEnumeration", alias="@type")
 
 
-class SkiResort(Resort):
+class SkiResort(Resort, SportsActivityLocation):
     """A ski resort."""
 
     type: str = Field(default="SkiResort", alias="@type")
@@ -11571,7 +11571,7 @@ class SpreadsheetDigitalDocument(DigitalDocument):
     type: str = Field(default="SpreadsheetDigitalDocument", alias="@type")
 
 
-class StadiumOrArena(CivicStructure):
+class StadiumOrArena(SportsActivityLocation, CivicStructure):
     """A stadium."""
 
     type: str = Field(default="StadiumOrArena", alias="@type")
@@ -11789,7 +11789,7 @@ class TVEpisode(Episode):
     titleEIDR: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
 
 
-class TVSeason(CreativeWork):
+class TVSeason(CreativeWorkSeason, CreativeWork):
     """Season dedicated to TV broadcast and associated online delivery."""
 
     type: str = Field(default="TVSeason", alias="@type")
@@ -11798,7 +11798,7 @@ class TVSeason(CreativeWork):
     titleEIDR: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
 
 
-class TVSeries(CreativeWorkSeries):
+class TVSeries(CreativeWorkSeries, CreativeWork):
     """CreativeWorkSeries dedicated to TV broadcast and associated online delivery."""
 
     type: str = Field(default="TVSeries", alias="@type")
@@ -12350,7 +12350,7 @@ class VideoGallery(MediaGallery):
     type: str = Field(default="VideoGallery", alias="@type")
 
 
-class VideoGame(SoftwareApplication):
+class VideoGame(SoftwareApplication, Game):
     """A video game is an electronic game that involves human interaction with a user
     interface to generate visual feedback on a video device."""
 
@@ -12702,3 +12702,8 @@ class _3DModel(MediaObject):
 
     type: str = Field(default="3DModel", alias="@type")
     isResizable: bool | str | list[bool | str] | None = Field(default=None)
+
+
+# ---------------------------------------------------------------------------
+# Dynamic lookup
+# ---------------------------------------------------------------------------
