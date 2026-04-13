@@ -6,7 +6,7 @@ from nanoid import generate
 from pydantic import ValidationError
 
 from metadata_converter.cleaning_plugin import CleaningPlugin
-from metadata_converter.config import CleaningConfig, Config
+from metadata_converter.config import CleaningConfig
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (
     SchemaOrgBase,
@@ -430,7 +430,9 @@ def split_properties(schema_properties: dict[str, Any]) -> list[dict[str, Any]]:
     return [dict(zip(keys, row)) for row in zip(*values)]
 
 
-def extract_schemas(df: pd.DataFrame, config: Config) -> list[SchemaOrgBase]:
+def extract_schemas(
+    df: pd.DataFrame, schema_type: str, mapping: dict[str, Any]
+) -> list[SchemaOrgBase]:
     """
     Convert a pandas DataFrame into a list of schema.org objects.
 
@@ -439,9 +441,8 @@ def extract_schemas(df: pd.DataFrame, config: Config) -> list[SchemaOrgBase]:
     df : pandas.DataFrame
         Input data in long format with at least ``"id"``, ``"header"``, and
         ``"value"`` columns.
-    config : Config
-        Configuration object containing schema type-to-property mappings
-        under ``config.mapping``.
+    mapping : dict
+        Dict containing schema type-to-property mappings.
 
     Returns
     -------
@@ -452,9 +453,8 @@ def extract_schemas(df: pd.DataFrame, config: Config) -> list[SchemaOrgBase]:
 
     for _, entity in df.groupby("id"):
         entity = entity.groupby("header")["value"].apply(list).to_dict()
-        for schema_type, properties in config.mapping.items():
-            result = build_schema(entity, schema_type, properties)
-            if result is not None:
-                schemas.extend(result)
+        result = build_schema(entity, schema_type, mapping)
+        if result is not None:
+            schemas.extend(result)
 
     return schemas

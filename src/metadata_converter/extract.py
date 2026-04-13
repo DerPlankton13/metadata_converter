@@ -22,7 +22,10 @@ EXTRACTOR_REGISTRY: dict[str, ExtractorFn] = {
 }
 
 
-def load_data(config: Config) -> pd.DataFrame:
+def extract_data(config: Config) -> dict[str, pd.DataFrame]:
     input_cfg = config.input
     extractor = EXTRACTOR_REGISTRY[input_cfg.extractor.type]
-    return extractor(input_cfg.file_path, input_cfg.extractor)
+    data = extractor(input_cfg.file_path, input_cfg.extractor)
+    if isinstance(data, pd.DataFrame):
+        data = {"data": data}
+    return data

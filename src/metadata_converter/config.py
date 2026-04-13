@@ -12,7 +12,7 @@ class ExtractorConfigBase(BaseModel):
 
 class ExcelExtractorConfig(ExtractorConfigBase):
     type: Literal["excel"]
-    sheet_name: str
+    sheet_name: str | list[str]
     header: int | None = None
     skiprows: list[int] | None = None
 
@@ -59,4 +59,5 @@ class OutputConfig(BaseModel):
 class Config(BaseModel):
     input: InputConfig
     output: OutputConfig
+    sheet_type_mapping: dict[str, str] | None = None
     mapping: dict[str, dict[str, Any]]
