@@ -1,0 +1,50 @@
+[input]
+file_path = "examples/Dataset_Alien_Tara4TREC_Biocean5D_version_1_export.xlsx"
+
+[input.extractor]
+type = "excel"
+sheet_name = ["dataset", "author"]
+header = 0
+skiprows = [1, 2]
+[input.cleaning]
+strip_header_whitespace = true
+strip_cell_whitespace = true
+sentinels_to_na = false
+placeholders_to_na = false
+plugin_dir = "plugins"
+plugin_name = "add_funding_info.py"
+
+[output]
+output_path = "output"
+
+[sheet_type_mapping]
+dataset = "Dataset"
+author = "Person"
+
+[mapping]
+[mapping.Person]
+email = "author:email"
+givenName = "author:first-name"
+familyName = "author:last-name"
+identifier.type = "Orcid"
+identifier.value = "author:pid"
+affiliation.type = "Organization"
+affiliation.name = "author:affiliation"
+funding.type = "Grant"
+funding.id = "Grant ID"
+memberOf.type = "Project"
+memberOf.id = "Project ID"
+
+[mapping.Dataset]
+name = "dataset:title"
+abstract = "dataset:description"
+identifier = "dataset:pid"
+dateCreated = "dataset:date-first-created"
+dateModified = "dataset:date-last-updated"
+datePublished = "dataset:date-public"
+inLanguage = "dataset:language"
+keywords = "dataset:keywords"
+funding.type = "Grant"
+funding.id = "Grant ID"
+sourceOrganization.type = "Project"
+sourceOrganization.id = "Project ID"
