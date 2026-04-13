@@ -104,9 +104,10 @@ class DOI(PropertyValue):
 class UrlIdentifier(PropertyValue):
     name: str = "URL Identifier"
     disambiguatingDescription: str = (
-        "This is not a standardised identifier but "
-        "rather a simple url. It should only be used "
-        "if no more suiting metadata could be found."
+        "The value of this identifier has been provided by the "
+        "data submitter, but is not of a known identifier type "
+        "to BIOcean5D's task 3.1. Thus the value is provided as "
+        "given with no guarantee of persistence or regularity."
     )
 
     @field_validator("value")
