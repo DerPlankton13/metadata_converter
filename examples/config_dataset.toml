@@ -12,6 +12,8 @@ strip_cell_whitespace = true
 sentinels_to_na = true
 empty_sentinels = ["", "N/A", "n/a", "-", "Please select"]
 placeholders_to_na = true
+plugin_dir = "plugins"
+plugin_name = "add_funding_info.py"
 
 [output]
 output_path = "output"
