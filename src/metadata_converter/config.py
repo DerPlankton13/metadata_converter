@@ -36,12 +36,13 @@ class CleaningConfig(BaseModel):
     placeholders_to_na: bool = True
     placeholder_pattern: str = r"^.*\[.*\]$"
     plugin_dir: Path | None = None
+    plugin_name: str | list[str] | None = None
     plugins: list[CleaningPlugin] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def load_plugins_from_dir(self) -> "CleaningConfig":
         if self.plugin_dir is not None:
-            self.plugins = load_plugins(self.plugin_dir)
+            self.plugins = load_plugins(self.plugin_dir, self.plugin_name)
         return self
 
 
