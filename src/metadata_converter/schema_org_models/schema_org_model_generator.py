@@ -100,9 +100,17 @@ class SchemaOrgBase(BaseModel):
     Provides the two fields common to all JSON-LD nodes and configures
     Pydantic to accept both Python attribute names and JSON-LD @-prefixed
     aliases interchangeably.
+    Defers build until first model validation to massively reduce run
+    time as most models are not used and ensures that each new
+    assignment is also validated.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True, defer_build=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        defer_build=True,
+        validate_assignment=True,
+    )
 
     # The schema.org class name, will be set automatically by each generated subclass.
     type: str = Field(alias="@type")
