@@ -7,6 +7,7 @@ from metadata_converter.load import load_to_jsonld
 from metadata_converter.parse import parse_cli
 from metadata_converter.schema_org_models.schemaorg_models import Person
 from metadata_converter.transform import (
+    add_id,
     clean_dataframe,
     convert_to_long,
     extract_schemas,
@@ -25,6 +26,7 @@ def main():
     results = {}
     for sheet, data in data_dict.items():
         data = clean_dataframe(data, config.input.cleaning)
+        data = add_id(data, schema_type)
         data = convert_to_long(data)
 
         # split the authors
