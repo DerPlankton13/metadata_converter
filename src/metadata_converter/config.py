@@ -6,6 +6,10 @@ from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 from metadata_converter.cleaning_plugin import CleaningPlugin, load_plugins
 
 
+class ConfigError(Exception):
+    pass
+
+
 class ExtractorConfigBase(BaseModel):
     type: str
 

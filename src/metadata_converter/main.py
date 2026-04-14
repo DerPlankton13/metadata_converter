@@ -12,11 +12,6 @@ from metadata_converter.transform import (
     extract_schemas,
 )
 
-
-class ConfigError(Exception):
-    pass
-
-
 SPLIT_AUTHORS = False
 
 
