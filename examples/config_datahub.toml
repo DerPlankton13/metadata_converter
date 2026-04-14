@@ -23,7 +23,9 @@ author = "Person"
 
 [mapping]
 [mapping.Person]
+id = "@id"
 email = "author:email"
+name = "name"
 givenName = "author:first-name"
 familyName = "author:last-name"
 identifier.type = "Orcid"
@@ -36,7 +38,10 @@ memberOf.type = "Project"
 memberOf.id = "Project ID"
 
 [mapping.Dataset]
+id = "@id"
 name = "dataset:title"
+creator.type = "Person"
+creator.id = "creator"
 abstract = "dataset:description"
 identifier = "dataset:pid"
 dateCreated = "dataset:date-first-created"
