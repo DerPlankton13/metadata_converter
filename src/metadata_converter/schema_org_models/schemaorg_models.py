@@ -24,7 +24,12 @@ class SchemaOrgBase(BaseModel):
     aliases interchangeably.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True, defer_build=True)
+    model_config = ConfigDict(
+        extra="forbid",
+        populate_by_name=True,
+        defer_build=True,
+        validate_assignment=True,
+    )
 
     # The schema.org class name, will be set automatically by each generated subclass.
     type: str = Field(alias="@type")
