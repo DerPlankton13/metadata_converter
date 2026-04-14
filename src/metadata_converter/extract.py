@@ -3,7 +3,7 @@ from typing import Callable
 
 import pandas as pd
 
-from metadata_converter.config import Config, ExtractorConfigBase
+from metadata_converter.config import Config, ConfigError, ExtractorConfigBase
 
 ExtractorFn = Callable[[Path, ExtractorConfigBase], pd.DataFrame]
 
@@ -25,7 +25,18 @@ EXTRACTOR_REGISTRY: dict[str, ExtractorFn] = {
 def extract_data(config: Config) -> dict[str, pd.DataFrame]:
     input_cfg = config.input
     extractor = EXTRACTOR_REGISTRY[input_cfg.extractor.type]
-    data = extractor(input_cfg.file_path, input_cfg.extractor)
-    if isinstance(data, pd.DataFrame):
-        data = {"data": data}
+    input_data = extractor(input_cfg.file_path, input_cfg.extractor)
+    if isinstance(input_data, pd.DataFrame):
+        schema_type = list(config.mapping)[0]
+        data = {schema_type: input_data}
+    else:
+        try:
+            data = {
+                config.sheet_type_mapping[sheet]: df for sheet, df in input_data.items()
+            }
+        except KeyError:
+            raise ConfigError(
+                "If multiple sheets are read, the config needs to specify a 'sheet_type_mapping'."
+            )
+
     return data
