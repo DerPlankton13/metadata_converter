@@ -152,10 +152,10 @@ def convert_to_long(df: pd.DataFrame, sheet_name: str = None) -> pd.DataFrame:
     return df.melt(id_vars=["id"], var_name="header")
 
 
-def generate_schema_id(schema_type: str) -> str:
+def add_id(data: pd.DataFrame, schema_type: str) -> pd.DataFrame:
     """Generate a unique identifier for a schema instance."""
-    unique_id = generate()
-    return f"{schema_type}_{unique_id}.jsonld"
+    data["@id"] = [f"{schema_type}_{generate()}.jsonld" for _ in range(len(data))]
+    return data
 
 
 def instantiate_schema(
@@ -245,9 +245,6 @@ def build_schema(
 
     schemas = []
     for schema_prop in schema_properties:
-        if not nested and "id" not in schema_prop:
-            schema_prop["id"] = generate_schema_id(schema_type)
-
         schema = instantiate_schema(schema_type, schema_prop)
         if schema is not None:
             schemas.append(schema)
