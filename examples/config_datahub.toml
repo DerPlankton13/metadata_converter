@@ -3,7 +3,7 @@ file_path = "examples/Dataset_Alien_Tara4TREC_Biocean5D_version_1_export.xlsx"
 
 [input.extractor]
 type = "excel"
-sheet_name = ["dataset", "author"]
+sheet_name = ["dataset", "author", "analysis", "sample"]
 header = 0
 skiprows = [1, 2]
 [input.cleaning]
@@ -20,6 +20,8 @@ output_path = "output"
 [sheet_type_mapping]
 dataset = "Dataset"
 author = "Person"
+analysis = "Action"
+sample = "Thing"
 
 [mapping]
 [mapping.Person]
@@ -41,7 +43,7 @@ memberOf.id = "Project ID"
 id = "@id"
 name = "dataset:title"
 creator.type = "Person"
-creator.id = "creator"
+creator.id = "creator_id"
 abstract = "dataset:description"
 identifier = "dataset:pid"
 dateCreated = "dataset:date-first-created"
@@ -53,3 +55,16 @@ funding.type = "Grant"
 funding.id = "Grant ID"
 sourceOrganization.type = "Project"
 sourceOrganization.id = "Project ID"
+
+[mapping.Action]
+id = "@id"
+name = "analysis:title"
+identifier = "analysis:pid"
+agent.type = "Person"
+agent.identifier = "agent_id"
+object.type = "Thing"
+object.identifier = "sample_id"
+
+[mapping.Thing]
+id = "@id"
+identifier = "sample:pid"
