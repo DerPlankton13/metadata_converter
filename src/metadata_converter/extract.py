@@ -27,16 +27,6 @@ def extract_data(config: Config) -> dict[str, pd.DataFrame]:
     extractor = EXTRACTOR_REGISTRY[input_cfg.extractor.type]
     input_data = extractor(input_cfg.file_path, input_cfg.extractor)
     if isinstance(input_data, pd.DataFrame):
-        schema_type = list(config.mapping)[0]
-        data = {schema_type: input_data}
-    else:
-        try:
-            data = {
-                config.sheet_type_mapping[sheet]: df for sheet, df in input_data.items()
-            }
-        except KeyError:
-            raise ConfigError(
-                "If multiple sheets are read, the config needs to specify a 'sheet_type_mapping'."
-            )
+        input_data = {input_cfg.extractor.sheet_name: input_data}
 
-    return data
+    return input_data

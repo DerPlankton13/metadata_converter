@@ -6,7 +6,6 @@ import pandas as pd
 from metadata_converter.extract import extract_data
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.parse import parse_cli
-from metadata_converter.schema_org_models.schemaorg_models import Person
 from metadata_converter.transform import (
     add_id,
     clean_dataframe,
@@ -23,19 +22,24 @@ def main():
     data_dict = extract_data(config)
 
     # Transform Step
-    for schema_type, data in data_dict.items():
+    for name, data in data_dict.items():
         data = clean_dataframe(data, config.input.cleaning)
-        data = add_id(data, schema_type)
+        data = add_id(data, config.mapping[name]["type"])
         data = convert_to_long(data)
-        data_dict[schema_type] = data
+        data_dict[name] = data
 
     # combine data for the specific types
-    # ====== handle Person ======
-    data_dict["Person"] = create_full_names(data_dict["Person"])
+    author_name = "author"
+    dataset_name = "dataset"
+    analysis_name = "analysis"
+    sample_name = "sample"
+    # ====== handle authors ======
+
+    data_dict[author_name] = create_full_names(data_dict[author_name])
 
     # ====== handle main Dataset ======
     # add the people as creators
-    p = data_dict["Person"]
+    p = data_dict[author_name]
     creator_ids = p[(p.header == "author:is-dataset-author") & (p.value == 1)].id
     creators = pd.DataFrame(
         [
@@ -46,16 +50,18 @@ def main():
     )
     creators["header"] = "creator_id"
     creators["id"] = "0"
-    data_dict["Dataset"] = pd.concat(
-        [data_dict["Dataset"], creators], ignore_index=True
+    data_dict[dataset_name] = pd.concat(
+        [data_dict[dataset_name], creators], ignore_index=True
     )
-    data_dict["Dataset"] = split_field(data_dict["Dataset"], "dataset:keywords")
+    data_dict[dataset_name] = split_field(data_dict[dataset_name], "dataset:keywords")
 
     # add agents to analysis
-    data_dict["Action"] = split_field(data_dict["Action"], "analysis:author-pid")
+    data_dict[analysis_name] = split_field(
+        data_dict[analysis_name], "analysis:author-pid"
+    )
     p_wide = p.pivot(index="id", columns="header", values="value")
 
-    a = data_dict["Action"]
+    a = data_dict[analysis_name]
     agents = a.loc[a.header == "analysis:author-pid"]
     agents["header"] = "agent_id"
     agents["value"] = agents["value"].apply(
@@ -63,7 +69,7 @@ def main():
     )
 
     # add samples as objects
-    s_wide = data_dict["Thing"].pivot(index="id", columns="header", values="value")
+    s_wide = data_dict[sample_name].pivot(index="id", columns="header", values="value")
     samples = (
         a.loc[a.header == "analysis:pid", ["id", "value"]]
         .merge(
@@ -76,16 +82,14 @@ def main():
         .assign(header="sample_id")[["id", "header", "value"]]
     )
 
-    data_dict["Action"] = pd.concat(
-        [data_dict["Action"], agents, samples], ignore_index=True
+    data_dict[analysis_name] = pd.concat(
+        [data_dict[analysis_name], agents, samples], ignore_index=True
     )
 
     # create the schemata
     results = {}
-    for schema_type, data in data_dict.items():
-        results[schema_type] = extract_schemas(
-            data, schema_type, config.mapping[schema_type]
-        )
+    for name, data in data_dict.items():
+        results[name] = extract_schemas(data, config.mapping[name])
 
     # Load Step
     for schema in [s for schemas in results.values() for s in schemas]:
