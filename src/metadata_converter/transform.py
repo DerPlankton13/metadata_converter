@@ -194,7 +194,7 @@ def instantiate_schema(
 
 
 def build_schema(
-    entity: dict[str, Any], schema_type: str, mapping: dict, nested: bool = False
+    entity: dict[str, Any], mapping: dict, nested: bool = False
 ) -> list[SchemaOrgBase]:
     """
     Orchestrate extraction and instantiation of one or more schema.org objects.
@@ -208,8 +208,6 @@ def build_schema(
     ----------
     entity : dict[str, Any]
         A dictionary of field names to their values, representing one record.
-    schema_type : str
-        The schema.org type to instantiate (e.g. ``"Person"``, ``"Event"``).
     mapping : dict
         Mapping of schema properties to data fields. Values can be either:
         - str : a field name in ``entity``
@@ -232,7 +230,13 @@ def build_schema(
     ValueError
         If a nested mapping dict is missing a ``"type"`` key.
     """
+    schema_type = mapping.get("type")
+    if not schema_type:
+        raise ValueError(
+            f"Missing 'type' in {'nested ' if nested else ''}schema for '{mapping}'"
+        )
 
+    mapping = {k: v for k, v in mapping.items() if k != "type"}
     schema_properties = extract_properties(entity, mapping)
 
     if len(schema_properties) == 0:
@@ -284,66 +288,31 @@ def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
     """
     schema_properties = {}
 
-    for prop, header in mapping.items():
-        if isinstance(header, str):
-            var = get_field_value(entity, header)
+    for prop, value in mapping.items():
+        if isinstance(value, str):
+            var = get_field_value(entity, value)
             if var is not None:
                 schema_properties[prop] = var
 
-        elif isinstance(header, dict):
-            nested_schemas = resolve_nested_properties(entity, prop, header)
+        elif isinstance(value, dict):
+            nested_schemas = build_schema(entity, value, nested=True)
             if nested_schemas:
                 schema_properties[prop] = (
                     nested_schemas[0] if len(nested_schemas) == 1 else nested_schemas
                 )
 
-        elif isinstance(header, list):
-            for schema_mapping in header:
+        elif isinstance(value, list):
+            for schema_mapping in value:
                 if not isinstance(schema_mapping, dict):
                     raise TypeError(
                         f"The elements of an array should be a dict. "
                         f"{schema_mapping} is not a dict."
                     )
-                nested_schemas = resolve_nested_properties(entity, prop, schema_mapping)
+                nested_schemas = build_schema(entity, schema_mapping, nested=True)
                 if nested_schemas:
                     schema_properties.setdefault(prop, []).extend(nested_schemas)
 
     return schema_properties
-
-
-def resolve_nested_properties(
-    entity: dict[str, Any], key: str, value: dict
-) -> list[SchemaOrgBase]:
-    """
-    Resolve one or more nested schema objects from a single nested mapping definition.
-
-    Parameters
-    ----------
-    entity : dict[str, Any]
-        A dictionary of field names to their values, representing one record.
-    key : str
-        The parent schema property name this nested object belongs to.
-        Used only for error reporting.
-    value : dict
-        A nested mapping definition. Must contain a ``"type"`` key specifying
-        the schema.org type; all other keys are treated as property mappings.
-
-    Returns
-    -------
-    list of SchemaOrgBase
-        The resolved nested schema objects. Empty if validation failed.
-
-    Raises
-    ------
-    ValueError
-        If ``value`` does not contain a ``"type"`` key.
-    """
-    nested_type = value.get("type")
-    if not nested_type:
-        raise ValueError(f"Missing 'type' in nested schema for '{key}'")
-
-    nested_props = {k: v for k, v in value.items() if k != "type"}
-    return build_schema(entity, nested_type, nested_props, nested=True)
 
 
 def get_field_value(entity: dict[str, Any], value: str):
@@ -427,9 +396,7 @@ def split_properties(schema_properties: dict[str, Any]) -> list[dict[str, Any]]:
     return [dict(zip(keys, row)) for row in zip(*values)]
 
 
-def extract_schemas(
-    df: pd.DataFrame, schema_type: str, mapping: dict[str, Any]
-) -> list[SchemaOrgBase]:
+def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrgBase]:
     """
     Convert a pandas DataFrame into a list of schema.org objects.
 
@@ -450,7 +417,7 @@ def extract_schemas(
 
     for _, entity in df.groupby("id"):
         entity = entity.groupby("header")["value"].apply(list).to_dict()
-        result = build_schema(entity, schema_type, mapping)
+        result = build_schema(entity, mapping)
         if result is not None:
             schemas.extend(result)
 
