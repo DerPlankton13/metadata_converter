@@ -1,0 +1,201 @@
+{
+  "@context": {
+    "@vocab": "http://schema.org"
+  },
+  "@type": "Action",
+  "additionalType": [
+    "sampling process",
+    "http://purl.obolibrary.org/obo/OBI_0000744"
+],
+  "@id": "",
+  "result": "id of sample",
+  "startTime": "2023-04-13T17:21:00Z", // collection date
+  "location": {
+    "@type": "Place",
+    "name": "Baie_de_veys, France",
+    "geo": {
+      "@type": "GeoCoordinates",
+      "elevation": "0.0",
+      "latitude": "0.0",
+      "longitude": "0.0"
+    },
+    "additionalProperty": [
+      {
+        "@type": "PropertyValue",
+        "name": "broad-scale environmental context",
+        "value": "shore [ENVO:00000304]",
+        "propertyID": "https://w3id.org/mixs/0000012",
+        "valueReference": {
+          "@type": "DefinedTerm",
+          "identifier": "http://purl.obolibrary.org/obo/ENVO_00000304",
+          "name": "shore",
+          "inDefinedTermSet": "http://purl.obolibrary.org/obo/envo.owl",
+          "termCode": "ENVO:00000304"
+        }},
+        {
+        "@type": "PropertyValue",
+        "name": "depth",
+        "value": "0-3"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "depth-max",
+        "value": "3"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "depth-min",
+        "value": "0"
+      },
+      {
+        "@type": "PropertyValue",
+        "propertyID": "https://w3id.org/mixs/0000010",
+        "name": "geographic location (country and/or sea,region)",
+        "value": "France: , Baie_de_veys" // ^{country}: {region}, {specific_location}$
+      }
+    ]
+  },
+  "instrument": {
+    "@type": "Product",
+    "description": "sample collection device",
+    "name": "Niskin bottle [NERC:SDN:L22::TOOL0412]",
+    "category": "https://vocab.nerc.ac.uk/collection/L22/current/TOOL0412/"
+  },
+  "object": [
+    {
+        "@type": "PropertyValue",
+        "name": "environmental medium",
+        "value": "seawater [ENVO:01001964]",
+        "propertyID": "https://w3id.org/mixs/0000014",
+        "valueReference":
+          {
+            "@type": "DefinedTerm",
+            "identifier": "http://purl.obolibrary.org/obo/ENVO_01001964",
+            "inDefinedTermSet": "http://purl.obolibrary.org/obo/envo.owl",
+            "termCode": "ENVO:01001964",
+            "name": "seawater"
+          }
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "organism",
+        "value": "marine metagenome [NCBI:txid408172]", // weird, unclear if this is to be understood as the object or the result - intuition is to use object, if this was a penguin, I'd assume that the penguin was the object of sampling and not the result
+        "valueReference":
+          {
+            "@type": "DefinedTerm",
+            "identifier": "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=408172",
+            "name": "marine metagenome"
+
+          }
+      }
+
+      ],
+    "actionProcess": {
+        "@type": "HowTo",
+        "name": "Sampling ...",
+        "step": [
+            {
+            "@type": "HowToStep",
+            "name": "filtration",
+            "text": "filtration volume: 15, filtration time:2.5"
+            }
+
+        ]
+
+    }
+}
+
+
+
+
+      {
+        "@type": "PropertyValue",
+        "name": "checklist",
+        "value": "ERC000024"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "collection date",
+        "value": "2023-04-13T17:21:00Z"
+      },
+      {
+        "@type": "PropertyValue",  // unclear if this is a mix term
+        "name": "depth",
+        "value": "0-3" // unclear units, if MIxS, preferred m, biosamples webpage shows "(m)" but not in JSON export
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "depth-max",
+        "value": "3"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "depth-min",
+        "value": "0"
+      },
+
+
+      {
+        "@type": "PropertyValue",
+        "name": "filtration time",
+        "value": "15.0"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "filtration volume",
+        "value": "2.5"
+      },
+
+
+      {
+        "@type": "PropertyValue",
+        "name": "local environmental context",
+        "value": "shoreline transect"
+      },
+
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "project name",
+        "value": "Traversing European Coastlines (TREC) expedition"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "protocol label",
+        "value": "S320-S"
+      },
+
+
+      {
+        "@type": "PropertyValue",
+        "name": "sampling design label",
+        "value": "002-01-10-00"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "sampling platform",
+        "value": "Sampling Processing Laboratory (SPL)"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "size-fraction lower threshold",
+        "value": "3"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "size-fraction upper threshold",
+        "value": "20"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "target analysis type",
+        "value": "Genomics"
+      }
+    ],
+    "sameAs": "http://identifiers.org/biosample/SAMEA112489011"
+  },
+  "isPartOf": {
+    "@type": "Dataset",
+    "@id": "https://www.ebi.ac.uk/biosamples/samples"
+  }
+}
