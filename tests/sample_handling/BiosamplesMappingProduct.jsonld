@@ -1,0 +1,63 @@
+{
+  "@context":
+   {
+    "@vocab": "http://schema.org"
+    },
+  "@type": "Product",
+  "additionalType": [
+    "sample",
+    "http://purl.obolibrary.org/obo/OBI_0000747"
+  ],
+  "@id": "",
+  "identifier": [
+    {
+        "@type": "PropertyValue",
+        "name": "Short Read Archive Accession",
+        "propertyID": "https://registry.identifiers.org/registry/insdc.sra",
+        "value": "ERS21018883",
+        "url":   "https://www.ebi.ac.uk/ena/browser/view/ERS21018883?dataType=SAMPLE"
+    },
+    {
+        "@type": "PropertyValue",
+        "name": "BioSamples Accession",
+        "propertyID": "https://registry.identifiers.org/registry/biosample",
+        "value": "SAMEA112489011",
+        "url":   "https://www.ebi.ac.uk/ena/browser/view/SAMEA112489011?dataType=BIOSAMPLE"
+
+    },
+    {
+        "@type": "PropertyValue",
+        "name": "sampling design label",
+        "propertyID": "sampling design label",
+        "value": "002-01-10-00"
+    }
+
+  ],
+  "name": "sample_2023-04-13T17:21:00Z_TREC_002-01-10-00_shallow-water_S320-S_R01_SAMEA112489011",
+  "description": "This marine metagenome sample was collected during the Traversing European Coastlines (TREC) expedition on date/time 2023-04-13T17:21:00Z, at location 49.32670 N 1.11253 W, elevation (m)=0 and depth (m)=0, using protocol S320-S with sample pid SAMEA112489011",
+  "subjectOf": "http://identifiers.org/biosample/SAMEA112489011",
+  "url": "https://www.ebi.ac.uk/biosamples/samples/SAMEA112489011",
+  "productionDate": "2023-04-13T17:21:00Z",
+  "material": "seawater [ENVO:01001964]",
+  "countryOfOrigin": "France",
+  "funding": "....B5D object",
+  "manufacturer":       {
+        "@type": "ResearchProject",
+        "name": "Traversing European Coastlines (TREC) expedition"
+      },
+   "keywords": [
+    "marine metagenome [NCBI:txid408172]",
+    "Genomics",
+    "shoreline transect"
+  ],
+
+  "additionalProperty":
+
+      {
+        "@type": "PropertyValue",
+        "name": "checklist",
+        "value": "ERC000024"
+      }
+
+
+}
