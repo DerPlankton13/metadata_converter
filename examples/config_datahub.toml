@@ -1,9 +1,9 @@
 [input]
-file_path = "examples/Dataset_Alien_Tara4TREC_Biocean5D_version_1_export.xlsx"
+file_path = "/home/japlan001/Nextcloud/B5D_Datahub/input/Dataset_Alien_Tara4TREC_Biocean5D_version_1_export.xlsx"
 
 [input.extractor]
 type = "excel"
-sheet_name = ["dataset", "author", "analysis", "sample"]
+sheet_name = ["dataset", "author", "analysis", "sample", "file"]
 header = 0
 skiprows = [1, 2]
 [input.cleaning]
@@ -66,3 +66,11 @@ object.identifier = "sample_id"
 type = "Product"
 id = "@id"
 identifier = "sample:pid"
+
+[mapping.file]
+type = "Dataset"
+id = "@id"
+name = "file:name"
+encodingFormat = "file:format"
+description = "file:description"
+comment = "file:comment"
