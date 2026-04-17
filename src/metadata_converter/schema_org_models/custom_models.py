@@ -1,6 +1,7 @@
 import re
 
 from pydantic import (
+    computed_field,
     field_validator,
     model_validator,
 )
@@ -15,6 +16,7 @@ ISBN_PATTERN = re.compile(
     r"^(ISBN)?(-13|-10)?[ :]?(\d{2,3}[ -]?)?\d{1,5}[ -]?\d{1,7}[ -]?\d{1,6}[ -]?(\d|X)$"
 )
 DOI_PATTERN = re.compile(r"10\.\d+/.*$")
+SRA_PATTERN = re.compile(r"^[SED]R[APRSXZ]\d+$")
 
 
 def check_pattern(value: str, pattern: re.Pattern[str], type: str) -> str:
@@ -92,8 +94,8 @@ class DOI(PropertyValue):
 
     @field_validator("value")
     @classmethod
-    def search_doi(cls, v: str) -> str:
-        return search_pattern(v, DOI_PATTERN, "DOI")
+    def check_sra(cls, v: str) -> str:
+        return check_pattern(v, DOI_PATTERN, "DOI")
 
     @model_validator(mode="after")
     def set_url(self):
@@ -117,6 +119,21 @@ class UrlIdentifier(PropertyValue):
             raise ValueError("A valid DOI was given to the arbitrary UrlIdentifier.")
         else:
             return v
+
+
+class SRA(PropertyValue):
+    name: str = "Short Read Archive Accession"
+    alternateName: str = "SRA"
+    propertyID: AnyUrl = "https://registry.identifiers.org/registry/insdc.sra"
+
+    def __init__(self, **data):
+        data["url"] = f"https://www.ebi.ac.uk/ena/browser/view/{data['value']}?dataType=SAMPLE"
+        super().__init__(**data)
+
+    @field_validator("value")
+    @classmethod
+    def search_doi(cls, v: str) -> str:
+        return search_pattern(v, SRA_PATTERN, "SRA")
 
 
 # ---------------------------------------------------------------------------
