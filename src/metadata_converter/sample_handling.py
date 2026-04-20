@@ -2,7 +2,7 @@ from typing import Any
 
 import requests
 
-from metadata_converter.schema_org_models.custom_models import SRA
+from metadata_converter.schema_org_models.custom_models import SRA, BioSample
 from metadata_converter.schema_org_models.schemaorg_models import PropertyValue
 
 
@@ -49,17 +49,12 @@ def safe_extract(data: dict, query: str, default=None) -> Any:
 
 def extract_sample(data: dict, sample_id: str) -> dict:
     identifier_list = [
-        PropertyValue(
-            name="BioSamples Accession",
-            propertyID="https://registry.identifiers.org/registry/biosample",
-            value=sample_id,
-            url=f"https://www.ebi.ac.uk/ena/browser/view/{sample_id}?dataType=BIOSAMPLE"
-        ).model_dump(by_alias=True, exclude_none=True),
+        BioSample(value=sample_id).model_dump(by_alias=True, exclude_none=True),
     ]
 
     sra_accession = safe_extract(data, "SRA accession")
     if sra_accession:
-        identifier_list.insert(0,
+        identifier_list.append(
             SRA(value=sra_accession).model_dump(by_alias=True, exclude_none=True)
         )
 
@@ -69,7 +64,7 @@ def extract_sample(data: dict, sample_id: str) -> dict:
             PropertyValue(
                 name="sampling design label",
                 propertyID="sampling design label",
-                value=sampling_design
+                value=sampling_design,
             ).model_dump(by_alias=True, exclude_none=True)
         )
 
@@ -114,17 +109,16 @@ def extract_sample(data: dict, sample_id: str) -> dict:
 
     project_name = safe_extract(data, "project name")
     if project_name:
-        sample_dict["manufacturer"] = {
-            "@type": "ResearchProject",
-            "name": project_name
-        }
+        sample_dict["manufacturer"] = {"@type": "ResearchProject", "name": project_name}
 
     keywords = [
-        k for k in [
+        k
+        for k in [
             safe_extract(data, "organism"),
             safe_extract(data, "target analysis type"),
-            safe_extract(data, "local environmental context")
-        ] if k is not None
+            safe_extract(data, "local environmental context"),
+        ]
+        if k is not None
     ]
     if keywords:
         sample_dict["keywords"] = keywords
@@ -134,7 +128,7 @@ def extract_sample(data: dict, sample_id: str) -> dict:
         sample_dict["additionalProperty"] = {
             "@type": "PropertyValue",
             "name": "checklist",
-            "value": checklist
+            "value": checklist,
         }
 
     return sample_dict
