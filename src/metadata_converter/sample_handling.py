@@ -105,11 +105,21 @@ def extract_sample(data: dict, sample_id: str) -> dict:
     if country:
         sample_dict["countryOfOrigin"] = country
 
-    sample_dict["funding"] = "....B5D object"
+    sample_dict["funding"] = {
+        "@type": "MonetaryGrant",
+        "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/grant_b5d.jsonld",
+    }
+
+    sample_dict["manufacturer"] = [
+        {
+            "@type": "ResearchProject",
+            "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
+        }
+    ]
 
     project_name = safe_extract(data, "project name")
     if project_name:
-        sample_dict["manufacturer"] = {"@type": "ResearchProject", "name": project_name}
+        sample_dict["manufacturer"].append({"@type": "ResearchProject", "name": project_name})
 
     keywords = [
         k

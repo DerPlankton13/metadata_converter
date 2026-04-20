@@ -39,11 +39,20 @@
   "productionDate": "2023-04-13T17:21:00Z",
   "material": "seawater [ENVO:01001964]",
   "countryOfOrigin": "France",
-  "funding": "....B5D object",
-  "manufacturer": {
-    "@type": "ResearchProject",
-    "name": "Traversing European Coastlines (TREC) expedition"
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/grant_b5d.jsonld"
   },
+  "manufacturer": [
+    {
+      "@type": "ResearchProject",
+      "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld"
+    },
+    {
+      "@type": "ResearchProject",
+      "name": "Traversing European Coastlines (TREC) expedition"
+    }
+  ],
   "keywords": [
     "marine metagenome [NCBI:txid408172]",
     "Genomics",
