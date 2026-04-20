@@ -3,6 +3,7 @@ from typing import Any
 import requests
 
 from metadata_converter.schema_org_models.custom_models import SRA
+from metadata_converter.schema_org_models.schemaorg_models import PropertyValue
 
 
 def get_metadata(sample_id: str) -> dict:
@@ -36,22 +37,52 @@ def find_property_value(data: dict, query: str) -> Any:
 
 
 def extract_sample(data: dict, sample_id: str) -> dict:
-    sample_dict = {}
-    sample_dict["type"] = "Product"
-    sample_dict["additionalType"] = [
-        "sample",
-        "http://purl.obolibrary.org/obo/OBI_0000747",
-    ]
-    sample_dict["id"] = f"Product_{sample_id}.jsonld"
-    value = find_property_value(data, "SRA accession")["value"]
-    print(value)
-    sample_dict["identifier"] = [
-        SRA(value=value).model_dump(by_alias=True, exclude_none=True)
-    ]
-    sample_dict["identifier"].append(data["@id"].split(":")[1])
-    sample_dict["identifier"].append(find_property_value(data, "sampling design label"))
-
-    print(sample_dict)
+    sample_dict = {
+        "@context": {"@vocab": "http://schema.org"},
+        "@type": "Product",
+        "additionalType": [
+            "sample",
+            "http://purl.obolibrary.org/obo/OBI_0000747",
+        ],
+        "@id": "",
+        "identifier": [
+            SRA(value=find_property_value(data, "SRA accession")["value"]).model_dump(by_alias=True, exclude_none=True),
+            PropertyValue(
+                name="BioSamples Accession",
+                propertyID="https://registry.identifiers.org/registry/biosample",
+                value=sample_id,
+                url=f"https://www.ebi.ac.uk/ena/browser/view/{sample_id}?dataType=BIOSAMPLE"
+            ).model_dump(by_alias=True, exclude_none=True),
+            PropertyValue(
+                name="sampling design label",
+                propertyID="sampling design label",
+                value=find_property_value(data, "sampling design label")["value"]
+            ).model_dump(by_alias=True, exclude_none=True),
+        ],
+        "name": data["mainEntity"]["name"],
+        "description": find_property_value(data, "sample description")["value"],
+        "subjectOf": data["mainEntity"]["sameAs"],
+        "url": data["mainEntity"]["url"],
+        "productionDate": find_property_value(data, "collection date")["value"],
+        "material": find_property_value(data, "environmental medium")["value"],
+        "countryOfOrigin": find_property_value(data, "geographic location (country and/or sea)")["value"],
+        "funding": "....B5D object",
+        "manufacturer": {
+            "@type": "ResearchProject",
+            "name": find_property_value(data, "project name")["value"]
+        },
+        "keywords": [
+            find_property_value(data, "organism")["value"],
+            find_property_value(data, "target analysis type")["value"],
+            find_property_value(data, "local environmental context")["value"]
+        ],
+        "additionalProperty": {
+            "@type": "PropertyValue",
+            "name": "checklist",
+            "value": find_property_value(data, "checklist")["value"]
+        }
+    }
+    return sample_dict
 
 
 if __name__ == "__main__":
