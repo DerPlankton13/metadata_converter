@@ -55,12 +55,19 @@
       }
     ]
   },
-  "instrument": {
+  "instrument": [
+  {
     "@type": "Product",
     "description": "sample collection device",
     "name": "Niskin bottle [NERC:SDN:L22::TOOL0412]",
-    "category": "https://vocab.nerc.ac.uk/collection/L22/current/TOOL0412/"
+    "category": "https://vocab.nerc.ac.uk/collection/L22/current/TOOL0412/",
   },
+  {
+    "@type": "Product",
+    "name": "sampling platform",
+    "description": "Sampling Processing Laboratory (SPL)"
+   }
+   ],
   "object": [
     {
         "@type": "PropertyValue",
@@ -98,7 +105,12 @@
             "@type": "HowToStep",
             "name": "filtration",
             "text": "filtration volume: 15, filtration time:2.5"
-            }
+            },
+            {
+            "@type": "HowToStep",
+            "name": "size fractionation",
+            "text": "size fractionation was performed with a lower threshold of 3 [unit] and an upper threshold of 20 [unit]"
+      }
 
         ]
 
@@ -171,11 +183,7 @@
         "name": "sampling design label",
         "value": "002-01-10-00"
       },
-      {
-        "@type": "PropertyValue",
-        "name": "sampling platform",
-        "value": "Sampling Processing Laboratory (SPL)"
-      },
+
       {
         "@type": "PropertyValue",
         "name": "size-fraction lower threshold",
