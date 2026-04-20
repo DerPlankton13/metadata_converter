@@ -11,18 +11,19 @@
   "identifier": [
     {
       "@type": "PropertyValue",
+      "name": "BioSamples Accession",
+      "alternateName": "BioSample",
+      "propertyID": "https://registry.identifiers.org/registry/biosample",
+      "value": "SAMEA112489011",
+      "url": "https://www.ebi.ac.uk/ena/browser/view/SAMEA112489011?dataType=BIOSAMPLE"
+    },
+    {
+      "@type": "PropertyValue",
       "name": "Short Read Archive Accession",
       "alternateName": "SRA",
       "propertyID": "https://registry.identifiers.org/registry/insdc.sra",
       "value": "ERS21018883",
       "url": "https://www.ebi.ac.uk/ena/browser/view/ERS21018883?dataType=SAMPLE"
-    },
-    {
-      "@type": "PropertyValue",
-      "name": "BioSamples Accession",
-      "propertyID": "https://registry.identifiers.org/registry/biosample",
-      "value": "SAMEA112489011",
-      "url": "https://www.ebi.ac.uk/ena/browser/view/SAMEA112489011?dataType=BIOSAMPLE"
     },
     {
       "@type": "PropertyValue",
