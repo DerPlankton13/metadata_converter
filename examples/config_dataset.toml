@@ -24,7 +24,7 @@ description = "Description of datasets"
 url = "URL to repository (if required by WP is the repository federated under EOSC?)"
 identifier = [{ type = "DOI", value = "PID of deposited dataset" }, { type = "UrlIdentifier", value = "PID of deposited dataset" }]
 license = "What license is the data licensed under?"
-funding.type = "Grant"
+funding.type = "MonetaryGrant"
 funding.id = "Grant ID"
 sourceOrganization.type = "Project"
 sourceOrganization.id = "Project ID"
