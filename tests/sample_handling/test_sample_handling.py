@@ -1,21 +1,19 @@
 import json
 import unittest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 
-from metadata_converter.sample_handling import get_metadata, extract_sample
+from metadata_converter.biosamples_handling import extract_sample, get_metadata
 
 
 class TestSampleHandling(unittest.TestCase):
-
-    @patch('metadata_converter.sample_handling.requests.get')
+    @patch("metadata_converter.sample_handling.requests.get")
     def test_extract_sample_samea112489011(self, mock_get):
         # Load expected output
-        with open('tests/sample_handling/BiosamplesMappingProduct.jsonld', 'r') as f:
+        with open("tests/sample_handling/SAMEA112489011_Product.jsonld", "r") as f:
             expected = json.load(f)
 
-        # Load mock data from BiosamplesOriginal.jsonld
-        with open('tests/sample_handling/BiosamplesOriginal.jsonld', 'r') as f:
+        # Load mock data from SAMEA112489011_original.jsonld
+        with open("tests/sample_handling/SAMEA112489011_original.jsonld", "r") as f:
             mock_data = json.load(f)
 
         # Mock the API response
@@ -32,5 +30,5 @@ class TestSampleHandling(unittest.TestCase):
         self.assertEqual(result, expected)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     unittest.main()
