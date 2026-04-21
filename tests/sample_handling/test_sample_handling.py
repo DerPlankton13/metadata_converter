@@ -2,9 +2,11 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
+from deepdiff import DeepDiff
+
 from metadata_converter.biosamples_handling import (
-    extract_sampling_action,
     extract_sample,
+    extract_sampling_action,
     fuse_metadata,
     get_metadata,
 )
@@ -31,8 +33,9 @@ class TestSampleHandling(unittest.TestCase):
         data = get_metadata(sample_id)
         result = extract_sample(data, sample_id)
 
-        # Assert the result matches expected
-        self.assertEqual(result, expected)
+        diff = DeepDiff(expected, result, ignore_order=False)
+        if diff:
+            self.fail(f"Mismatch:\n{diff.pretty()}")
 
     def test_fuse_metadata_samea112489011(self):
         # Load expected output
@@ -49,8 +52,9 @@ class TestSampleHandling(unittest.TestCase):
         # Call fuse_metadata
         result = fuse_metadata(structured, unstructured)
 
-        # Assert the result matches expected
-        self.assertEqual(result, expected)
+        diff = DeepDiff(expected, result, ignore_order=False)
+        if diff:
+            self.fail(f"Mismatch:\n{diff.pretty()}")
 
     @patch("metadata_converter.biosamples_handling.requests.get")
     def test_extract_action_samea112489011(self, mock_get):
@@ -72,8 +76,9 @@ class TestSampleHandling(unittest.TestCase):
         data = get_metadata(sample_id)
         result = extract_sampling_action(data, sample_id)
 
-        # Assert the result matches expected
-        self.assertEqual(result, expected)
+        diff = DeepDiff(expected, result, ignore_order=False)
+        if diff:
+            self.fail(f"Mismatch:\n{diff.pretty()}")
 
 
 if __name__ == "__main__":
