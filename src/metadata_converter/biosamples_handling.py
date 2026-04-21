@@ -43,32 +43,31 @@ def get_metadata(sample_id: str) -> dict:
     return fuse_metadata(structured_metadata, unstructured_metadata)
 
 
-def find_property_value(data: dict, query: str) -> Any:
+def get_property_by_name(data: dict, name: str) -> Any:
 
     props = data["mainEntity"]["additionalProperty"]
 
-    results = [p for p in props if p.get("name") == query]
+    results = [p for p in props if p.get("name") == name]
 
     if len(results) != 1:
-        raise Exception()  # f"No unique match found for {query} within {data}")
+        print(f"No unique match found for {name} within {data}")
+        return None
 
     return results[0]
 
 
-def safe_extract(data: dict, query: str, default=None) -> Any:
+def safe_extract_value(data: dict, name: str) -> Any:
     """
     Safely extract a property value from the data without raising exceptions.
     Returns the default value if the property is not found.
     """
     try:
-        return find_property_value(data, query)["value"]
+        return get_property_by_name(data, name)["value"]
     except (Exception, KeyError, IndexError):
-        return default
+        return None
 
 
-def safe_extract_with_unit(
-    data: dict, query: str, default_value=None, default_unit="Unit unknown"
-) -> tuple[Any, Any]:
+def safe_extract_value_with_unit(data: dict, name: str) -> tuple[Any, Any]:
     """
     Safely extract a property value and its unit from the data without raising exceptions.
     Returns the default values if the property is not found.
@@ -78,11 +77,15 @@ def safe_extract_with_unit(
     tuple[Any, Any]
         (value, unit) tuple
     """
+    value, unit = None, "Unit unknown"
     try:
-        prop = find_property_value(data, query)
-        return prop["value"], prop.get("unitText", default_unit)
+        prop = get_property_by_name(data, name)
+        value = prop["value"]
+        unit = prop["unitText"]
     except (Exception, KeyError, IndexError):
-        return default_value, default_unit
+        pass
+    finally:
+        return value, unit
 
 
 def extract_sample(data: dict, sample_id: str) -> dict:
@@ -90,13 +93,13 @@ def extract_sample(data: dict, sample_id: str) -> dict:
         BioSample(value=sample_id).model_dump(by_alias=True, exclude_none=True),
     ]
 
-    sra_accession = safe_extract(data, "SRA accession")
+    sra_accession = safe_extract_value(data, "SRA accession")
     if sra_accession:
         identifier_list.append(
             SRA(value=sra_accession).model_dump(by_alias=True, exclude_none=True)
         )
 
-    sampling_design = safe_extract(data, "sampling design label")
+    sampling_design = safe_extract_value(data, "sampling design label")
     if sampling_design:
         identifier_list.append(
             PropertyValue(
@@ -121,7 +124,7 @@ def extract_sample(data: dict, sample_id: str) -> dict:
     if data["mainEntity"].get("name"):
         sample_dict["name"] = data["mainEntity"]["name"]
 
-    description = safe_extract(data, "sample description")
+    description = safe_extract_value(data, "sample description")
     if description:
         sample_dict["description"] = description
 
@@ -131,15 +134,15 @@ def extract_sample(data: dict, sample_id: str) -> dict:
     if data["mainEntity"].get("url"):
         sample_dict["url"] = data["mainEntity"]["url"]
 
-    production_date = safe_extract(data, "collection date")
+    production_date = safe_extract_value(data, "collection date")
     if production_date:
         sample_dict["productionDate"] = production_date
 
-    material = safe_extract(data, "environmental medium")
+    material = safe_extract_value(data, "environmental medium")
     if material:
         sample_dict["material"] = material
 
-    country = safe_extract(data, "geographic location (country and/or sea)")
+    country = safe_extract_value(data, "geographic location (country and/or sea)")
     if country:
         sample_dict["countryOfOrigin"] = country
 
@@ -155,7 +158,7 @@ def extract_sample(data: dict, sample_id: str) -> dict:
         }
     ]
 
-    project_name = safe_extract(data, "project name")
+    project_name = safe_extract_value(data, "project name")
     if project_name:
         sample_dict["manufacturer"].append(
             {"@type": "ResearchProject", "name": project_name}
@@ -164,16 +167,16 @@ def extract_sample(data: dict, sample_id: str) -> dict:
     keywords = [
         k
         for k in [
-            safe_extract(data, "organism"),
-            safe_extract(data, "target analysis type"),
-            safe_extract(data, "local environmental context"),
+            safe_extract_value(data, "organism"),
+            safe_extract_value(data, "target analysis type"),
+            safe_extract_value(data, "local environmental context"),
         ]
         if k is not None
     ]
     if keywords:
         sample_dict["keywords"] = keywords
 
-    checklist = safe_extract(data, "checklist")
+    checklist = safe_extract_value(data, "checklist")
     if checklist:
         sample_dict["additionalProperty"] = {
             "@type": "PropertyValue",
@@ -213,7 +216,7 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     }
 
     # Add startTime from collection date
-    collection_date = safe_extract(data, "collection date")
+    collection_date = safe_extract_value(data, "collection date")
     if collection_date:
         action_dict["startTime"] = collection_date
 
@@ -223,8 +226,8 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     }
 
     # Location name from region and country
-    region = safe_extract(data, "geographic location (region and locality)")
-    country = safe_extract(data, "geographic location (country and/or sea)")
+    region = safe_extract_value(data, "geographic location (region and locality)")
+    country = safe_extract_value(data, "geographic location (country and/or sea)")
     if region and country:
         location["name"] = f"{region}, {country}"
     elif region:
@@ -233,11 +236,13 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
         location["name"] = country
 
     # Geo coordinates
-    latitude, lat_unit = safe_extract_with_unit(data, "geographic location (latitude)")
-    longitude, lon_unit = safe_extract_with_unit(
+    latitude, lat_unit = safe_extract_value_with_unit(
+        data, "geographic location (latitude)"
+    )
+    longitude, lon_unit = safe_extract_value_with_unit(
         data, "geographic location (longitude)"
     )
-    elevation, elev_unit = safe_extract_with_unit(data, "elevation")
+    elevation, elev_unit = safe_extract_value_with_unit(data, "elevation")
 
     if latitude or longitude or elevation:
         geo = {"@type": "GeoCoordinates"}
@@ -253,9 +258,9 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     location_props = []
 
     # Broad-scale environmental context
-    broad_context = safe_extract(data, "broad-scale environmental context")
+    broad_context = safe_extract_value(data, "broad-scale environmental context")
     if broad_context:
-        prop = find_property_value(data, "broad-scale environmental context")
+        prop = get_property_by_name(data, "broad-scale environmental context")
         value_ref = (
             prop.get("valueReference", [{}])[0] if prop.get("valueReference") else {}
         )
@@ -279,52 +284,27 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
             }
         )
 
-    # Local environmental context
-    local_context = safe_extract(data, "local environmental context")
-    if local_context:
-        location_props.append(
-            {
-                "@type": "PropertyValue",
-                "name": "local environmental context",
-                "value": local_context,
-                "propertyID": "https://w3id.org/mixs/0000013",
-            }
-        )
+    # Local environmental context - reuse PropertyValue from input
+    local_context_prop = get_property_by_name(data, "local environmental context")
+    if local_context_prop:
+        prop_copy = local_context_prop.copy()
+        prop_copy["propertyID"] = "https://w3id.org/mixs/0000013"
+        location_props.append(prop_copy)
 
-    # Depth information
-    depth, depth_unit = safe_extract_with_unit(data, "depth")
-    if depth:
-        location_props.append(
-            {
-                "@type": "PropertyValue",
-                "name": "depth",
-                "value": depth,
-                "unitText": depth_unit,
-                "propertyID": "https://w3id.org/mixs/0000018",
-            }
-        )
+    # Depth information - reuse PropertyValue from input
+    depth_prop = get_property_by_name(data, "depth")
+    if depth_prop:
+        prop_copy = depth_prop.copy()
+        prop_copy["propertyID"] = "https://w3id.org/mixs/0000018"
+        location_props.append(prop_copy)
 
-    depth_max, depth_max_unit = safe_extract_with_unit(data, "depth-max")
-    if depth_max:
-        location_props.append(
-            {
-                "@type": "PropertyValue",
-                "name": "depth-max",
-                "value": depth_max,
-                "unitText": depth_max_unit,
-            }
-        )
+    depth_max_prop = get_property_by_name(data, "depth-max")
+    if depth_max_prop:
+        location_props.append(depth_max_prop.copy())
 
-    depth_min, depth_min_unit = safe_extract_with_unit(data, "depth-min")
-    if depth_min:
-        location_props.append(
-            {
-                "@type": "PropertyValue",
-                "name": "depth-min",
-                "value": depth_min,
-                "unitText": depth_min_unit,
-            }
-        )
+    depth_min_prop = get_property_by_name(data, "depth-min")
+    if depth_min_prop:
+        location_props.append(depth_min_prop.copy())
 
     # Geographic location combined
     if region and country:
@@ -351,9 +331,9 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     instruments = []
 
     # Sample collection device
-    collection_device = safe_extract(data, "sample collection device")
+    collection_device = safe_extract_value(data, "sample collection device")
     if collection_device:
-        prop = find_property_value(data, "sample collection device")
+        prop = get_property_by_name(data, "sample collection device")
         instrument = {
             "@type": "Product",
             "description": "sample collection device",
@@ -364,7 +344,7 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
         instruments.append(instrument)
 
     # Sampling platform
-    sampling_platform = safe_extract(data, "sampling platform")
+    sampling_platform = safe_extract_value(data, "sampling platform")
     if sampling_platform:
         instruments.append(
             {
@@ -381,9 +361,9 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     objects = []
 
     # Environmental medium
-    env_medium = safe_extract(data, "environmental medium")
+    env_medium = safe_extract_value(data, "environmental medium")
     if env_medium:
-        prop = find_property_value(data, "environmental medium")
+        prop = get_property_by_name(data, "environmental medium")
         obj = {
             "@type": "PropertyValue",
             "name": "environmental medium",
@@ -403,9 +383,9 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
         objects.append(obj)
 
     # Organism
-    organism = safe_extract(data, "organism")
+    organism = safe_extract_value(data, "organism")
     if organism:
-        prop = find_property_value(data, "organism")
+        prop = get_property_by_name(data, "organism")
         obj = {
             "@type": "PropertyValue",
             "name": "organism",
@@ -430,8 +410,12 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     steps = []
 
     # Filtration step - extract actual values and units from data
-    filtration_volume, filt_vol_unit = safe_extract_with_unit(data, "filtration volume")
-    filtration_time, filt_time_unit = safe_extract_with_unit(data, "filtration time")
+    filtration_volume, filt_vol_unit = safe_extract_value_with_unit(
+        data, "filtration volume"
+    )
+    filtration_time, filt_time_unit = safe_extract_value_with_unit(
+        data, "filtration time"
+    )
 
     if filtration_volume or filtration_time:
         text_parts = []
@@ -449,10 +433,10 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
             )
 
     # Size fractionation step
-    lower_threshold, lower_unit = safe_extract_with_unit(
+    lower_threshold, lower_unit = safe_extract_value_with_unit(
         data, "size-fraction lower threshold"
     )
-    upper_threshold, upper_unit = safe_extract_with_unit(
+    upper_threshold, upper_unit = safe_extract_value_with_unit(
         data, "size-fraction upper threshold"
     )
     if lower_threshold and upper_threshold:
@@ -479,7 +463,7 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
         }
     ]
 
-    project_name = safe_extract(data, "project name")
+    project_name = safe_extract_value(data, "project name")
     if project_name:
         participants.append({"@type": "ResearchProject", "name": project_name})
 
@@ -488,41 +472,25 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     # Build additionalProperty array
     additional_props = []
 
-    checklist = safe_extract(data, "checklist")
-    if checklist:
-        additional_props.append(
-            {"@type": "PropertyValue", "name": "checklist", "value": checklist}
-        )
+    # Checklist - reuse PropertyValue from input
+    checklist_prop = get_property_by_name(data, "checklist")
+    if checklist_prop:
+        additional_props.append(checklist_prop.copy())
 
-    protocol_label = safe_extract(data, "protocol label")
-    if protocol_label:
-        additional_props.append(
-            {
-                "@type": "PropertyValue",
-                "name": "protocol label",
-                "value": protocol_label,
-            }
-        )
+    # Protocol label - reuse PropertyValue from input
+    protocol_label_prop = get_property_by_name(data, "protocol label")
+    if protocol_label_prop:
+        additional_props.append(protocol_label_prop.copy())
 
-    sampling_design = safe_extract(data, "sampling design label")
-    if sampling_design:
-        additional_props.append(
-            {
-                "@type": "PropertyValue",
-                "name": "sampling design label",
-                "value": sampling_design,
-            }
-        )
+    # Sampling design label - reuse PropertyValue from input
+    sampling_design_prop = get_property_by_name(data, "sampling design label")
+    if sampling_design_prop:
+        additional_props.append(sampling_design_prop.copy())
 
-    target_analysis = safe_extract(data, "target analysis type")
-    if target_analysis:
-        additional_props.append(
-            {
-                "@type": "PropertyValue",
-                "name": "target analysis type",
-                "value": target_analysis,
-            }
-        )
+    # Target analysis type - reuse PropertyValue from input
+    target_analysis_prop = get_property_by_name(data, "target analysis type")
+    if target_analysis_prop:
+        additional_props.append(target_analysis_prop.copy())
 
     if additional_props:
         action_dict["additionalProperty"] = additional_props
