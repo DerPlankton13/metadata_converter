@@ -1,3 +1,4 @@
+import re
 from typing import Any
 
 import requests
@@ -53,7 +54,7 @@ def get_property_by_name(data: dict, name: str) -> Any:
         print(f"No unique match found for {name} within {data}")
         return None
 
-    return results[0]
+    return results[0].copy()
 
 
 def safe_extract_value(data: dict, name: str) -> Any:
@@ -86,6 +87,31 @@ def safe_extract_value_with_unit(data: dict, name: str) -> tuple[Any, Any]:
         pass
     finally:
         return value, unit
+
+
+def add_property_value(
+    property_list: list, data: dict, name: str, prop_id: str | None = None
+) -> dict:
+    prop = get_property_by_name(data, name)
+    if prop:
+        if prop_id:
+            prop["propertyID"] = prop_id
+        value_reference = prop.pop("valueReference", None)
+        if value_reference:
+            value_reference = value_reference[0]
+            name = prop["value"].split("[")[0].strip()
+            term_code = re.search(r"\[([^\[\]]*)\]", prop["value"]).group(0)
+            prop["valueReference"] = {
+                "@type": "definedTerm",
+                "identifier": value_reference["@id"],
+                "name": name,
+                "termCode": term_code,
+            }
+            if term_code.split(":")[0] == "ENVO":
+                prop["valueReference"]["inDefinedTermSet"] = (
+                    "http://purl.obolibrary.org/obo/envo.owl"
+                )
+        property_list.append(prop)
 
 
 def extract_sample(data: dict, sample_id: str) -> dict:
@@ -284,27 +310,13 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
             }
         )
 
-    # Local environmental context - reuse PropertyValue from input
-    local_context_prop = get_property_by_name(data, "local environmental context")
-    if local_context_prop:
-        prop_copy = local_context_prop.copy()
-        prop_copy["propertyID"] = "https://w3id.org/mixs/0000013"
-        location_props.append(prop_copy)
-
-    # Depth information - reuse PropertyValue from input
-    depth_prop = get_property_by_name(data, "depth")
-    if depth_prop:
-        prop_copy = depth_prop.copy()
-        prop_copy["propertyID"] = "https://w3id.org/mixs/0000018"
-        location_props.append(prop_copy)
-
-    depth_max_prop = get_property_by_name(data, "depth-max")
-    if depth_max_prop:
-        location_props.append(depth_max_prop.copy())
-
-    depth_min_prop = get_property_by_name(data, "depth-min")
-    if depth_min_prop:
-        location_props.append(depth_min_prop.copy())
+    for name, prop_id in {
+        "local environmental context": "https://w3id.org/mixs/0000013",
+        "depth": "https://w3id.org/mixs/0000018",
+        "depth-max": None,
+        "depth-min": None,
+    }.items():
+        add_property_value(location_props, data, name, prop_id)
 
     # Geographic location combined
     if region and country:
@@ -320,12 +332,7 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     if location_props:
         location["additionalProperty"] = location_props
 
-    if (
-        location.get("name")
-        or location.get("geo")
-        or location.get("additionalProperty")
-    ):
-        action_dict["location"] = location
+    action_dict["location"] = location
 
     # Build instrument array
     instruments = []
@@ -472,25 +479,13 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     # Build additionalProperty array
     additional_props = []
 
-    # Checklist - reuse PropertyValue from input
-    checklist_prop = get_property_by_name(data, "checklist")
-    if checklist_prop:
-        additional_props.append(checklist_prop.copy())
-
-    # Protocol label - reuse PropertyValue from input
-    protocol_label_prop = get_property_by_name(data, "protocol label")
-    if protocol_label_prop:
-        additional_props.append(protocol_label_prop.copy())
-
-    # Sampling design label - reuse PropertyValue from input
-    sampling_design_prop = get_property_by_name(data, "sampling design label")
-    if sampling_design_prop:
-        additional_props.append(sampling_design_prop.copy())
-
-    # Target analysis type - reuse PropertyValue from input
-    target_analysis_prop = get_property_by_name(data, "target analysis type")
-    if target_analysis_prop:
-        additional_props.append(target_analysis_prop.copy())
+    for name in [
+        "checklist",
+        "protocol label",
+        "sampling design label",
+        "target analysis type",
+    ]:
+        add_property_value(additional_props, data, name)
 
     if additional_props:
         action_dict["additionalProperty"] = additional_props
