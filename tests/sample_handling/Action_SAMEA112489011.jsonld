@@ -98,7 +98,6 @@
       "@type": "PropertyValue",
       "name": "organism",
       "value": "marine metagenome [NCBI:txid408172]",
-      "ambiguityDescription": "weird, unclear if this is to be understood as the object or the result - intuition is to use object, if this was a penguin, I'd assume that the penguin was the object of sampling and not the result",
       "valueReference": {
         "@type": "DefinedTerm",
         "identifier": "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=408172",
