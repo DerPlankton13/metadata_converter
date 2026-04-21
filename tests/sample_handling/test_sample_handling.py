@@ -2,14 +2,18 @@ import json
 import unittest
 from unittest.mock import MagicMock, patch
 
-from metadata_converter.biosamples_handling import extract_sample, get_metadata, fuse_metadata
+from metadata_converter.biosamples_handling import (
+    extract_sample,
+    fuse_metadata,
+    get_metadata,
+)
 
 
 class TestSampleHandling(unittest.TestCase):
     @patch("metadata_converter.biosamples_handling.requests.get")
     def test_extract_sample_samea112489011(self, mock_get):
         # Load expected output
-        with open("tests/sample_handling/SAMEA112489011_Product.jsonld", "r") as f:
+        with open("tests/sample_handling/Product_SAMEA112489011.jsonld", "r") as f:
             expected = json.load(f)
 
         # Load mock data from SAMEA112489011_original.jsonld
