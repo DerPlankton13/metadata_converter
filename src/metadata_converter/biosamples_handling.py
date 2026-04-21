@@ -100,17 +100,17 @@ def add_property_value(
         if value_reference:
             value_reference = value_reference[0]
             name = prop["value"].split("[")[0].strip()
-            term_code = re.search(r"\[([^\[\]]*)\]", prop["value"]).group(0)
+            term_code = re.search(r"\[([^\[\]]*)\]", prop["value"]).group(1)
             prop["valueReference"] = {
-                "@type": "definedTerm",
+                "@type": "DefinedTerm",
                 "identifier": value_reference["@id"],
                 "name": name,
-                "termCode": term_code,
             }
             if term_code.split(":")[0] == "ENVO":
                 prop["valueReference"]["inDefinedTermSet"] = (
                     "http://purl.obolibrary.org/obo/envo.owl"
                 )
+                prop["valueReference"]["termCode"] = term_code
         property_list.append(prop)
 
 
@@ -283,34 +283,8 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     # Location additional properties
     location_props = []
 
-    # Broad-scale environmental context
-    broad_context = safe_extract_value(data, "broad-scale environmental context")
-    if broad_context:
-        prop = get_property_by_name(data, "broad-scale environmental context")
-        value_ref = (
-            prop.get("valueReference", [{}])[0] if prop.get("valueReference") else {}
-        )
-        location_props.append(
-            {
-                "@type": "PropertyValue",
-                "name": "broad-scale environmental context",
-                "value": broad_context,
-                "propertyID": "https://w3id.org/mixs/0000012",
-                "valueReference": {
-                    "@type": "DefinedTerm",
-                    "identifier": value_ref.get(
-                        "@id", "http://purl.obolibrary.org/obo/ENVO_00000304"
-                    ),
-                    "name": "shore",
-                    "inDefinedTermSet": "http://purl.obolibrary.org/obo/envo.owl",
-                    "termCode": "ENVO:00000304",
-                }
-                if value_ref
-                else None,
-            }
-        )
-
     for name, prop_id in {
+        "broad-scale environmental context": "https://w3id.org/mixs/0000012",
         "local environmental context": "https://w3id.org/mixs/0000013",
         "depth": "https://w3id.org/mixs/0000018",
         "depth-max": None,
@@ -367,48 +341,14 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     # Build object array
     objects = []
 
-    # Environmental medium
-    env_medium = safe_extract_value(data, "environmental medium")
-    if env_medium:
-        prop = get_property_by_name(data, "environmental medium")
-        obj = {
-            "@type": "PropertyValue",
-            "name": "environmental medium",
-            "value": env_medium,
-            "propertyID": "https://w3id.org/mixs/0000014",
-        }
-        if prop.get("valueReference"):
-            obj["valueReference"] = {
-                "@type": "DefinedTerm",
-                "identifier": prop["valueReference"][0].get(
-                    "@id", "http://purl.obolibrary.org/obo/ENVO_01001964"
-                ),
-                "inDefinedTermSet": "http://purl.obolibrary.org/obo/envo.owl",
-                "termCode": "ENVO:01001964",
-                "name": "seawater",
-            }
-        objects.append(obj)
+    for name, prop_id in {
+        "environmental medium": "https://w3id.org/mixs/0000014",
+        "organism": None,
+    }.items():
+        add_property_value(objects, data, name, prop_id)
 
-    # Organism
-    organism = safe_extract_value(data, "organism")
-    if organism:
-        prop = get_property_by_name(data, "organism")
-        obj = {
-            "@type": "PropertyValue",
-            "name": "organism",
-            "value": organism,
-            "ambiguityDescription": "weird, unclear if this is to be understood as the object or the result - intuition is to use object, if this was a penguin, I'd assume that the penguin was the object of sampling and not the result",
-        }
-        if prop.get("valueReference"):
-            obj["valueReference"] = {
-                "@type": "DefinedTerm",
-                "identifier": prop["valueReference"][0].get(
-                    "@id",
-                    "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=408172",
-                ),
-                "name": "marine metagenome",
-            }
-        objects.append(obj)
+    # Todo clarify organism
+    # weird, unclear if this is to be understood as the object or the result - intuition is to use object, if this was a penguin, I'd assume that the penguin was the object of sampling and not the result
 
     if objects:
         action_dict["object"] = objects
