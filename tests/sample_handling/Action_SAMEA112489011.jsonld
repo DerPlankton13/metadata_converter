@@ -113,7 +113,7 @@
       {
         "@type": "HowToStep",
         "name": "filtration",
-        "text": "filtration volume: 15 L, filtration time: 2.5 min"
+        "text": "filtration volume: 2.5 L, filtration time: 15.0 min"
       },
       {
         "@type": "HowToStep",
