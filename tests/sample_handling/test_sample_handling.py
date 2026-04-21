@@ -6,7 +6,7 @@ from metadata_converter.biosamples_handling import extract_sample, get_metadata,
 
 
 class TestSampleHandling(unittest.TestCase):
-    @patch("metadata_converter.sample_handling.requests.get")
+    @patch("metadata_converter.biosamples_handling.requests.get")
     def test_extract_sample_samea112489011(self, mock_get):
         # Load expected output
         with open("tests/sample_handling/SAMEA112489011_Product.jsonld", "r") as f:
