@@ -4,7 +4,11 @@ from typing import Any
 import requests
 
 from metadata_converter.schema_org_models.custom_models import SRA, BioSample
-from metadata_converter.schema_org_models.schemaorg_models import PropertyValue
+from metadata_converter.schema_org_models.schemaorg_models import (
+    Action,
+    Product,
+    PropertyValue,
+)
 
 
 def fetch_metadata(url: str) -> dict:
@@ -436,4 +440,11 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
 if __name__ == "__main__":
     sample_id = "SAMEA112489011"
     data = get_metadata(sample_id)
-    extract_sample(data, sample_id)
+    product_dict = extract_sample(data, sample_id)
+    product_dict.pop("@context")
+    product = Product(**product_dict)
+    action_dict = extract_sampling_action(data, sample_id)
+    action_dict.pop("@context")
+    action = Action(**action_dict)
+    print(product)
+    print(action)
