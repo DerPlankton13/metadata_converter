@@ -1,18 +1,15 @@
 from pathlib import Path
-from typing import Any
-
-import pandas as pd
 
 from metadata_converter.extract import extract_data
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.parse import parse_cli
+from metadata_converter.preprocess_datahub import preprocess_datahub
 from metadata_converter.transform import (
     add_id,
     clean_dataframe,
     convert_to_long,
     extract_schemas,
 )
-from transform_helpers import create_full_names, split_field
 
 
 def main():
@@ -28,63 +25,7 @@ def main():
         data = convert_to_long(data)
         data_dict[name] = data
 
-    # combine data for the specific types
-    author_name = "author"
-    dataset_name = "dataset"
-    analysis_name = "analysis"
-    sample_name = "sample"
-    # ====== handle authors ======
-
-    data_dict[author_name] = create_full_names(data_dict[author_name])
-
-    # ====== handle main Dataset ======
-    # add the people as creators
-    p = data_dict[author_name]
-    creator_ids = p[(p.header == "author:is-dataset-author") & (p.value == 1)].id
-    creators = pd.DataFrame(
-        [
-            p.loc[(p.id == id) & (p.header == "@id")].value.values[0]
-            for id in creator_ids
-        ],
-        columns=["value"],
-    )
-    creators["header"] = "creator_id"
-    creators["id"] = "0"
-    data_dict[dataset_name] = pd.concat(
-        [data_dict[dataset_name], creators], ignore_index=True
-    )
-    data_dict[dataset_name] = split_field(data_dict[dataset_name], "dataset:keywords")
-
-    # add agents to analysis
-    data_dict[analysis_name] = split_field(
-        data_dict[analysis_name], "analysis:author-pid"
-    )
-    p_wide = p.pivot(index="id", columns="header", values="value")
-
-    a = data_dict[analysis_name]
-    agents = a.loc[a.header == "analysis:author-pid"]
-    agents["header"] = "agent_id"
-    agents["value"] = agents["value"].apply(
-        lambda v: p_wide.loc[p_wide["author:pid"] == v, "@id"].values[0]
-    )
-
-    # add samples as objects
-    s_wide = data_dict[sample_name].pivot(index="id", columns="header", values="value")
-    samples = (
-        a.loc[a.header == "analysis:pid", ["id", "value"]]
-        .merge(
-            s_wide[["sample:analysis-pid", "@id"]],
-            left_on="value",
-            right_on="sample:analysis-pid",
-        )
-        .drop(columns="value")
-        .rename(columns={"@id": "value"})
-        .assign(header="sample_id")[["id", "header", "value"]]
-    )
-
-    data_dict[analysis_name] = pd.concat(
-        [data_dict[analysis_name], agents, samples], ignore_index=True
-    )
+    data_dict = preprocess_datahub(data_dict)
 
     # create the schemata
     results = {}
