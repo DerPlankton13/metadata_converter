@@ -25,7 +25,7 @@ class SchemaOrgBase(BaseModel):
     """
 
     model_config = ConfigDict(
-        extra="forbid",
+        extra="allow",
         populate_by_name=True,
         defer_build=True,
         validate_assignment=True,
