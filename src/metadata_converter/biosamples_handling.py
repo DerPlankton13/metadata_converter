@@ -242,7 +242,7 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
         ],
         "@id": f"Action_{sample_id}.jsonld",
         "name": f"Sampling process for sample {sample_id}",
-        "result": f"Product_{sample_id}.jsonld",
+        "result": {"@type": "Product", "@id": f"Product_{sample_id}.jsonld"},
     }
 
     # Add startTime from collection date
