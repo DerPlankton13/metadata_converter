@@ -9,7 +9,10 @@
   ],
   "@id": "Action_SAMEA112489011.jsonld",
   "name": "Sampling process for sample SAMEA112489011",
-  "result": "Product_SAMEA112489011.jsonld",
+  "result": {
+    "@type": "Product",
+    "@id": "Product_SAMEA112489011.jsonld"
+  },
   "startTime": "2023-04-13T17:21:00Z",
   "location": {
     "@type": "Place",
