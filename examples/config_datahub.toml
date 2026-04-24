@@ -59,7 +59,7 @@ name = "analysis:title"
 identifier = "analysis:pid"
 agent.type = "Person"
 agent.identifier = "agent_id"
-object.type = "Thing"
+object.type = "Product"
 object.identifier = "sample_id"
 
 [mapping.sample]
