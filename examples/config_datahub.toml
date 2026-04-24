@@ -58,9 +58,9 @@ id = "@id"
 name = "analysis:title"
 identifier = "analysis:pid"
 agent.type = "Person"
-agent.identifier = "agent_id"
+agent.id = "agent_id"
 object.type = "Product"
-object.identifier = "sample_id"
+object.id = "sample_id"
 
 [mapping.sample]
 type = "Product"
