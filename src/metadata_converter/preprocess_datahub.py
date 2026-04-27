@@ -17,6 +17,27 @@ def wide(df: pd.DataFrame) -> pd.DataFrame:
     return df.pivot(index="id", columns="header", values="value")
 
 
+def get_one_to_many_id_mapping(
+    addend: pd.DataFrame,
+    source: pd.DataFrame,
+    addend_header: str,
+    source_header: str,
+    id_header: str,
+) -> pd.DataFrame:
+    ids = (
+        addend.loc[addend.header == addend_header, ["id", "value"]]
+        .merge(
+            source[[source_header, "@id"]],
+            left_on="value",
+            right_on=source_header,
+        )
+        .drop(columns="value")
+        .rename(columns={"@id": "value"})
+        .assign(header=id_header)[["id", "header", "value"]]
+    )
+    return ids
+
+
 def preprocess_datahub(data_dict: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
     # hardcode the sheet names for now
     author_sheet = "author"
