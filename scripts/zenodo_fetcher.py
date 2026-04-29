@@ -25,9 +25,8 @@ PAGE_SIZE = 25  # 25 is the maximum allowed without authentication; use authenti
 REQUEST_DELAY = 0.5  # seconds between requests (be polite to the API)
 
 
-def get_community_record_ids(token: str | None) -> list[str]:
+def get_community_record_ids(session: requests.Session) -> list[str]:
     """Return all record IDs belonging to the BIOcean5D community."""
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
     params = {
         "communities": COMMUNITY_ID,
         "size": PAGE_SIZE,
@@ -36,9 +35,7 @@ def get_community_record_ids(token: str | None) -> list[str]:
     }
 
     # First request to get total and first page of results
-    response = requests.get(
-        RECORDS_SEARCH_URL, params=params, headers=headers, timeout=30
-    )
+    response = session.get(RECORDS_SEARCH_URL, params=params, timeout=30)
     response.raise_for_status()
     data = response.json()
 
@@ -52,9 +49,7 @@ def get_community_record_ids(token: str | None) -> list[str]:
         params["page"] += 1
         time.sleep(REQUEST_DELAY)
 
-        response = requests.get(
-            RECORDS_SEARCH_URL, params=params, headers=headers, timeout=30
-        )
+        response = session.get(RECORDS_SEARCH_URL, params=params, timeout=30)
         response.raise_for_status()
         data = response.json()
 
@@ -64,11 +59,10 @@ def get_community_record_ids(token: str | None) -> list[str]:
     return record_ids
 
 
-def fetch_jsonld(record_id: str, token: str | None) -> dict:
+def fetch_jsonld(session: requests.Session, record_id: str) -> dict:
     """Fetch the JSON-LD export for a single record."""
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
     url = JSONLD_EXPORT_URL.format(record_id=record_id)
-    response = requests.get(url, headers=headers, timeout=30)
+    response = session.get(url, timeout=30)
     response.raise_for_status()
     return response.json()
 
@@ -93,8 +87,13 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     print(f"Output directory: {output_dir.resolve()}\n")
 
+    session = requests.Session()
+    session.headers.update({"User-Agent": "BIOcean5D-metadata-harvester/1.0"})
+    if args.token:
+        session.headers.update({"Authorization": f"Bearer {args.token}"})
+
     # Step 1: collect all record IDs
-    record_ids = get_community_record_ids(args.token)
+    record_ids = get_community_record_ids(session)
 
     # Step 2: fetch JSON-LD for each record
     success, failed = 0, []
@@ -107,7 +106,7 @@ def main():
             continue
 
         try:
-            jsonld = fetch_jsonld(record_id, args.token)
+            jsonld = fetch_jsonld(session, record_id)
             out_path.write_text(
                 json.dumps(jsonld, indent=2, ensure_ascii=False), encoding="utf-8"
             )
