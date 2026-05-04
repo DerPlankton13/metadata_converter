@@ -7,10 +7,12 @@ from metadata_converter.biosamples_handling import (
     extract_sampling_action,
     get_metadata,
 )
+from metadata_converter.flat_data.transform_helpers import (
+    create_full_names,
+    split_field,
+)
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import Action, Product
-from metadata_converter.transform import convert_to_long
-from metadata_converter.transform_helpers import create_full_names, split_field
 
 
 def wide(df: pd.DataFrame) -> pd.DataFrame:

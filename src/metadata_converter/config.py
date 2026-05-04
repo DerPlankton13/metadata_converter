@@ -1,9 +1,9 @@
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from metadata_converter.cleaning_plugin import CleaningPlugin, load_plugins
+from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin, load_plugins
 
 
 class ConfigError(Exception):
