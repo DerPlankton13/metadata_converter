@@ -1,15 +1,15 @@
 from pathlib import Path
 
 from metadata_converter.extract import extract_data
-from metadata_converter.load import load_to_jsonld
-from metadata_converter.parse import parse_cli
-from metadata_converter.preprocess_datahub import preprocess_datahub
-from metadata_converter.transform import (
+from metadata_converter.flat_data.preprocess_datahub import preprocess_datahub
+from metadata_converter.flat_data.transform import (
     add_id,
     clean_dataframe,
     convert_to_long,
     extract_schemas,
 )
+from metadata_converter.load import load_to_jsonld
+from metadata_converter.parse import parse_cli
 
 
 def main():
