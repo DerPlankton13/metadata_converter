@@ -94,7 +94,7 @@ class Record(BaseModel):
     Parameters
     ----------
     doi :
-        Canonical DOI in lowercase, or ``None`` if unavailable.
+        Canonical DOI in lowercase.
     title :
         Record title as returned by the source API.
     publisher :
@@ -106,7 +106,7 @@ class Record(BaseModel):
         (e.g. Zenodo record ID, SEANOE docId).
     """
 
-    doi: str | None
+    doi: str
     title: str
     publisher: str
     url: str
@@ -169,7 +169,9 @@ def _post(
     return session.post(url, **kwargs)
 
 
-def _check_response_size(response: requests.Response, config: ApiExtractorConfig) -> None:
+def _check_response_size(
+    response: requests.Response, config: ApiExtractorConfig
+) -> None:
     """Raise `ValueError` if the response body exceeds ``max_response_mb``."""
     max_bytes = int(config.max_response_mb * 1024 * 1024)
     # Check Content-Length header first (not always present, but cheap)
@@ -220,7 +222,9 @@ def _to_es_query(query: Query) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _query_zenodo(config: ApiExtractorConfig, session: requests.Session) -> list[Record]:
+def _query_zenodo(
+    config: ApiExtractorConfig, session: requests.Session
+) -> list[Record]:
     """Query handler for the Zenodo REST API."""
     params: dict = {
         "q": _to_es_query(config.query),
@@ -293,7 +297,9 @@ def _query_datacite(
     return records
 
 
-def _query_seanoe(config: ApiExtractorConfig, session: requests.Session) -> list[Record]:
+def _query_seanoe(
+    config: ApiExtractorConfig, session: requests.Session
+) -> list[Record]:
     """
     Query handler for the SEANOE internal search API.
 
