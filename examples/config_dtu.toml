@@ -1,0 +1,15 @@
+workflow_type = "metadata_collector"
+
+[extractor]
+type = "api"
+api_url = "https://api.figshare.com"   # matches handler substring "api.figshare.com"
+fetch_strategy = "html_jsonld"
+page_size = 25
+request_delay = 0.5
+
+[extractor.query]
+field = "search_for"
+value = "BIOcean5D"
+
+[output]
+output_path = "output/dtu_figshare"
