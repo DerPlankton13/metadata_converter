@@ -1,7 +1,16 @@
+import tomllib
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    TypeAdapter,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin, load_plugins
 from metadata_converter.linked_data.query_models import Query
@@ -137,3 +146,29 @@ class MetadataCollectorConfig(BaseModel):
     workflow_type: Literal["metadata_collector"] = "metadata_collector"
     extractor: ApiExtractorConfig
     output: OutputConfig
+
+
+Config = Annotated[
+    Union[FlatDataConfig, MetadataCollectorConfig],
+    Field(discriminator="workflow_type"),
+]
+
+
+def load_config(path: str) -> Config:
+    try:
+        with open(path, "rb") as f:
+            config_file = tomllib.load(f)
+            config = TypeAdapter(Config).validate_python(config_file)
+    except FileNotFoundError:
+        print(f"Error: config file not found: {path}")
+        raise SystemExit(1)
+    except ValidationError as e:
+        print(f"Error: invalid config:\n{e}")
+        print(
+            e.errors()[0]["msg"],
+            e.errors()[0]["loc"],
+            "but input was:",
+            e.errors()[0]["input"],
+        )
+        raise SystemExit(1)
+    return config
