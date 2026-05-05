@@ -143,7 +143,7 @@ def _checked(fn):
             url,
             config,
             allow_redirects=config.max_redirects > 0,
-            timeout=30,
+            timeout=config.response_timeout,
             **kwargs,
         )
         response.raise_for_status()
