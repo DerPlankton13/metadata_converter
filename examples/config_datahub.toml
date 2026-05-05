@@ -1,12 +1,13 @@
-[input]
-file_path = "/home/japlan001/Nextcloud/B5D_Datahub/input/Dataset_Alien_Tara4TREC_Biocean5D_version_1_export.xlsx"
+workflow_type = "flat_data"
 
-[input.extractor]
+[extractor]
 type = "excel"
+file_path = "/home/japlan001/Nextcloud/B5D_Datahub/input/Dataset_Alien_Tara4TREC_Biocean5D_version_1_export.xlsx"
 sheet_name = ["dataset", "author", "analysis", "sample", "file"]
 header = 0
 skiprows = [1, 2]
-[input.cleaning]
+
+[cleaning]
 strip_header_whitespace = true
 strip_cell_whitespace = true
 sentinels_to_na = false

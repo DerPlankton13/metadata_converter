@@ -1,12 +1,13 @@
-[input]
-file_path = "examples/ReportingContinuous_WP1.xlsx"
+workflow_type = "flat_data"
 
-[input.extractor]
+[extractor]
 type = "excel"
+file_path = "examples/ReportingContinuous_WP1.xlsx"
 sheet_name = "Publications"
 header = 0
 skiprows = [0, 1, 2, 3, 5, 6]
-[input.cleaning]
+
+[cleaning]
 strip_header_whitespace = true
 strip_cell_whitespace = true
 sentinels_to_na = true
