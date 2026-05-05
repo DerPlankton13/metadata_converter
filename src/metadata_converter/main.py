@@ -1,5 +1,4 @@
-from pathlib import Path
-from typing import Any
+import json
 
 from metadata_converter.config import (
     FlatDataConfig,
@@ -46,19 +45,54 @@ def main():
             load_to_jsonld(schema, output_path=config.output.output_path)
 
     elif isinstance(config, MetadataCollectorConfig):
+        from pydantic import ValidationError
+
+        def print_validation_error(error: ValidationError):
+            # calculate the depth of the error
+            error_list = list(
+                map(lambda e: {**e, "depth": len(e["loc"])}, error.errors())
+            )
+
+            # use the deepest errors, as they contain the most essential information
+            max_depth = max(e["depth"] for e in error_list)
+            deepest_errors = [e for e in error_list if e["depth"] == max_depth]
+
+            # assumes that the deepest errors all correspond to the same input
+            # from the loc structure, the first entry should be the parent structure, where it failed
+            # and the second to entry the failed property
+            print(
+                f"Validation error in '{deepest_errors[0]['loc'][0]}' for property: {deepest_errors[0]['loc'][-2]}"
+            )
+            print("The following errors occurred:")
+            for e in deepest_errors:
+                print(" - ", e["msg"])
+            print(f"The input was: {deepest_errors[0]['input']}")
+
+        results: dict[str, SchemaOrgBase] = {}
+        raw_output_path = config.output.output_path / "raw"
+        raw_output_path.mkdir(parents=True, exist_ok=True)
         # Extract Step
         records = query_source(config.extractor)
-        results: dict[str, SchemaOrgBase] = {}
+        print(raw_output_path)
         for record in records:
             jsonld = fetch_jsonld(record, config.extractor)
 
+            # write raw jsonfiles
+            output_path = raw_output_path / f"{record.source_id}.jsonld"
+            print(output_path)
+            output_path.write_text(
+                json.dumps(jsonld, indent=2, ensure_ascii=False, default=str),
+                encoding="utf-8",
+            )
+
             # Transform Step
-            # currently just check that matching schem.org model can be generated
+            # currently just check that matching schema.org model can be generated
             try:
-                results[record.doi] = get_schema(jsonld["@type"])(**jsonld)
+                schema_type = jsonld["@type"].split("/")[-1]
+                results[record.doi] = get_schema(schema_type)(**jsonld)
             except Exception as e:
                 print("Failed to extract schema for DOI:", record.doi)
-                print(e)
+                print_validation_error(e)
 
         # Todo: Standardise files
         # Todo: uplift the data
