@@ -2,14 +2,14 @@ from pathlib import Path
 
 import pandas as pd
 
-from metadata_converter.biosamples_handling import (
-    extract_sample,
-    extract_sampling_action,
-    get_metadata,
-)
 from metadata_converter.flat_data.transform_helpers import (
     create_full_names,
     split_field,
+)
+from metadata_converter.linked_data.biosamples_handling import (
+    extract_sample,
+    extract_sampling_action,
+    get_metadata,
 )
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import Action, Product
