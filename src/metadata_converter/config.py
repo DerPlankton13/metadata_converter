@@ -18,11 +18,11 @@ from metadata_converter.linked_data.query_models import Query
 
 class ExtractorConfigBase(BaseModel):
     type: str
+    file_path: Path
 
 
 class ExcelExtractorConfig(ExtractorConfigBase):
     type: Literal["excel"]
-    file_path: Path
     sheet_name: str | list[str]
     header: int | None = None
     skiprows: list[int] | None = None
@@ -30,7 +30,6 @@ class ExcelExtractorConfig(ExtractorConfigBase):
 
 class CsvExtractorConfig(ExtractorConfigBase):
     type: Literal["csv"]
-    file_path: Path
     skipinitialspace: bool | None = None
 
 
@@ -88,6 +87,7 @@ class ApiExtractorConfig(ExtractorConfigBase):
     request_delay: float = 0.5
     user_agent: str = "metadata-collector/1.0"
     max_redirects: int = 0
+    response_timeout: int = 120
     max_response_mb: float = 10.0
 
     @field_validator("api_url", "export_url_template", mode="before")
