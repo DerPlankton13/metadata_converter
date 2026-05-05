@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 from deepdiff import DeepDiff
 
-from metadata_converter.biosamples_handling import (
+from metadata_converter.linked_data.biosamples_handling import (
     extract_sample,
     extract_sampling_action,
     fuse_metadata,
