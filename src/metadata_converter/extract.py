@@ -3,7 +3,7 @@ from typing import Callable
 
 import pandas as pd
 
-from metadata_converter.config import Config, ConfigError, ExtractorConfigBase
+from metadata_converter.config import Config, ExtractorConfigBase
 
 ExtractorFn = Callable[[Path, ExtractorConfigBase], pd.DataFrame]
 
