@@ -38,7 +38,7 @@ TabularExtractorConfig = Annotated[
 ]
 
 
-class ApiExtractorConfig(ExtractorConfigBase):
+class ApiExtractorConfig(BaseModel):
     """
     Configuration for a single `query_source` or `fetch_jsonld` call.
 
@@ -78,7 +78,6 @@ class ApiExtractorConfig(ExtractorConfigBase):
         exceeding this limit raise `ValueError`. Defaults to ``10.0``.
     """
 
-    type: Literal["api"]
     api_url: str
     query: Query
     fetch_strategy: Literal["export_endpoint", "html_jsonld"]
