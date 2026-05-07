@@ -93,29 +93,31 @@ def safe_extract_value_with_unit(data: dict, name: str) -> tuple[Any, Any]:
         return value, unit
 
 
-def add_property_value(
-    property_list: list, data: dict, name: str, prop_id: str | None = None
-) -> dict:
+def safe_add_property_value(
+    data: dict, name: str, prop_id: str | None = None
+) -> dict | None:
     prop = get_property_by_name(data, name)
-    if prop:
-        if prop_id:
-            prop["propertyID"] = prop_id
-        value_reference = prop.pop("valueReference", None)
-        if value_reference:
-            value_reference = value_reference[0]
-            name = prop["value"].split("[")[0].strip()
-            term_code = re.search(r"\[([^\[\]]*)\]", prop["value"]).group(1)
-            prop["valueReference"] = {
-                "@type": "DefinedTerm",
-                "identifier": value_reference["@id"],
-                "name": name,
-            }
-            if term_code.split(":")[0] == "ENVO":
-                prop["valueReference"]["inDefinedTermSet"] = (
-                    "http://purl.obolibrary.org/obo/envo.owl"
-                )
-                prop["valueReference"]["termCode"] = term_code
-        property_list.append(prop)
+    if not prop:
+        return None
+
+    if prop_id:
+        prop["propertyID"] = prop_id
+    value_reference = prop.pop("valueReference", None)
+    if value_reference:
+        value_reference = value_reference[0]
+        name = prop["value"].split("[")[0].strip()
+        term_code = re.search(r"\[([^\[\]]*)\]", prop["value"]).group(1)
+        prop["valueReference"] = {
+            "@type": "DefinedTerm",
+            "identifier": value_reference["@id"],
+            "name": name,
+        }
+        if term_code.split(":")[0] == "ENVO":
+            prop["valueReference"]["inDefinedTermSet"] = (
+                "https://purl.obolibrary.org/obo/envo.owl"
+            )
+            prop["valueReference"]["termCode"] = term_code
+    return prop
 
 
 def extract_sample(data: dict, sample_id: str) -> dict:
@@ -129,22 +131,12 @@ def extract_sample(data: dict, sample_id: str) -> dict:
             SRA(value=sra_accession).model_dump(by_alias=True, exclude_none=True)
         )
 
-    sampling_design = safe_extract_value(data, "sampling design label")
-    if sampling_design:
-        identifier_list.append(
-            PropertyValue(
-                name="sampling design label",
-                propertyID="sampling design label",
-                value=sampling_design,
-            ).model_dump(by_alias=True, exclude_none=True)
-        )
-
     sample_dict = {
-        "@context": {"@vocab": "http://schema.org"},
+        "@context": {"@vocab": "https://schema.org"},
         "@type": "Product",
         "additionalType": [
             "sample",
-            "http://purl.obolibrary.org/obo/OBI_0000747",
+            "https://purl.obolibrary.org/obo/OBI_0000747",
         ],
         "@id": f"Product_{sample_id}.jsonld",
         "identifier": identifier_list,
@@ -158,11 +150,8 @@ def extract_sample(data: dict, sample_id: str) -> dict:
     if description:
         sample_dict["description"] = description
 
-    if data["mainEntity"].get("sameAs"):
-        sample_dict["subjectOf"] = data["mainEntity"]["sameAs"]
-
     if data["mainEntity"].get("url"):
-        sample_dict["url"] = data["mainEntity"]["url"]
+        sample_dict["url"] = "https://identifiers.org/biosample/SAMEA112489011"
 
     production_date = safe_extract_value(data, "collection date")
     if production_date:
@@ -194,25 +183,55 @@ def extract_sample(data: dict, sample_id: str) -> dict:
             {"@type": "ResearchProject", "name": project_name}
         )
 
-    keywords = [
-        k
-        for k in [
-            safe_extract_value(data, "organism"),
-            safe_extract_value(data, "target analysis type"),
-            safe_extract_value(data, "local environmental context"),
-        ]
-        if k is not None
-    ]
+    keywords = []
+    organism = safe_extract_value(data, "organism")
+    if organism:
+        prop = get_property_by_name(data, "organism")
+        if prop.get("valueReference"):
+            value_reference = prop["valueReference"][0]
+            name = organism.split("[")[0].strip()
+            term_code = re.search(r"\[([^\[\]]*)\]", organism).group(1)
+            defined_term = {
+                "@type": "DefinedTerm",
+                "url": value_reference["@id"].replace("http://", "https://"),
+                "name": name,
+                "termCode": term_code.split(":")[1].replace("txid", ""),
+                "inDefinedTermSet": "https://www.ncbi.nlm.nih.gov/Taxonomy",
+            }
+            keywords.append(defined_term)
+        else:
+            keywords.append(organism)
+    target = safe_extract_value(data, "target analysis type")
+    if target:
+        keywords.append(target)
+    local = safe_extract_value(data, "local environmental context")
+    if local:
+        keywords.append(local)
     if keywords:
         sample_dict["keywords"] = keywords
 
     checklist = safe_extract_value(data, "checklist")
-    if checklist:
-        sample_dict["additionalProperty"] = {
-            "@type": "PropertyValue",
-            "name": "checklist",
-            "value": checklist,
-        }
+    target_analysis = safe_extract_value(data, "target analysis type")
+    if checklist or target_analysis:
+        sample_dict["additionalProperty"] = []
+        if checklist:
+            sample_dict["additionalProperty"].append(
+                {
+                    "@type": "PropertyValue",
+                    "name": "checklist",
+                    "value": checklist,
+                    "description": "There is a minimum amount of information required during ENA sample registration and all samples must conform to a defined checklist of expected metadata values. The most suitable checklist for sample registration depends on the type of the sample. (https://www.ebi.ac.uk/ena/browser/checklists)",
+                    "url": "https://www.ebi.ac.uk/ena/browser/view/ERC000024",
+                }
+            )
+        if target_analysis:
+            sample_dict["additionalProperty"].append(
+                {
+                    "@type": "PropertyValue",
+                    "name": "target analysis type",
+                    "value": target_analysis,
+                }
+            )
 
     return sample_dict
 
@@ -234,11 +253,11 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
         A dictionary representing the Action in JSON-LD format
     """
     action_dict = {
-        "@context": {"@vocab": "http://schema.org"},
+        "@context": {"@vocab": "https://schema.org"},
         "@type": "Action",
         "additionalType": [
             "sampling process",
-            "http://purl.obolibrary.org/obo/OBI_0000744",
+            "https://purl.obolibrary.org/obo/OBI_0000744",
         ],
         "@id": f"Action_{sample_id}.jsonld",
         "name": f"Sampling process for sample {sample_id}",
@@ -250,12 +269,12 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     if collection_date:
         action_dict["startTime"] = collection_date
 
-    # Build location object
+    # Build the schema.org location Property as type Place
     location = {
         "@type": "Place",
     }
 
-    # Location name from region and country
+    # create name Property if possible
     region = safe_extract_value(data, "geographic location (region and locality)")
     country = safe_extract_value(data, "geographic location (country and/or sea)")
     if region and country:
@@ -265,7 +284,7 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     elif country:
         location["name"] = country
 
-    # Geo coordinates
+    # adds geo Property to location as type GeoCoordinates if values are provided
     latitude, lat_unit = safe_extract_value_with_unit(
         data, "geographic location (latitude)"
     )
@@ -284,9 +303,10 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
             geo["elevation"] = f"{elevation} {elev_unit}"
         location["geo"] = geo
 
-    # Location additional properties
+    # We can add additionalProperty to location
     location_props = []
 
+    # Uplift the properties by adding their MIxS IDs if applicable
     for name, prop_id in {
         "broad-scale environmental context": "https://w3id.org/mixs/0000012",
         "local environmental context": "https://w3id.org/mixs/0000013",
@@ -294,7 +314,7 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
         "depth-max": None,
         "depth-min": None,
     }.items():
-        add_property_value(location_props, data, name, prop_id)
+        safe_add_property_value(location_props, data, name, prop_id)
 
     # Geographic location combined
     if region and country:
@@ -306,6 +326,9 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
                 "value": f"{country}: , {region}",
             }
         )
+
+    # Sampling design label
+    safe_add_property_value(location_props, data, "sampling design label", None)
 
     if location_props:
         location["additionalProperty"] = location_props
@@ -349,7 +372,7 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
         "environmental medium": "https://w3id.org/mixs/0000014",
         "organism": None,
     }.items():
-        add_property_value(objects, data, name, prop_id)
+        safe_add_property_value(objects, data, name, prop_id)
 
     # Todo clarify organism
     # weird, unclear if this is to be understood as the object or the result - intuition is to use object, if this was a penguin, I'd assume that the penguin was the object of sampling and not the result
@@ -402,7 +425,8 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     if steps:
         action_dict["actionProcess"] = {
             "@type": "HowTo",
-            "name": "Sampling ...",
+            "name": f"Submitter-declared sampling steps for sample {sample_id}.",
+            "description": "The steps in this object are those that have been provided by the submitter of this metadata. They are not ordered and may be incomplete. Please refer to the associated publication and or documentation for more authoritative information.",
             "step": steps,
         }
 
@@ -426,10 +450,8 @@ def extract_sampling_action(data: dict, sample_id: str) -> dict:
     for name in [
         "checklist",
         "protocol label",
-        "sampling design label",
-        "target analysis type",
     ]:
-        add_property_value(additional_props, data, name)
+        safe_add_property_value(additional_props, data, name)
 
     if additional_props:
         action_dict["additionalProperty"] = additional_props
