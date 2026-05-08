@@ -130,7 +130,7 @@
       {
         "@type": "HowToStep",
         "name": "size fractionation",
-        "text": "size fractionation was performed with a lower threshold of 3 µm and an upper threshold of 20 µm"
+        "text": "size fractionation was performed with: lower threshold of 3 µm, upper threshold of 20 µm"
       }
     ]
   },
