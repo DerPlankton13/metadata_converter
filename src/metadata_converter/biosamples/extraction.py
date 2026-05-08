@@ -2,7 +2,7 @@ import re
 from enum import Enum
 from typing import Any, Literal
 
-from metadata_converter.biosamples.schemas import SRA, BioSample
+from metadata_converter.biosamples.schemas import SRA, BioSample, Checklist
 
 
 def get_property(sample_record: dict, prop_name: str) -> dict | None:
@@ -47,8 +47,7 @@ def get_value_with_unit(
         unit = prop["unitText"]
     except (Exception, KeyError, IndexError):
         pass
-    finally:
-        return value, unit
+    return value, unit
 
 
 class Terminology(Enum):
@@ -94,7 +93,7 @@ def build_defined_term(value: str) -> dict[str, str] | None:
     if not terminology:
         print(
             f"Could not identify a known terminology from {value}. Available terminologies are: ",
-            ",".join([t.name for t in Terminology]),
+            ", ".join([t.name for t in Terminology]),
         )
         return None
 
@@ -103,10 +102,10 @@ def build_defined_term(value: str) -> dict[str, str] | None:
         "@type": "DefinedTerm",
         "name": name,
         "termCode": term_code,
-        "url": terminology.value[0],
+        "url": terminology.url,
     }
-    if terminology.value[1]:
-        defined_term_dict["inDefinedTermSet"] = terminology.value[1]
+    if terminology.defined_termset:
+        defined_term_dict["inDefinedTermSet"] = terminology.defined_termset
     return defined_term_dict
 
 
@@ -132,26 +131,27 @@ class SampleExtractor:
     def __init__(self, sample_record: dict, sample_id: str):
         self.sample_record = sample_record
         self.sample_id = sample_id
-        self._used_props: list[str] = []
-        self.product_dict: dict[str, str] = {}
-        self.action_dict: dict[str, str] = {}
+        self._used_props: set[str] = set()
 
     def _get_prop(self, prop_name: str) -> dict:
-        self._used_props.append(prop_name)
+        self._used_props.add(prop_name)
         return get_property(self.sample_record, prop_name)
 
     def _get_prop_value(self, prop_name: str) -> str | None:
+        self._used_props.add(prop_name)
         return get_value(self.sample_record, prop_name)
 
     def _get_prop_value_with_unit(
         self, prop_name: str
     ) -> tuple[str | None, str | Literal["Unit unknown"]]:
+        self._used_props.add(prop_name)
         return get_value_with_unit(self.sample_record, prop_name)
 
-    def _append_built_prop(self, prop_list: list, prop_name: str, prop_id=None) -> None:
-        prop = build_property(self.sample_record, prop_name, prop_id)
-        if prop:
-            prop_list.append(prop)
+    def _build_prop(
+        self, prop_name: str, prop_id: str | None = None
+    ) -> dict[str, str] | None:
+        self._used_props.add(prop_name)
+        return build_property(self.sample_record, prop_name, prop_id)
 
     def _get_base_value(self, name: str) -> str:
         return self.sample_record["mainEntity"].get(name)
@@ -165,8 +165,7 @@ class SampleExtractor:
                     by_alias=True, exclude_none=True
                 ),
             ]
-            sra_accession = self._get_prop_value("SRA accession")
-            if sra_accession:
+            if sra_accession := self._get_prop_value("SRA accession"):
                 identifier_list.append(
                     SRA(value=sra_accession).model_dump(
                         by_alias=True, exclude_none=True
@@ -181,8 +180,7 @@ class SampleExtractor:
                     "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
                 }
             ]
-            project_name = self._get_prop_value("project name")
-            if project_name:
+            if project_name := self._get_prop_value("project name"):
                 manufacturer.append({"@type": "ResearchProject", "name": project_name})
             return manufacturer if len(manufacturer) > 1 else manufacturer[0]
 
@@ -190,37 +188,33 @@ class SampleExtractor:
             keywords = []
             organism = self._get_prop_value("organism")
             if organism:
-                defined_term = build_defined_term(organism)
-                if defined_term:
+                if defined_term := build_defined_term(organism):
                     keywords.append(defined_term)
                 else:
                     keywords.append(organism)
-            target = self._get_prop_value("target analysis type")
-            if target:
+            if target := self._get_prop_value("target analysis type"):
                 keywords.append(target)
-            local = self._get_prop_value("local environmental context")
-            if local:
+            if local := self._get_prop_value("local environmental context"):
                 keywords.append(local)
             return keywords if len(keywords) > 0 else None
 
-        def build_additional_property() -> list[dict] | None:
+        def build_additional_property() -> list[dict[str, Any]] | dict[str, Any] | None:
             additional_property = []
-            checklist = self._get_prop_value("checklist")
-            target_analysis = self._get_prop("target analysis type")
-            if checklist or target_analysis:
-                if checklist:
-                    additional_property.append(
-                        {
-                            "@type": "PropertyValue",
-                            "name": "checklist",
-                            "value": checklist,
-                            "description": "There is a minimum amount of information required during ENA sample registration and all samples must conform to a defined checklist of expected metadata values. The most suitable checklist for sample registration depends on the type of the sample. (https://www.ebi.ac.uk/ena/browser/checklists)",
-                            "url": f"https://www.ebi.ac.uk/ena/browser/view/{checklist}",
-                        }
+            if checklist := self._get_prop_value("checklist"):
+                additional_property.append(
+                    Checklist(value=checklist).model_dump(
+                        by_alias=True, exclude_none=True
                     )
-                if target_analysis:
-                    additional_property.append(target_analysis)
-            return additional_property if len(additional_property) > 0 else None
+                )
+            if target_analysis := self._build_prop("target analysis type"):
+                additional_property.append(target_analysis)
+            if not additional_property:
+                return None
+            return (
+                additional_property
+                if len(additional_property) > 1
+                else additional_property[0]
+            )
 
         return {
             "@context": {"@vocab": "https://schema.org"},
@@ -232,8 +226,8 @@ class SampleExtractor:
             "@id": f"Product_{self.sample_id}.jsonld",
             "identifier": build_identifiers(),
             "name": self._get_base_value("name"),
-            "description": self._get_prop_value("description"),
-            "url": self._get_base_value("ur"),
+            "description": self._get_prop_value("sample description"),
+            "url": self._get_base_value("url"),
             "productionDate": self._get_prop_value("collection date"),
             "material": self._get_prop_value("environmental medium"),
             "countryOfOrigin": self._get_prop_value(
@@ -257,7 +251,190 @@ class SampleExtractor:
         dict
             A dictionary representing the Action in JSON-LD format
         """
-        action_dict = {
+
+        def build_location() -> dict[str, Any]:
+            """Build the schema.org location Property as type Place"""
+
+            # create name Property if possible
+            region = self._get_prop_value("geographic location (region and locality)")
+            country = self._get_prop_value("geographic location (country and/or sea)")
+            loc_name = ", ".join(filter(None, [region, country]))
+
+            # adds geo Property to location as type GeoCoordinates if values are provided
+            geo_fields = {
+                "latitude": self._get_prop_value_with_unit(
+                    "geographic location (latitude)"
+                ),
+                "longitude": self._get_prop_value_with_unit(
+                    "geographic location (longitude)"
+                ),
+                "elevation": self._get_prop_value_with_unit("elevation"),
+            }
+            geo = {
+                key: f"{value} {unit}"
+                for key, (value, unit) in geo_fields.items()
+                if value
+            }
+
+            # We can add additionalProperty to location
+            additional_property = []
+
+            # Uplift the properties by adding their MIxS IDs if applicable
+            for prop_name, prop_id in {
+                "broad-scale environmental context": "https://w3id.org/mixs/0000012",
+                "local environmental context": "https://w3id.org/mixs/0000013",
+                "depth": "https://w3id.org/mixs/0000018",
+                "depth-max": None,
+                "depth-min": None,
+            }.items():
+                prop = self._build_prop(prop_name, prop_id)
+                if prop:
+                    additional_property.append(prop)
+
+            # Geographic location combined to MIxS term
+            if region and country:
+                additional_property.append(
+                    {
+                        "@type": "PropertyValue",
+                        "propertyID": "https://w3id.org/mixs/0000010",
+                        "name": "geographic location (country and/or sea,region)",
+                        "value": f"{country}: , {region}",
+                    }
+                )
+
+            # Add an uplifted sampling design label if provided
+            if sampling_design_label := self._get_prop_value("sampling design label"):
+                additional_property.append(
+                    {
+                        "@type": "PropertyValue",
+                        "name": "sampling design label",
+                        "description": "Sampling Design Label (SDL) is a unique identifier used to track all samples and data originating from the same sampling location. (https://biocean5d.embl.de/faq.cgi)",
+                        "propertyID": "sampling design label",
+                        "value": sampling_design_label,
+                    }
+                )
+
+            return {
+                "@type": "Place",
+                "name": loc_name if loc_name else None,
+                "geo": {"@type": "GeoCoordinates"} | geo if geo else None,
+                "additionalProperty": additional_property
+                if additional_property
+                else None,
+            }
+
+        def build_instrument() -> dict[str, Any] | None:
+            # Build instrument array
+            instrument = []
+            for prop_name in ["sample collection device", "sampling platform"]:
+                prop = self._build_prop(prop_name)
+                if prop:
+                    instrument.append(prop)
+            return instrument if instrument else None
+
+        def build_object() -> dict[str, Any] | None:
+            # Build object array
+            object = []
+            for prop_name, prop_id in {
+                "environmental medium": "https://w3id.org/mixs/0000014",
+                "organism": None,
+            }.items():
+                prop = self._build_prop(prop_name, prop_id)
+                if prop:
+                    object.append(prop)
+            # Todo clarify organism
+            # weird, unclear if this is to be understood as the object or the result - intuition is to use object, if this was a penguin, I'd assume that the penguin was the object of sampling and not the result
+
+            return object if object else None
+
+        def build_action_process() -> dict[str, Any] | None:
+            step = []
+
+            # Filtration step - extract actual values and units from data
+            filtration_param = {
+                "filtration volume": self._get_prop_value_with_unit(
+                    "filtration volume"
+                ),
+                "filtration time": self._get_prop_value_with_unit("filtration time"),
+            }
+            text_parts = [
+                f"{label}: {value} {unit}"
+                for label, (value, unit) in filtration_param.items()
+                if value
+            ]
+            if text_parts:
+                step.append(
+                    {
+                        "@type": "HowToStep",
+                        "name": "filtration",
+                        "text": ", ".join(text_parts),
+                    }
+                )
+
+            # Size fractionation step
+            size_frac_param = {
+                "lower threshold": self._get_prop_value_with_unit(
+                    "size-fraction lower threshold"
+                ),
+                "upper threshold": self._get_prop_value_with_unit(
+                    "size-fraction upper threshold"
+                ),
+            }
+            text_parts = [
+                f"{label} of {value} {unit}"
+                for label, (value, unit) in size_frac_param.items()
+                if value
+            ]
+            if text_parts:
+                step.append(
+                    {
+                        "@type": "HowToStep",
+                        "name": "size fractionation",
+                        "text": f"size fractionation was performed with: {', '.join(text_parts)}",
+                    }
+                )
+
+            if step:
+                return {
+                    "@type": "HowTo",
+                    "name": f"Submitter-declared sampling steps for sample {self.sample_id}.",
+                    "description": "The steps in this object are those that have been provided by the submitter of this metadata. They are not ordered and may be incomplete. Please refer to the associated publication and or documentation for more authoritative information.",
+                    "step": step,
+                }
+            return None
+
+        def build_participant() -> list[dict[str, Any]] | dict[str, Any]:
+            participant = [
+                {
+                    "@type": "ResearchProject",
+                    "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
+                }
+            ]
+            if project_name := self._get_prop_value("project name"):
+                participant.append({"@type": "ResearchProject", "name": project_name})
+            return participant if len(participant) > 1 else participant[0]
+
+        def build_additional_property() -> list[dict[str, Any]] | dict[str, Any] | None:
+            additional_property = []
+            if checklist := self._get_prop_value("checklist"):
+                additional_property.append(
+                    Checklist(value=checklist).model_dump(
+                        by_alias=True, exclude_none=True
+                    )
+                )
+            if protocol_label := self._build_prop("protocol label"):
+                additional_property.append(protocol_label)
+
+            if not additional_property:
+                return None
+
+            return (
+                additional_property
+                if len(additional_property) > 1
+                else additional_property[0]
+            )
+
+        return {
             "@context": {"@vocab": "https://schema.org"},
             "@type": "Action",
             "additionalType": [
@@ -267,205 +444,14 @@ class SampleExtractor:
             "@id": f"Action_{self.sample_id}.jsonld",
             "name": f"Sampling process for sample {self.sample_id}",
             "result": {"@type": "Product", "@id": f"Product_{self.sample_id}.jsonld"},
+            "startTime": self._get_prop_value("collection date"),
+            "location": build_location(),
+            "instrument": build_instrument(),
+            "object": build_object(),
+            "actionProcess": build_action_process(),
+            "participant": build_participant(),
+            "additionalProperty": build_additional_property(),
         }
-
-        # Add startTime from collection date
-        collection_date = self._get_prop_value("collection date")
-        if collection_date:
-            action_dict["startTime"] = collection_date
-
-        # Build the schema.org location Property as type Place
-        location = {
-            "@type": "Place",
-        }
-
-        # create name Property if possible
-        region = get_value(sample_record, "geographic location (region and locality)")
-        country = get_value(sample_record, "geographic location (country and/or sea)")
-        if region and country:
-            location["name"] = f"{region}, {country}"
-        elif region:
-            location["name"] = region
-        elif country:
-            location["name"] = country
-
-        # adds geo Property to location as type GeoCoordinates if values are provided
-        latitude, lat_unit = get_value_with_unit(
-            sample_record, "geographic location (latitude)"
-        )
-        longitude, lon_unit = get_value_with_unit(
-            sample_record, "geographic location (longitude)"
-        )
-        elevation, elev_unit = get_value_with_unit(sample_record, "elevation")
-
-        if latitude or longitude or elevation:
-            geo = {"@type": "GeoCoordinates"}
-            if latitude:
-                geo["latitude"] = f"{latitude} {lat_unit}"
-            if longitude:
-                geo["longitude"] = f"{longitude} {lon_unit}"
-            if elevation:
-                geo["elevation"] = f"{elevation} {elev_unit}"
-            location["geo"] = geo
-
-        # We can add additionalProperty to location
-        location_props = []
-
-        # Uplift the properties by adding their MIxS IDs if applicable
-        for name, prop_id in {
-            "broad-scale environmental context": "https://w3id.org/mixs/0000012",
-            "local environmental context": "https://w3id.org/mixs/0000013",
-            "depth": "https://w3id.org/mixs/0000018",
-            "depth-max": None,
-            "depth-min": None,
-        }.items():
-            build_property(location_props, sample_record, name, prop_id)
-
-        # Geographic location combined
-        if region and country:
-            location_props.append(
-                {
-                    "@type": "PropertyValue",
-                    "propertyID": "https://w3id.org/mixs/0000010",
-                    "name": "geographic location (country and/or sea,region)",
-                    "value": f"{country}: , {region}",
-                }
-            )
-
-        # Sampling design label
-        build_property(location_props, sample_record, "sampling design label", None)
-
-        if location_props:
-            location["additionalProperty"] = location_props
-
-        action_dict["location"] = location
-
-        # Build instrument array
-        instruments = []
-
-        # Sample collection device
-        collection_device = self._get_prop_value("sample collection device")
-        if collection_device:
-            prop = get_property(sample_record, "sample collection device")
-            instrument = {
-                "@type": "Product",
-                "description": "sample collection device",
-                "name": collection_device,
-            }
-            if prop.get("valueReference"):
-                instrument["category"] = prop["valueReference"][0].get("@id")
-            instruments.append(instrument)
-
-        # Sampling platform
-        sampling_platform = self._get_prop_value("sampling platform")
-        if sampling_platform:
-            instruments.append(
-                {
-                    "@type": "Product",
-                    "name": "sampling platform",
-                    "description": sampling_platform,
-                }
-            )
-
-        if instruments:
-            action_dict["instrument"] = instruments
-
-        # Build object array
-        objects = []
-
-        for name, prop_id in {
-            "environmental medium": "https://w3id.org/mixs/0000014",
-            "organism": None,
-        }.items():
-            build_property(objects, sample_record, name, prop_id)
-
-        # Todo clarify organism
-        # weird, unclear if this is to be understood as the object or the result - intuition is to use object, if this was a penguin, I'd assume that the penguin was the object of sampling and not the result
-
-        if objects:
-            action_dict["object"] = objects
-
-        # Build actionProcess
-        steps = []
-
-        # Filtration step - extract actual values and units from data
-        filtration_volume, filt_vol_unit = get_value_with_unit(
-            sample_record, "filtration volume"
-        )
-        filtration_time, filt_time_unit = get_value_with_unit(
-            sample_record, "filtration time"
-        )
-
-        if filtration_volume or filtration_time:
-            text_parts = []
-            if filtration_volume:
-                text_parts.append(
-                    f"filtration volume: {filtration_volume} {filt_vol_unit}"
-                )
-            if filtration_time:
-                text_parts.append(
-                    f"filtration time: {filtration_time} {filt_time_unit}"
-                )
-            if text_parts:
-                steps.append(
-                    {
-                        "@type": "HowToStep",
-                        "name": "filtration",
-                        "text": ", ".join(text_parts),
-                    }
-                )
-
-        # Size fractionation step
-        lower_threshold, lower_unit = get_value_with_unit(
-            sample_record, "size-fraction lower threshold"
-        )
-        upper_threshold, upper_unit = get_value_with_unit(
-            sample_record, "size-fraction upper threshold"
-        )
-        if lower_threshold and upper_threshold:
-            steps.append(
-                {
-                    "@type": "HowToStep",
-                    "name": "size fractionation",
-                    "text": f"size fractionation was performed with a lower threshold of {lower_threshold} {lower_unit} and an upper threshold of {upper_threshold} {upper_unit}",
-                }
-            )
-
-        if steps:
-            action_dict["actionProcess"] = {
-                "@type": "HowTo",
-                "name": f"Submitter-declared sampling steps for sample {self.sample_id}.",
-                "description": "The steps in this object are those that have been provided by the submitter of this metadata. They are not ordered and may be incomplete. Please refer to the associated publication and or documentation for more authoritative information.",
-                "step": steps,
-            }
-
-        # Build participant array
-        participants = [
-            {
-                "@type": "ResearchProject",
-                "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
-            }
-        ]
-
-        project_name = self._get_prop_value("project name")
-        if project_name:
-            participants.append({"@type": "ResearchProject", "name": project_name})
-
-        action_dict["participant"] = participants
-
-        # Build additionalProperty array
-        additional_props = []
-
-        for name in [
-            "checklist",
-            "protocol label",
-        ]:
-            build_property(additional_props, sample_record, name)
-
-        if additional_props:
-            action_dict["additionalProperty"] = additional_props
-
-        return action_dict
 
     def _append_remaining_props(self, schema_dict: dict[str, str]):
         used_props = set(self._used_props)
@@ -475,9 +461,9 @@ class SampleExtractor:
             if p.get("name") not in used_props
         ]
 
-        additional_properties = schema_dict.get("additionalProperty", [])
-        additional_properties.extend(remaining_props)
-        schema_dict["additionalProperty"] = additional_properties
+        additional_property = schema_dict.get("additionalProperty", [])
+        additional_property.extend(remaining_props)
+        schema_dict["additionalProperty"] = additional_property
 
     def build_dicts(self) -> tuple[dict[str, Any], dict[str, Any]]:
         product_dict = self._build_product_dict()
