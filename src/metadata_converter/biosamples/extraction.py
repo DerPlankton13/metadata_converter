@@ -2,7 +2,11 @@ import re
 from enum import Enum
 from typing import Any, Literal
 
-from metadata_converter.biosamples.schemas import SRA, BioSample, Checklist
+from metadata_converter.biosamples.schemas import (
+    SRA,
+    BioSample,
+    Checklist,
+)
 
 
 def get_property(sample_record: dict, prop_name: str) -> dict | None:
@@ -461,9 +465,15 @@ class SampleExtractor:
             if p.get("name") not in used_props
         ]
 
-        additional_property = schema_dict.get("additionalProperty", [])
-        additional_property.extend(remaining_props)
-        schema_dict["additionalProperty"] = additional_property
+        if remaining_props:
+            additional_property = schema_dict.get("additionalProperty")
+            if additional_property is not None:
+                if isinstance(additional_property, list):
+                    remaining_props = additional_property + remaining_props
+                else:
+                    remaining_props.insert(0, additional_property)
+
+            schema_dict["additionalProperty"] = remaining_props
 
     def build_dicts(self) -> tuple[dict[str, Any], dict[str, Any]]:
         product_dict = self._build_product_dict()
