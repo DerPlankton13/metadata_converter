@@ -195,7 +195,11 @@ class SampleExtractor:
                 }
             ]
             if project_name := self._get_prop_value("project name"):
-                manufacturer.append({"@type": "ResearchProject", "name": project_name})
+                # do not add the B5D project a second time
+                if project_name.lower() not in ["BIOcean5D".lower(), "b5d"]:
+                    manufacturer.append(
+                        {"@type": "ResearchProject", "name": project_name}
+                    )
             return manufacturer if len(manufacturer) > 1 else manufacturer[0]
 
         def build_keywords() -> list[dict] | None:
