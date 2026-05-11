@@ -66,25 +66,29 @@ class Terminology(Enum):
     )
 
     def __init__(self, url: str, defined_termset: str | None) -> None:
-        self.url = url
+        self.base_url = url  # renamed to make clear it's a base
         self.defined_termset = defined_termset
 
     @classmethod
     def from_term_code(cls, term_code: str) -> "Terminology | None":
-        if "NERC" in term_code:
-            return cls.NERC
-        elif "ENVO" in term_code:
+        if "ENVO" in term_code:
             return cls.ENVO
         elif "txid" in term_code:
             return cls.NCBI
         return None
 
     def normalize_term_code(self, term_code: str) -> str:
-        if self == Terminology.NERC:
-            return term_code.replace("NERC:", "")
         if self == Terminology.NCBI:
             return term_code.split("txid")[-1]
         return term_code
+
+    def build_url(self, term_code: str) -> str:
+        normalized = self.normalize_term_code(term_code)
+        if self == Terminology.ENVO:
+            return self.base_url + normalized.replace(":", "_")
+        elif self == Terminology.NCBI:
+            return self.base_url + normalized
+        return self.base_url
 
 
 def build_defined_term(value: str) -> dict[str, str] | None:
