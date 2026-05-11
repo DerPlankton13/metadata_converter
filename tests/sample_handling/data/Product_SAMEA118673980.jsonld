@@ -39,15 +39,12 @@
     "@type": "MonetaryGrant",
     "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/grant_b5d.jsonld"
   },
-  "manufacturer": [
-    {
-      "@type": "ResearchProject",
-      "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld"
-    }
-  ],
+  "manufacturer": {
+    "@type": "ResearchProject",
+    "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld"
+  },
   "keywords": [
     "sediment metagenome",
-    "sediment surface (ENVO:01001192)",
     {
       "@type": "DefinedTerm",
       "url": "https://purl.obolibrary.org/obo/ENVO_01001192",
