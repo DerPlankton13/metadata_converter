@@ -74,11 +74,15 @@ class Terminology(Enum):
             return cls.ENVO
         elif "txid" in term_code:
             return cls.NCBI
+        elif "NERC" in term_code:
+            return cls.NERC
         return None
 
     def normalize_term_code(self, term_code: str) -> str:
         if self == Terminology.NCBI:
             return term_code.split("txid")[-1]
+        if self == Terminology.NERC:
+            return term_code.split("NERC:")[-1]
         return term_code
 
     def build_url(self, term_code: str) -> str:
@@ -87,6 +91,10 @@ class Terminology(Enum):
             return self.base_url + normalized.replace(":", "_")
         elif self == Terminology.NCBI:
             return self.base_url + normalized
+        elif self == Terminology.NERC:
+            vocab = normalized.split(":")[1]
+            concept = normalized.split("::")[-1]
+            return self.base_url + vocab + "/current/" + concept
         return self.base_url
 
 
