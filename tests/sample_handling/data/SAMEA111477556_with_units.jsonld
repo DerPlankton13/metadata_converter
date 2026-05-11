@@ -1,203 +1,203 @@
 {
-  '@context': [
-    'http://schema.org',
+  "@context": [
+    "http://schema.org",
     {
-      'OBI': 'http://purl.obolibrary.org/obo/OBI_',
-      'biosample': 'http://identifiers.org/biosample/'
+      "OBI": "http://purl.obolibrary.org/obo/OBI_",
+      "biosample": "http://identifiers.org/biosample/"
     }
   ],
-  '@type': 'DataRecord',
-  '@id': 'biosample:SAMEA111477556',
-  'identifier': 'biosample:SAMEA111477556',
-  'dateCreated': '2022-10-17T08:02:21.438Z',
-  'dateModified': '2024-02-21T05:33:47.984Z',
-  'dateReleased': '2022-10-18T00:27:54Z',
-  'dateSubmitted': '2022-10-17T09:02:21Z',
-  'mainEntity': {
-    '@id': 'https://www.ebi.ac.uk/biosamples/samples/SAMEA111477556',
-    '@type': [
-      'Sample',
-      'OBI:0000747'
+  "@type": "DataRecord",
+  "@id": "biosample:SAMEA111477556",
+  "identifier": "biosample:SAMEA111477556",
+  "dateCreated": "2022-10-17T08:02:21.438Z",
+  "dateModified": "2024-02-21T05:33:47.984Z",
+  "dateReleased": "2022-10-18T00:27:54Z",
+  "dateSubmitted": "2022-10-17T09:02:21Z",
+  "mainEntity": {
+    "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA111477556",
+    "@type": [
+      "Sample",
+      "OBI:0000747"
     ],
-    'identifier': [
-      'biosample:SAMEA111477556'
+    "identifier": [
+      "biosample:SAMEA111477556"
     ],
-    'name': 'LMO16S:2013-12-03:3',
-    'url': 'https://www.ebi.ac.uk/biosamples/samples/SAMEA111477556',
-    'subjectOf': [
-      'https://www.ebi.ac.uk/ena/browser/view/SAMEA111477556'
+    "name": "LMO16S:2013-12-03:3",
+    "url": "https://www.ebi.ac.uk/biosamples/samples/SAMEA111477556",
+    "subjectOf": [
+      "https://www.ebi.ac.uk/ena/browser/view/SAMEA111477556"
     ],
-    'additionalProperty': [
+    "additionalProperty": [
       {
-        '@type': 'PropertyValue',
-        'name': 'ENA-CHECKLIST',
-        'value': 'ERC000024'
+        "@type": "PropertyValue",
+        "name": "ENA-CHECKLIST",
+        "value": "ERC000024"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'ENA-FIRST-PUBLIC',
-        'value': '2022-10-18T00:27:54Z'
+        "@type": "PropertyValue",
+        "name": "ENA-FIRST-PUBLIC",
+        "value": "2022-10-18T00:27:54Z"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'ENA-LAST-UPDATE',
-        'value': '2022-10-18T00:27:54Z'
+        "@type": "PropertyValue",
+        "name": "ENA-LAST-UPDATE",
+        "value": "2022-10-18T00:27:54Z"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'External Id',
-        'value': 'SAMEA111477556'
+        "@type": "PropertyValue",
+        "name": "External Id",
+        "value": "SAMEA111477556"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'INSDC center name',
-        'value': 'LNU'
+        "@type": "PropertyValue",
+        "name": "INSDC center name",
+        "value": "LNU"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'INSDC first public',
-        'value': '2022-10-18T00:27:54Z'
+        "@type": "PropertyValue",
+        "name": "INSDC first public",
+        "value": "2022-10-18T00:27:54Z"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'INSDC last update',
-        'value': '2022-10-18T00:27:54Z'
+        "@type": "PropertyValue",
+        "name": "INSDC last update",
+        "value": "2022-10-18T00:27:54Z"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'INSDC status',
-        'value': 'public'
+        "@type": "PropertyValue",
+        "name": "INSDC status",
+        "value": "public"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'SRA accession',
-        'value': 'ERS13571591'
+        "@type": "PropertyValue",
+        "name": "SRA accession",
+        "value": "ERS13571591"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'Submitter Id',
-        'value': 'LMO16S:2013-12-03:3'
+        "@type": "PropertyValue",
+        "name": "Submitter Id",
+        "value": "LMO16S:2013-12-03:3"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'broad-scale environmental context',
-        'value': 'marine pelagic biome (ENVO:01000023)'
+        "@type": "PropertyValue",
+        "name": "broad-scale environmental context",
+        "value": "marine pelagic biome (ENVO:01000023)"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'collection date',
-        'value': '2013-12-03'
+        "@type": "PropertyValue",
+        "name": "collection date",
+        "value": "2013-12-03"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'depth',
-        'value': '3',
-        'unitText': 'm'
+        "@type": "PropertyValue",
+        "name": "depth",
+        "value": "3",
+        "unitText": "m"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'environmental medium',
-        'value': 'brackish water (ENVO:00002019)'
+        "@type": "PropertyValue",
+        "name": "environmental medium",
+        "value": "brackish water (ENVO:00002019)"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'geographic location (country and/or sea)',
-        'value': 'Baltic Sea'
+        "@type": "PropertyValue",
+        "name": "geographic location (country and/or sea)",
+        "value": "Baltic Sea"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'geographic location (latitude)',
-        'value': '56.9309',
-        'unitText': 'DD'
+        "@type": "PropertyValue",
+        "name": "geographic location (latitude)",
+        "value": "56.9309",
+        "unitText": "DD"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'geographic location (longitude)',
-        'value': '17.0607',
-        'unitText': 'DD'
+        "@type": "PropertyValue",
+        "name": "geographic location (longitude)",
+        "value": "17.0607",
+        "unitText": "DD"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'investigation type',
-        'value': 'mimarks-survey'
+        "@type": "PropertyValue",
+        "name": "investigation type",
+        "value": "mimarks-survey"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'local environmental context',
-        'value': 'brackish water body (ENVO:01001321)'
+        "@type": "PropertyValue",
+        "name": "local environmental context",
+        "value": "brackish water body (ENVO:01001321)"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'organism',
-        'value': 'aquatic metagenome',
-        'valueReference': [
+        "@type": "PropertyValue",
+        "name": "organism",
+        "value": "aquatic metagenome",
+        "valueReference": [
           {
-            '@type': 'DefinedTerm',
-            'termCode': ''
+            "@type": "DefinedTerm",
+            "termCode": ""
           }
         ]
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'oxygenation status of sample',
-        'value': 'aerobic'
+        "@type": "PropertyValue",
+        "name": "oxygenation status of sample",
+        "value": "aerobic"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'pcr primers',
-        'value': '341F (CCTACGGGNGGCWGCAG) and 805R (GACTACHVGGGTATCTAATCC)'
+        "@type": "PropertyValue",
+        "name": "pcr primers",
+        "value": "341F (CCTACGGGNGGCWGCAG) and 805R (GACTACHVGGGTATCTAATCC)"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'project name',
-        'value': 'LMO 2013 (3 um)'
+        "@type": "PropertyValue",
+        "name": "project name",
+        "value": "LMO 2013 (3 um)"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'sample collection device or method',
-        'value': 'Filter setup: 3'
+        "@type": "PropertyValue",
+        "name": "sample collection device or method",
+        "value": "Filter setup: 3"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'scientific_name',
-        'value': 'aquatic metagenome',
-        'valueReference': [
+        "@type": "PropertyValue",
+        "name": "scientific_name",
+        "value": "aquatic metagenome",
+        "valueReference": [
           {
-            '@type': 'DefinedTerm',
-            'termCode': ''
+            "@type": "DefinedTerm",
+            "termCode": ""
           }
         ]
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'sequencing method',
-        'value': 'Sequencing by synthesis (Illumina)'
+        "@type": "PropertyValue",
+        "name": "sequencing method",
+        "value": "Sequencing by synthesis (Illumina)"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'target gene',
-        'value': '16S rRNA'
+        "@type": "PropertyValue",
+        "name": "target gene",
+        "value": "16S rRNA"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'target subfragment',
-        'value': 'V3-V4'
+        "@type": "PropertyValue",
+        "name": "target subfragment",
+        "value": "V3-V4"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'title',
-        'value': 'LMO 16S 2013-12-03, filter fraction:3'
+        "@type": "PropertyValue",
+        "name": "title",
+        "value": "LMO 16S 2013-12-03, filter fraction:3"
       },
       {
-        '@type': 'PropertyValue',
-        'name': 'water environmental package',
-        'value': 'water'
+        "@type": "PropertyValue",
+        "name": "water environmental package",
+        "value": "water"
       }
     ],
-    'sameAs': 'http://identifiers.org/biosample/SAMEA111477556'
+    "sameAs": "http://identifiers.org/biosample/SAMEA111477556"
   },
-  'isPartOf': {
-    '@type': 'Dataset',
-    '@id': 'https://www.ebi.ac.uk/biosamples/samples'
+  "isPartOf": {
+    "@type": "Dataset",
+    "@id": "https://www.ebi.ac.uk/biosamples/samples"
   }
 }

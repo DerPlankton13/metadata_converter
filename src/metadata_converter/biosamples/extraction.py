@@ -33,7 +33,7 @@ def get_value(sample_record: dict, prop_name: str) -> str | None:
 
 
 def get_value_with_unit(
-    sample_record: dict, prop_name: str
+        sample_record: dict, prop_name: str
 ) -> tuple[str | None, str | Literal["Unit unknown"]]:
     """
     Safely extract a property value and its unit from the data without raising exceptions.
@@ -114,7 +114,7 @@ def build_defined_term(value: str) -> dict[str, str] | None:
 
 
 def build_property(
-    sample_record: dict, prop_name: str, prop_id: str | None = None
+        sample_record: dict, prop_name: str, prop_id: str | None = None
 ) -> dict | None:
     prop = get_property(sample_record, prop_name)
     if not prop:
@@ -146,13 +146,13 @@ class SampleExtractor:
         return get_value(self.sample_record, prop_name)
 
     def _get_prop_value_with_unit(
-        self, prop_name: str
+            self, prop_name: str
     ) -> tuple[str | None, str | Literal["Unit unknown"]]:
         self._used_props.add(prop_name)
         return get_value_with_unit(self.sample_record, prop_name)
 
     def _build_prop(
-        self, prop_name: str, prop_id: str | None = None
+            self, prop_name: str, prop_id: str | None = None
     ) -> dict[str, str] | None:
         self._used_props.add(prop_name)
         return build_property(self.sample_record, prop_name, prop_id)
@@ -457,7 +457,7 @@ class SampleExtractor:
             "additionalProperty": build_additional_property(),
         }
 
-    def _append_remaining_props(self, schema_dict: dict[str, str]):
+    def _append_remaining_props(self, schema_dict: dict[str, Any]):
         used_props = set(self._used_props)
         remaining_props = [
             p
