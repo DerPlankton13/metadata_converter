@@ -48,14 +48,14 @@
   },
   "instrument": [
     {
-      "@type": "PropertyValue",
-      "name": "sample collection device",
-      "value": "corer (20 cm)"
+      "@type": "Product",
+      "description": "sample collection device",
+      "name": "corer (20 cm)"
     },
     {
-      "@type": "PropertyValue",
-      "name": "sampling platform",
-      "value": "Aurelia"
+      "@type": "Product",
+      "description": "sampling platform",
+      "name": "Aurelia"
     }
   ],
   "object": [
