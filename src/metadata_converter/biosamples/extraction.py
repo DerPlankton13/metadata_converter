@@ -117,19 +117,26 @@ def build_defined_term(value: str) -> dict[str, str] | None:
 
 
 def build_property(
-        sample_record: dict, prop_name: str, prop_id: str | None = None
+    sample_record: dict, prop_name: str, prop_id: str | None = None
 ) -> dict | None:
     prop = get_property(sample_record, prop_name)
-    if not prop:
+    if prop is None:
         return None
 
     if prop_id:
         prop["propertyID"] = prop_id
-    # see if wee can create a value reference from the value
+
+    # try to build a value reference from the value and overwrite any existing one
     value_reference = build_defined_term(prop.get("value"))
-    # if so, overwrite any possibly existing, otherwise any existing will be kept
     if value_reference:
         prop["valueReference"] = value_reference
+    # otherwise check if there is an existing value reference and clean it up if needed
+    elif existing := prop.get("valueReference"):
+        if isinstance(existing, list) and len(existing) == 1:
+            existing = existing[0]
+        # remove any existing valueReference that contain no information
+        if not any(v for k, v in existing.items() if k != "@type"):
+            prop.pop("valueReference")
 
     return prop
 
