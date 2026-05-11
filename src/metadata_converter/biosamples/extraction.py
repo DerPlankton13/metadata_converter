@@ -204,16 +204,17 @@ class SampleExtractor:
 
         def build_keywords() -> list[dict] | None:
             keywords = []
-            organism = self._get_prop_value("organism")
-            if organism:
-                if defined_term := build_defined_term(organism):
-                    keywords.append(defined_term)
-                else:
-                    keywords.append(organism)
-            if target := self._get_prop_value("target analysis type"):
-                keywords.append(target)
-            if local := self._get_prop_value("local environmental context"):
-                keywords.append(local)
+            desired_properties = [
+                "organism",
+                "target analysis type",
+                "local environmental context",
+            ]
+            for prop_name in desired_properties:
+                if prop := self._get_prop_value(prop_name):
+                    if defined_term := build_defined_term(prop):
+                        keywords.append(defined_term)
+                    else:
+                        keywords.append(prop)
             return keywords if len(keywords) > 0 else None
 
         def build_additional_property() -> list[dict[str, Any]] | dict[str, Any] | None:
