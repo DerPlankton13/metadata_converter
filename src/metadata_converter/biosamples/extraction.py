@@ -366,9 +366,24 @@ class SampleExtractor:
             # Build instrument array
             instrument = []
             for prop_name in ["sample collection device", "sampling platform"]:
-                prop = self._build_prop(prop_name)
-                if prop:
-                    instrument.append(prop)
+                if prop := self._get_prop(prop_name):
+                    category = None
+                    if value_reference := prop.get("valueReference"):
+                        if (
+                            isinstance(value_reference, list)
+                            and len(value_reference) == 1
+                        ):
+                            value_reference = value_reference[0]
+                        category = value_reference.get("@id")
+                    print(category)
+                    instrument.append(
+                        {
+                            "@type": "Product",
+                            "description": prop_name,
+                            "name": prop.get("value"),
+                            "category": category,
+                        }
+                    )
             return instrument if instrument else None
 
         def build_object() -> dict[str, Any] | None:
