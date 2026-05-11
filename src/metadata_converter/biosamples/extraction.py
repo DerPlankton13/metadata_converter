@@ -486,11 +486,21 @@ class SampleExtractor:
 
     def _append_remaining_props(self, schema_dict: dict[str, Any]):
         used_props = set(self._used_props)
-        remaining_props = [
-            p
-            for p in self.sample_record["mainEntity"]["additionalProperty"]
-            if p.get("name") not in used_props
-        ]
+        excluded_values = ["not applicable"]
+        remaining_props = []
+
+        for prop in self.sample_record["mainEntity"]["additionalProperty"]:
+            if (
+                prop.get("name") not in used_props
+                and prop.get("value") not in excluded_values
+            ):
+                # build prop to handle empty value reference and resolving terminologies
+                prop = self._build_prop(prop.get("name"))
+                # remove empty units
+                if prop.get("unitText") == "":
+                    prop.pop("unitText")
+
+                remaining_props.append(prop)
 
         if remaining_props:
             additional_property = schema_dict.get("additionalProperty")
