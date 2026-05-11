@@ -59,8 +59,6 @@
   "additionalProperty": [
     {
       "@type": "PropertyValue",
-      "description": "There is a minimum amount of information required during ENA sample registration and all samples must conform to a defined checklist of expected metadata values. The most suitable checklist for sample registration depends on the type of the sample. (https://www.ebi.ac.uk/ena/browser/checklists)",
-      "url": "https://www.ebi.ac.uk/ena/browser/view/BSDC00001",
       "name": "checklist",
       "value": "BSDC00001"
     },
