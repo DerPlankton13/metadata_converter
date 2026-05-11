@@ -55,7 +55,6 @@ def get_value_with_unit(
 
 
 class Terminology(Enum):
-    NERC = ("https://vocab.nerc.ac.uk/collection/L22/current/", None)
     ENVO = (
         "https://purl.obolibrary.org/obo/",
         "https://purl.obolibrary.org/obo/envo.owl",
@@ -92,11 +91,11 @@ class Terminology(Enum):
 
 
 def build_defined_term(value: str) -> dict[str, str] | None:
-    try:
-        term_code = re.search(r"\[([^\[\]]*)\]", value).group(1)
-    except AttributeError:
+    matches = re.findall(r"[\[(](.*?)[\])]", value)
+    if len(matches) != 1:
         return None
-    name = value.split("[")[0].strip()
+    term_code = matches[0]
+    name = re.split(r"[\[(]", value)[0].strip()
     terminology = Terminology.from_term_code(term_code)
     if not terminology:
         print(
@@ -110,7 +109,7 @@ def build_defined_term(value: str) -> dict[str, str] | None:
         "@type": "DefinedTerm",
         "name": name,
         "termCode": term_code,
-        "url": terminology.url,
+        "url": terminology.build_url(term_code),
     }
     if terminology.defined_termset:
         defined_term_dict["inDefinedTermSet"] = terminology.defined_termset
