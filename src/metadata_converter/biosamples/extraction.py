@@ -141,6 +141,10 @@ def build_property(
     return prop
 
 
+def convert_to_https(link: str) -> str:
+    return link.replace("http://", "https://")
+
+
 class SampleExtractor:
     def __init__(self, sample_record: dict, sample_id: str):
         self.sample_record = sample_record
@@ -254,7 +258,7 @@ class SampleExtractor:
             "identifier": build_identifiers(),
             "name": self._get_base_value("name"),
             "description": self._get_prop_value("sample description"),
-            "url": self._get_base_value("url"),
+            "url": convert_to_https(self._get_base_value("sameAs")),
             "productionDate": self._get_prop_value("collection date"),
             "material": self._get_prop_value("environmental medium"),
             "countryOfOrigin": self._get_prop_value(
