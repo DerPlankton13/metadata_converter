@@ -219,12 +219,20 @@ class SampleExtractor:
 
         def build_additional_property() -> list[dict[str, Any]] | dict[str, Any] | None:
             additional_property = []
-            if checklist := self._get_prop_value("checklist"):
-                additional_property.append(
-                    Checklist(value=checklist).model_dump(
-                        by_alias=True, exclude_none=True
+            if checklist := self._get_prop("checklist") or self._get_prop(
+                "ENA-CHECKLIST"
+            ):
+                # check that it is a checklist from ENA
+                if "ERC" in checklist["value"]:
+                    additional_property.append(
+                        Checklist(value=checklist["value"]).model_dump(
+                            by_alias=True, exclude_none=True
+                        )
                     )
-                )
+                # otherwise just add it as is
+                else:
+                    additional_property.append(checklist)
+
             if target_analysis := self._build_prop("target analysis type"):
                 additional_property.append(target_analysis)
             if not additional_property:
