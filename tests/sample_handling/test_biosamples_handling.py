@@ -34,11 +34,14 @@ def assert_no_diff(expected: dict, result: dict):
 
 
 def strip_none(d: dict) -> dict:
-    return {
-        k: strip_none(v) if isinstance(v, dict) else v
-        for k, v in d.items()
-        if v is not None
-    }
+    def process(v):
+        if isinstance(v, dict):
+            return strip_none(v)
+        if isinstance(v, list):
+            return [process(i) for i in v]
+        return v
+
+    return {k: process(v) for k, v in d.items() if v is not None}
 
 
 # ---------------------------------------------------------------------------
