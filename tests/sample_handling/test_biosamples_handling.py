@@ -1,85 +1,128 @@
 import json
-import unittest
-from unittest.mock import MagicMock, patch
+from pathlib import Path
 
+import pytest
 from deepdiff import DeepDiff
 
-from metadata_converter.linked_data.biosamples_handling import (
-    extract_sample,
-    extract_sampling_action,
-    fuse_metadata,
-    get_metadata,
+from metadata_converter.biosamples.extraction import SampleExtractor, build_defined_term
+from metadata_converter.biosamples.fetch import fuse_metadata
+
+# ---------------------------------------------------------------------------
+# Constants
+# ---------------------------------------------------------------------------
+
+SAMPLE_IDS = ["SAMEA112489011", "SAMEA111477556", "SAMEA118673980"]
+DATA_DIR = Path(__file__).parent / "data"
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+
+def load_json(path: Path) -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+def assert_no_diff(expected: dict, result: dict):
+    diff = DeepDiff(expected, result, ignore_order=False)
+    if diff:
+        print("result:")
+        print(json.dumps(result, indent=2))
+        pytest.fail(diff.pretty())
+
+
+def strip_none(d: dict) -> dict:
+    return {
+        k: strip_none(v) if isinstance(v, dict) else v
+        for k, v in d.items()
+        if v is not None
+    }
+
+
+# ---------------------------------------------------------------------------
+# Tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("sample_id", SAMPLE_IDS)
+def test_fuse_metadata(sample_id):
+    expected = load_json(DATA_DIR / f"{sample_id}_with_units.jsonld")
+    structured = load_json(DATA_DIR / f"{sample_id}_original.jsonld")
+    unstructured = load_json(DATA_DIR / f"{sample_id}_original.json")
+
+    result = fuse_metadata(structured, unstructured)
+    # I consider the dicts the be equal, even if they contain additional None entries
+    assert_no_diff(strip_none(expected), strip_none(result))
+
+
+@pytest.mark.parametrize("sample_id", SAMPLE_IDS)
+def test_extract_product(sample_id):
+    expected = load_json(DATA_DIR / f"Product_{sample_id}.jsonld")
+    data = load_json(DATA_DIR / f"{sample_id}_with_units.jsonld")
+
+    product, _ = SampleExtractor(data, sample_id).build_dicts()
+    # I consider the dicts the be equal, even if they contain additional None entries
+    assert_no_diff(strip_none(expected), strip_none(product))
+
+
+@pytest.mark.parametrize("sample_id", SAMPLE_IDS)
+def test_extract_action(sample_id):
+    expected = load_json(DATA_DIR / f"Action_{sample_id}.jsonld")
+    data = load_json(DATA_DIR / f"{sample_id}_with_units.jsonld")
+
+    _, action = SampleExtractor(data, sample_id).build_dicts()
+    # I consider the dicts the be equal, even if they contain additional None entries
+    assert_no_diff(strip_none(expected), strip_none(action))
+
+
+EXPECTED_ENVO = {
+    "@type": "DefinedTerm",
+    "name": "organism name",
+    "termCode": "ENVO:12345",
+    "url": "https://purl.obolibrary.org/obo/ENVO_12345",
+    "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
+}
+
+EXPECTED_NCBI = {
+    "@type": "DefinedTerm",
+    "name": "marine metagenome",
+    "termCode": "12345",
+    "url": "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=12345",
+    "inDefinedTermSet": "https://www.ncbi.nlm.nih.gov/Taxonomy",
+}
+
+
+@pytest.mark.parametrize(
+    ("input", "expected"),
+    [
+        pytest.param(
+            "organism name [ENVO:12345]", EXPECTED_ENVO, id="envo_square_brackets"
+        ),
+        pytest.param(
+            "organism name (ENVO:12345)", EXPECTED_ENVO, id="envo_round_brackets"
+        ),
+        pytest.param(
+            "I am a (random) description of weired properties [1234]",
+            None,
+            id="multiple_brackets_returns_none",
+        ),
+        pytest.param(
+            "marine metagenome [NCBI:txid12345]",
+            EXPECTED_NCBI,
+            id="ncbi_square_brackets",
+        ),
+        pytest.param(
+            "marine metagenome (NCBI:txid12345)",
+            EXPECTED_NCBI,
+            id="ncbi_round_brackets",
+        ),
+        pytest.param(
+            "nice property [prop:1234]", None, id="unknown_terminology_returns_none"
+        ),
+    ],
 )
-
-
-class TestSampleHandling(unittest.TestCase):
-    @patch("metadata_converter.biosamples_handling.requests.get")
-    def test_extract_sample_samea112489011(self, mock_get):
-        # Load expected output
-        with open("tests/sample_handling/Product_SAMEA112489011.jsonld", "r") as f:
-            expected = json.load(f)
-
-        # Load mock data from SAMEA112489011_with_units.jsonld (fused data)
-        with open("tests/sample_handling/SAMEA112489011_with_units.jsonld", "r") as f:
-            mock_data = json.load(f)
-
-        # Mock the API response
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_data
-        mock_get.return_value = mock_response
-
-        # Call the function
-        sample_id = "SAMEA112489011"
-        data = get_metadata(sample_id)
-        result = extract_sample(data, sample_id)
-
-        diff = DeepDiff(expected, result, ignore_order=False)
-        if diff:
-            self.fail(f"Mismatch:\n{diff.pretty()}")
-
-    def test_fuse_metadata_samea112489011(self):
-        # Load expected output
-        with open("tests/sample_handling/SAMEA112489011_with_units.jsonld", "r") as f:
-            expected = json.load(f)
-
-        # Load input data
-        with open("tests/sample_handling/SAMEA112489011_original.jsonld", "r") as f:
-            structured = json.load(f)
-
-        with open("tests/sample_handling/SAMEA112489011_original.json", "r") as f:
-            unstructured = json.load(f)
-
-        # Call fuse_metadata
-        result = fuse_metadata(structured, unstructured)
-
-        diff = DeepDiff(expected, result, ignore_order=False)
-        if diff:
-            self.fail(f"Mismatch:\n{diff.pretty()}")
-
-    @patch("metadata_converter.biosamples_handling.requests.get")
-    def test_extract_action_samea112489011(self, mock_get):
-        # Load expected output
-        with open("tests/sample_handling/Action_SAMEA112489011.jsonld", "r") as f:
-            expected = json.load(f)
-
-        # Load mock data from SAMEA112489011_with_units.jsonld (fused data)
-        with open("tests/sample_handling/SAMEA112489011_with_units.jsonld", "r") as f:
-            mock_data = json.load(f)
-
-        # Mock the API response
-        mock_response = MagicMock()
-        mock_response.json.return_value = mock_data
-        mock_get.return_value = mock_response
-
-        # Call the function
-        sample_id = "SAMEA112489011"
-        data = get_metadata(sample_id)
-        result = extract_sampling_action(data, sample_id)
-
-        diff = DeepDiff(expected, result, ignore_order=False)
-        if diff:
-            self.fail(f"Mismatch:\n{diff.pretty()}")
-
-
-if __name__ == "__main__":
-    unittest.main()
+def test_build_defined_term(input, expected):
+    defined_term = build_defined_term(input)
+    assert_no_diff(expected, defined_term)
