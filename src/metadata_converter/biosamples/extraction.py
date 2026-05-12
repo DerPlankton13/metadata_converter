@@ -28,7 +28,7 @@ def get_value(sample_record: dict, prop_name: str) -> str | None:
     """
     try:
         return get_property(sample_record, prop_name)["value"]
-    except (Exception, KeyError, IndexError):
+    except Exception:
         return None
 
 
@@ -49,7 +49,7 @@ def get_value_with_unit(
         prop = get_property(sample_record, prop_name)
         value = prop["value"]
         unit = prop["unitText"]
-    except (Exception, KeyError, IndexError):
+    except Exception:
         pass
     return value, unit
 
@@ -63,7 +63,7 @@ class Terminology(Enum):
         "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=",
         "https://www.ncbi.nlm.nih.gov/Taxonomy",
     )
-    NERC = ("http://vocab.nerc.ac.uk/collection/", None)
+    NERC = ("https://vocab.nerc.ac.uk/collection/", None)
 
     def __init__(self, url: str, defined_termset: str | None) -> None:
         self.base_url = url  # renamed to make clear it's a base
