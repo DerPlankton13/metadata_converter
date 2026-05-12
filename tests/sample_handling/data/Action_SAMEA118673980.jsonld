@@ -82,12 +82,10 @@
       }
     }
   ],
-  "participant": [
-    {
-      "@type": "ResearchProject",
-      "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld"
-    }
-  ],
+  "participant": {
+    "@type": "ResearchProject",
+    "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld"
+  },
   "additionalProperty": [
     {
       "@type": "PropertyValue",
