@@ -524,10 +524,12 @@ class SampleExtractor:
         additional_property = schema_dict.get("additionalProperty")
         if additional_property is not None:
             if isinstance(additional_property, list):
-                remaining_props = additional_property + remaining_props
+                combined = additional_property + remaining_props
             else:
-                remaining_props.insert(0, additional_property)
-        schema_dict["additionalProperty"] = remaining_props
+                combined = [additional_property] + remaining_props
+        else:
+            combined = remaining_props
+        schema_dict["additionalProperty"] = combined
         return schema_dict
 
     def build_dicts(self) -> tuple[dict[str, Any], dict[str, Any]]:
