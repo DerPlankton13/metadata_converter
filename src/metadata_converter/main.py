@@ -1,6 +1,8 @@
 import json
 
+from metadata_converter.biosamples.run import run_biosamples_extraction
 from metadata_converter.config import (
+    BiosamplesConfig,
     FlatDataConfig,
     MetadataCollectorConfig,
 )
@@ -101,6 +103,8 @@ def main():
         for key, schema in results.items():
             load_to_jsonld(schema, output_path=config.output.output_path)
 
+    elif isinstance(config, BiosamplesConfig):
+        run_biosamples_extraction(config)
 
 if __name__ == "__main__":
     main()
