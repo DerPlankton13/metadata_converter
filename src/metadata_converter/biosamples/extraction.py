@@ -228,6 +228,32 @@ class BaseBuilder:
             return checklist
         return None
 
+    def _build_additional_property(
+        self, extra_prop_names: list[str]
+    ) -> list[dict] | dict | None:
+        additional_property = []
+        if checklist := self._build_checklist():
+            additional_property.append(checklist)
+        for prop_name in extra_prop_names:
+            if prop := self.record.as_property(prop_name):
+                additional_property.append(prop)
+        if not additional_property:
+            return None
+        return self._unwrap_single(additional_property)
+
+    def _build_research_project(self) -> list[dict] | dict:
+        projects = [
+            {
+                "@type": "ResearchProject",
+                "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
+            }
+        ]
+        if project_name := self.record["project name"]:
+            # do not add the B5D project a second time
+            if project_name.lower() not in ["biocean5d", "b5d"]:
+                projects.append({"@type": "ResearchProject", "name": project_name})
+        return self._unwrap_single(projects)
+
     @staticmethod
     def _unwrap_single(items: list) -> list | dict:
         return items if len(items) > 1 else items[0]
@@ -274,16 +300,6 @@ class ProductBuilder(BaseBuilder):
                     keywords.append(prop)
         return keywords if len(keywords) > 0 else None
 
-    def _build_additional_property(self) -> list[dict] | dict | None:
-        additional_property = []
-        if checklist := self._build_checklist():
-            additional_property.append(checklist)
-        if target_analysis := self.record.as_property("target analysis type"):
-            additional_property.append(target_analysis)
-        if not additional_property:
-            return None
-        return self._unwrap_single(additional_property)
-
     def build(self) -> dict:
         return {
             "@context": {"@vocab": "https://schema.org"},
@@ -304,9 +320,11 @@ class ProductBuilder(BaseBuilder):
                 "@type": "MonetaryGrant",
                 "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/grant_b5d.jsonld",
             },
-            "manufacturer": self._build_manufacturer(),
+            "manufacturer": self._build_research_project(),
             "keywords": self._build_keywords(),
-            "additionalProperty": self._build_additional_property(),
+            "additionalProperty": self._build_additional_property(
+                ["target analysis type"]
+            ),
         }
 
 
@@ -410,13 +428,13 @@ class ActionBuilder(BaseBuilder):
         step = []
 
         # Filtration step - extract actual values and units from data
-        filtration_param = {
+        filtration_params = {
             "filtration volume": self.record.with_unit("filtration volume"),
             "filtration time": self.record.with_unit("filtration time"),
         }
         text_parts = [
             f"{label}: {value} {unit}"
-            for label, (value, unit) in filtration_param.items()
+            for label, (value, unit) in filtration_params.items()
             if value
         ]
         if text_parts:
@@ -429,13 +447,13 @@ class ActionBuilder(BaseBuilder):
             )
 
         # Size fractionation step
-        size_frac_param = {
+        size_frac_params = {
             "lower threshold": self.record.with_unit("size-fraction lower threshold"),
             "upper threshold": self.record.with_unit("size-fraction upper threshold"),
         }
         text_parts = [
             f"{label} of {value} {unit}"
-            for label, (value, unit) in size_frac_param.items()
+            for label, (value, unit) in size_frac_params.items()
             if value
         ]
         if text_parts:
@@ -456,27 +474,6 @@ class ActionBuilder(BaseBuilder):
             }
         return None
 
-    def _build_participant(self) -> list[dict] | dict:
-        participant = [
-            {
-                "@type": "ResearchProject",
-                "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
-            }
-        ]
-        if project_name := self.record["project name"]:
-            participant.append({"@type": "ResearchProject", "name": project_name})
-        return self._unwrap_single(participant)
-
-    def _build_additional_property(self) -> list[dict] | dict | None:
-        additional_property = []
-        if checklist := self._build_checklist():
-            additional_property.append(checklist)
-        if protocol_label := self.record.as_property("protocol label"):
-            additional_property.append(protocol_label)
-        if not additional_property:
-            return None
-        return self._unwrap_single(additional_property)
-
     def build(self) -> dict:
         return {
             "@context": {"@vocab": "https://schema.org"},
@@ -496,8 +493,8 @@ class ActionBuilder(BaseBuilder):
             "instrument": self._build_instrument(),
             "object": self._build_object(),
             "actionProcess": self._build_action_process(),
-            "participant": self._build_participant(),
-            "additionalProperty": self._build_additional_property(),
+            "participant": self._build_research_project(),
+            "additionalProperty": self._build_additional_property(["protocol label"]),
         }
 
 
