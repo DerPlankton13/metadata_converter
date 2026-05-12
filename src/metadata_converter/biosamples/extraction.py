@@ -146,11 +146,11 @@ def build_property(
         # remove any existing valueReference that contain no information
         if not any(v for k, v in existing.items() if k != "@type"):
             prop.pop("valueReference")
-
-    if unit_text := prop.get("unitText"):
-        print(unit_text)
-        if unit_text == "":
-            prop.pop("unitText")
+        # fix http links
+        else:
+            prop["valueReference"] = {
+                k: convert_to_https(v) for k, v in existing.items()
+            }
 
     return prop
 
