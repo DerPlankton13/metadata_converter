@@ -1,9 +1,9 @@
 import re
 
-from pydantic import AnyUrl, field_validator
+from pydantic import AnyUrl, field_validator, model_validator
 
 from metadata_converter.schema_org_models.custom_models import search_pattern
-from metadata_converter.schema_org_models.schemaorg_models import PropertyValue
+from metadata_converter.schema_org_models.schemaorg_models import *
 
 
 class SRA(PropertyValue):
