@@ -17,6 +17,7 @@ from metadata_converter.linked_data.query_models import Query
 
 
 class ExtractorConfigBase(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     type: str
     file_path: Path
 
@@ -36,6 +37,25 @@ class CsvExtractorConfig(ExtractorConfigBase):
 TabularExtractorConfig = Annotated[
     Union[ExcelExtractorConfig, CsvExtractorConfig], Field(discriminator="type")
 ]
+
+
+class CleaningConfig(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True, extra="forbid")
+    strip_header_whitespace: bool = True
+    strip_cell_whitespace: bool = True
+    sentinels_to_na: bool = True
+    empty_sentinels: list[str] = Field(default_factory=lambda: ["", "N/A", "n/a", "-"])
+    placeholders_to_na: bool = True
+    placeholder_pattern: str = r"^.*\[.*\]$"
+    plugin_dir: Path | None = None
+    plugin_name: str | list[str] | None = None
+    plugins: list[CleaningPlugin] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def load_plugins_from_dir(self) -> "CleaningConfig":
+        if self.plugin_dir is not None:
+            self.plugins = load_plugins(self.plugin_dir, self.plugin_name)
+        return self
 
 
 class ApiExtractorConfig(BaseModel):
@@ -78,6 +98,8 @@ class ApiExtractorConfig(BaseModel):
         exceeding this limit raise `ValueError`. Defaults to ``10.0``.
     """
 
+    model_config = ConfigDict(extra="forbid")
+
     api_url: str
     query: Query
     fetch_strategy: Literal["export_endpoint", "html_jsonld"]
@@ -109,30 +131,22 @@ class ApiExtractorConfig(BaseModel):
         return self
 
 
-class CleaningConfig(BaseModel):
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-    strip_header_whitespace: bool = True
-    strip_cell_whitespace: bool = True
-    sentinels_to_na: bool = True
-    empty_sentinels: list[str] = Field(default_factory=lambda: ["", "N/A", "n/a", "-"])
-    placeholders_to_na: bool = True
-    placeholder_pattern: str = r"^.*\[.*\]$"
-    plugin_dir: Path | None = None
-    plugin_name: str | list[str] | None = None
-    plugins: list[CleaningPlugin] = Field(default_factory=list)
-
-    @model_validator(mode="after")
-    def load_plugins_from_dir(self) -> "CleaningConfig":
-        if self.plugin_dir is not None:
-            self.plugins = load_plugins(self.plugin_dir, self.plugin_name)
-        return self
+class BiosamplesInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    input_path: Path
+    sheet_name: str = "sample"
+    header: int | None = None
+    skiprows: list[int] | None = None
+    header_name: str = "sample:pid"
 
 
 class OutputConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     output_path: Path
 
 
 class FlatDataConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     workflow_type: Literal["flat_data"] = "flat_data"
     extractor: TabularExtractorConfig
     cleaning: CleaningConfig
@@ -142,13 +156,21 @@ class FlatDataConfig(BaseModel):
 
 
 class MetadataCollectorConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     workflow_type: Literal["metadata_collector"] = "metadata_collector"
     extractor: ApiExtractorConfig
     output: OutputConfig
 
 
+class BiosamplesConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workflow_type: Literal["biosamples"] = "biosamples"
+    input: BiosamplesInput
+    output: OutputConfig
+
+
 Config = Annotated[
-    Union[FlatDataConfig, MetadataCollectorConfig],
+    Union[FlatDataConfig, MetadataCollectorConfig, BiosamplesConfig],
     Field(discriminator="workflow_type"),
 ]
 
