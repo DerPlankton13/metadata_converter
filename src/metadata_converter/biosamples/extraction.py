@@ -202,11 +202,30 @@ class SampleRecord:
         return remaining_props
 
 
-class SampleExtractor:
-    def __init__(self, raw: dict, sample_id: str):
-        self.record = SampleRecord(raw, sample_id)
+class BaseBuilder:
+    def __init__(self, record: SampleRecord):
+        self.record = record
 
-    def _build_product_dict(self) -> dict:
+    def _build_checklist(self) -> dict | None:
+        if checklist := self.record.raw_property(
+            "checklist"
+        ) or self.record.raw_property("ENA-CHECKLIST"):
+            # check that it is a checklist from ENA
+            if "ERC" in checklist["value"]:
+                return Checklist(value=checklist["value"]).model_dump(
+                    by_alias=True, exclude_none=True
+                )
+            # otherwise just return it as is
+            return checklist
+        return None
+
+    @staticmethod
+    def _unwrap_single(items: list) -> list | dict:
+        return items if len(items) > 1 else items[0]
+
+
+class ProductBuilder(BaseBuilder):
+    def build(self) -> dict:
 
         # prebuild more complex entries
         def build_identifiers() -> list[dict] | dict:
@@ -221,7 +240,7 @@ class SampleExtractor:
                         by_alias=True, exclude_none=True
                     )
                 )
-            return identifier_list if len(identifier_list) > 1 else identifier_list[0]
+            return self._unwrap_single(identifier_list)
 
         def build_manufacturer() -> list[dict] | dict:
             manufacturer = [
@@ -236,7 +255,7 @@ class SampleExtractor:
                     manufacturer.append(
                         {"@type": "ResearchProject", "name": project_name}
                     )
-            return manufacturer if len(manufacturer) > 1 else manufacturer[0]
+            return self._unwrap_single(manufacturer)
 
         def build_keywords() -> list[dict] | None:
             keywords = []
@@ -255,28 +274,13 @@ class SampleExtractor:
 
         def build_additional_property() -> list[dict] | dict | None:
             additional_property = []
-            if checklist := self.record.raw_property(
-                "checklist"
-            ) or self.record.raw_property("ENA-CHECKLIST"):
-                # check that it is a checklist from ENA
-                if "ERC" in checklist["value"]:
-                    additional_property.append(
-                        Checklist(value=checklist["value"]).model_dump(
-                            by_alias=True, exclude_none=True
-                        )
-                    )
-                # otherwise just add it as is
-                else:
-                    additional_property.append(checklist)
+            if checklist := self._build_checklist():
+                additional_property.append(checklist)
             if target_analysis := self.record.as_property("target analysis type"):
                 additional_property.append(target_analysis)
             if not additional_property:
                 return None
-            return (
-                additional_property
-                if len(additional_property) > 1
-                else additional_property[0]
-            )
+            return self._unwrap_single(additional_property)
 
         return {
             "@context": {"@vocab": "https://schema.org"},
@@ -302,11 +306,13 @@ class SampleExtractor:
             "additionalProperty": build_additional_property(),
         }
 
-    def _build_action_dict(self) -> dict:
-        """Build the schema.org location Property as type Place"""
 
-        # create name Property if possible
+class ActionBuilder(BaseBuilder):
+    def build(self) -> dict:
+
         def build_location() -> dict:
+            """Build the schema.org location Property as type Place"""
+            # create name Property if possible
             region = self.record["geographic location (region and locality)"]
             country = self.record["geographic location (country and/or sea)"]
             loc_name = ", ".join(filter(None, [region, country]))
@@ -350,7 +356,7 @@ class SampleExtractor:
                 )
 
             # Add an uplifted sampling design label if provided
-            if sampling_design_label := self._get_prop_value("sampling design label"):
+            if sampling_design_label := self.record["sampling design label"]:
                 additional_property.append(
                     {
                         "@type": "PropertyValue",
@@ -470,30 +476,17 @@ class SampleExtractor:
             ]
             if project_name := self.record["project name"]:
                 participant.append({"@type": "ResearchProject", "name": project_name})
-            return participant if len(participant) > 1 else participant[0]
+            return self._unwrap_single(participant)
 
         def build_additional_property() -> list[dict[str, Any]] | dict[str, Any] | None:
             additional_property = []
-            if checklist := self.record.raw_property(
-                "checklist"
-            ) or self.record.raw_property("ENA-CHECKLIST"):
-                if "ERC" in checklist["value"]:
-                    additional_property.append(
-                        Checklist(value=checklist["value"]).model_dump(
-                            by_alias=True, exclude_none=True
-                        )
-                    )
-                else:
-                    additional_property.append(checklist)
+            if checklist := self._build_checklist():
+                additional_property.append(checklist)
             if protocol_label := self.record.as_property("protocol label"):
                 additional_property.append(protocol_label)
             if not additional_property:
                 return None
-            return (
-                additional_property
-                if len(additional_property) > 1
-                else additional_property[0]
-            )
+            return self._unwrap_single(additional_property)
 
         return {
             "@context": {"@vocab": "https://schema.org"},
@@ -517,6 +510,11 @@ class SampleExtractor:
             "additionalProperty": build_additional_property(),
         }
 
+
+class SampleExtractor:
+    def __init__(self, raw: dict, sample_id: str):
+        self.record = SampleRecord(raw, sample_id)
+
     @staticmethod
     def _append_remaining_props(
         schema_dict: dict[str, Any], remaining_props: list[dict[str, Any]]
@@ -531,8 +529,8 @@ class SampleExtractor:
         return schema_dict
 
     def build_dicts(self) -> tuple[dict[str, Any], dict[str, Any]]:
-        product_dict = self._build_product_dict()
-        action_dict = self._build_action_dict()
+        product_dict = ProductBuilder(self.record).build()
+        action_dict = ActionBuilder(self.record).build()
         remaining_props = self.record.remaining()
         if remaining_props:
             product_dict = self._append_remaining_props(product_dict, remaining_props)
