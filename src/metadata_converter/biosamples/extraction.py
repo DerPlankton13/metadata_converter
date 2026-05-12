@@ -33,7 +33,7 @@ def get_value(sample_record: dict, prop_name: str) -> str | None:
 
 
 def get_value_with_unit(
-        sample_record: dict, prop_name: str
+    sample_record: dict, prop_name: str
 ) -> tuple[str | None, str | Literal["Unit unknown"]]:
     """
     Safely extract a property value and its unit from the data without raising exceptions.
@@ -63,6 +63,7 @@ class Terminology(Enum):
         "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=",
         "https://www.ncbi.nlm.nih.gov/Taxonomy",
     )
+    NERC = ("http://vocab.nerc.ac.uk/collection/", None)
 
     def __init__(self, url: str, defined_termset: str | None) -> None:
         self.base_url = url  # renamed to make clear it's a base
@@ -146,6 +147,11 @@ def build_property(
         if not any(v for k, v in existing.items() if k != "@type"):
             prop.pop("valueReference")
 
+    if unit_text := prop.get("unitText"):
+        print(unit_text)
+        if unit_text == "":
+            prop.pop("unitText")
+
     return prop
 
 
@@ -153,45 +159,63 @@ def convert_to_https(link: str) -> str:
     return link.replace("http://", "https://")
 
 
-class SampleExtractor:
-    def __init__(self, sample_record: dict, sample_id: str):
-        self.sample_record = sample_record
+class SampleRecord:
+    def __init__(self, raw: dict, sample_id: str):
+        self._raw = raw
         self.sample_id = sample_id
-        self._used_props: set[str] = set()
+        self._used: set[str] = set()
 
-    def _get_prop(self, prop_name: str) -> dict:
-        self._used_props.add(prop_name)
-        return get_property(self.sample_record, prop_name)
+    def __getitem__(self, prop_name: str) -> str | None:
+        self._used.add(prop_name)
+        return get_value(self._raw, prop_name)
 
-    def _get_prop_value(self, prop_name: str) -> str | None:
-        self._used_props.add(prop_name)
-        return get_value(self.sample_record, prop_name)
+    def __contains__(self, prop_name: str) -> bool:
+        return get_property(self._raw, prop_name) is not None
 
-    def _get_prop_value_with_unit(
-            self, prop_name: str
-    ) -> tuple[str | None, str | Literal["Unit unknown"]]:
-        self._used_props.add(prop_name)
-        return get_value_with_unit(self.sample_record, prop_name)
+    def base_value(self, name: str) -> str | None:
+        return self._raw["mainEntity"].get(name)
 
-    def _build_prop(
-            self, prop_name: str, prop_id: str | None = None
-    ) -> dict[str, str] | None:
-        self._used_props.add(prop_name)
-        return build_property(self.sample_record, prop_name, prop_id)
+    def with_unit(self, prop_name: str) -> tuple[str | None, str]:
+        self._used.add(prop_name)
+        return get_value_with_unit(self._raw, prop_name)
 
-    def _get_base_value(self, name: str) -> str:
-        return self.sample_record["mainEntity"].get(name)
+    def as_property(self, prop_name: str, prop_id: str | None = None) -> dict | None:
+        self._used.add(prop_name)
+        return build_property(self._raw, prop_name, prop_id)
+
+    def raw_property(self, prop_name: str) -> dict | None:
+        self._used.add(prop_name)
+        return get_property(self._raw, prop_name)
+
+    def remaining(self) -> list[dict]:
+        excluded_values = ["not applicable"]
+        remaining_props = []
+        for prop in self._raw["mainEntity"]["additionalProperty"]:
+            if (
+                prop.get("name") not in self._used
+                and prop.get("value") not in excluded_values
+            ):
+                prop = self.as_property(prop.get("name"))
+                if prop.get("unitText") == "":
+                    prop.pop("unitText")
+                remaining_props.append(prop)
+        return remaining_props
+
+
+class SampleExtractor:
+    def __init__(self, raw: dict, sample_id: str):
+        self.record = SampleRecord(raw, sample_id)
 
     def _build_product_dict(self) -> dict:
 
         # prebuild more complex entries
         def build_identifiers() -> list[dict] | dict:
             identifier_list = [
-                BioSample(value=self.sample_id).model_dump(
+                BioSample(value=self.record.sample_id).model_dump(
                     by_alias=True, exclude_none=True
                 ),
             ]
-            if sra_accession := self._get_prop_value("SRA accession"):
+            if sra_accession := self.record["SRA accession"]:
                 identifier_list.append(
                     SRA(value=sra_accession).model_dump(
                         by_alias=True, exclude_none=True
@@ -206,7 +230,7 @@ class SampleExtractor:
                     "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
                 }
             ]
-            if project_name := self._get_prop_value("project name"):
+            if project_name := self.record["project name"]:
                 # do not add the B5D project a second time
                 if project_name.lower() not in ["BIOcean5D".lower(), "b5d"]:
                     manufacturer.append(
@@ -222,18 +246,18 @@ class SampleExtractor:
                 "local environmental context",
             ]
             for prop_name in desired_properties:
-                if prop := self._get_prop_value(prop_name):
+                if prop := self.record[prop_name]:
                     if defined_term := build_defined_term(prop):
                         keywords.append(defined_term)
                     else:
                         keywords.append(prop)
             return keywords if len(keywords) > 0 else None
 
-        def build_additional_property() -> list[dict[str, Any]] | dict[str, Any] | None:
+        def build_additional_property() -> list[dict] | dict | None:
             additional_property = []
-            if checklist := self._get_prop("checklist") or self._get_prop(
-                "ENA-CHECKLIST"
-            ):
+            if checklist := self.record.raw_property(
+                "checklist"
+            ) or self.record.raw_property("ENA-CHECKLIST"):
                 # check that it is a checklist from ENA
                 if "ERC" in checklist["value"]:
                     additional_property.append(
@@ -244,8 +268,7 @@ class SampleExtractor:
                 # otherwise just add it as is
                 else:
                     additional_property.append(checklist)
-
-            if target_analysis := self._build_prop("target analysis type"):
+            if target_analysis := self.record.as_property("target analysis type"):
                 additional_property.append(target_analysis)
             if not additional_property:
                 return None
@@ -262,16 +285,14 @@ class SampleExtractor:
                 "sample",
                 "https://purl.obolibrary.org/obo/OBI_0000747",
             ],
-            "@id": f"Product_{self.sample_id}.jsonld",
+            "@id": f"Product_{self.record.sample_id}.jsonld",
             "identifier": build_identifiers(),
-            "name": self._get_base_value("name"),
-            "description": self._get_prop_value("sample description"),
-            "url": convert_to_https(self._get_base_value("sameAs")),
-            "productionDate": self._get_prop_value("collection date"),
-            "material": self._get_prop_value("environmental medium"),
-            "countryOfOrigin": self._get_prop_value(
-                "geographic location (country and/or sea)"
-            ),
+            "name": self.record.base_value("name"),
+            "description": self.record["sample description"],
+            "url": convert_to_https(self.record.base_value("sameAs")),
+            "productionDate": self.record["collection date"],
+            "material": self.record["environmental medium"],
+            "countryOfOrigin": self.record["geographic location (country and/or sea)"],
             "funding": {
                 "@type": "MonetaryGrant",
                 "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/grant_b5d.jsonld",
@@ -282,32 +303,19 @@ class SampleExtractor:
         }
 
     def _build_action_dict(self) -> dict:
-        """
-        Extract action data from biosamples metadata and convert to Action.jsonld format.
+        """Build the schema.org location Property as type Place"""
 
-        Returns
-        -------
-        dict
-            A dictionary representing the Action in JSON-LD format
-        """
-
-        def build_location() -> dict[str, Any]:
-            """Build the schema.org location Property as type Place"""
-
-            # create name Property if possible
-            region = self._get_prop_value("geographic location (region and locality)")
-            country = self._get_prop_value("geographic location (country and/or sea)")
+        # create name Property if possible
+        def build_location() -> dict:
+            region = self.record["geographic location (region and locality)"]
+            country = self.record["geographic location (country and/or sea)"]
             loc_name = ", ".join(filter(None, [region, country]))
 
             # adds geo Property to location as type GeoCoordinates if values are provided
             geo_fields = {
-                "latitude": self._get_prop_value_with_unit(
-                    "geographic location (latitude)"
-                ),
-                "longitude": self._get_prop_value_with_unit(
-                    "geographic location (longitude)"
-                ),
-                "elevation": self._get_prop_value_with_unit("elevation"),
+                "latitude": self.record.with_unit("geographic location (latitude)"),
+                "longitude": self.record.with_unit("geographic location (longitude)"),
+                "elevation": self.record.with_unit("elevation"),
             }
             geo = {
                 key: f"{value} {unit}"
@@ -326,7 +334,7 @@ class SampleExtractor:
                 "depth-max": None,
                 "depth-min": None,
             }.items():
-                prop = self._build_prop(prop_name, prop_id)
+                prop = self.record.as_property(prop_name, prop_id)
                 if prop:
                     additional_property.append(prop)
 
@@ -363,10 +371,9 @@ class SampleExtractor:
             }
 
         def build_instrument() -> dict[str, Any] | None:
-            # Build instrument array
             instrument = []
             for prop_name in ["sample collection device", "sampling platform"]:
-                if prop := self._get_prop(prop_name):
+                if prop := self.record.raw_property(prop_name):
                     category = None
                     if value_reference := prop.get("valueReference"):
                         if (
@@ -387,13 +394,12 @@ class SampleExtractor:
             return instrument if instrument else None
 
         def build_object() -> dict[str, Any] | None:
-            # Build object array
             object = []
             for prop_name, prop_id in {
                 "environmental medium": "https://w3id.org/mixs/0000014",
                 "organism": None,
             }.items():
-                prop = self._build_prop(prop_name, prop_id)
+                prop = self.record.as_property(prop_name, prop_id)
                 if prop:
                     object.append(prop)
             # Todo clarify organism
@@ -406,10 +412,8 @@ class SampleExtractor:
 
             # Filtration step - extract actual values and units from data
             filtration_param = {
-                "filtration volume": self._get_prop_value_with_unit(
-                    "filtration volume"
-                ),
-                "filtration time": self._get_prop_value_with_unit("filtration time"),
+                "filtration volume": self.record.with_unit("filtration volume"),
+                "filtration time": self.record.with_unit("filtration time"),
             }
             text_parts = [
                 f"{label}: {value} {unit}"
@@ -427,10 +431,10 @@ class SampleExtractor:
 
             # Size fractionation step
             size_frac_param = {
-                "lower threshold": self._get_prop_value_with_unit(
+                "lower threshold": self.record.with_unit(
                     "size-fraction lower threshold"
                 ),
-                "upper threshold": self._get_prop_value_with_unit(
+                "upper threshold": self.record.with_unit(
                     "size-fraction upper threshold"
                 ),
             }
@@ -451,7 +455,7 @@ class SampleExtractor:
             if step:
                 return {
                     "@type": "HowTo",
-                    "name": f"Submitter-declared sampling steps for sample {self.sample_id}.",
+                    "name": f"Submitter-declared sampling steps for sample {self.record.sample_id}.",
                     "description": "The steps in this object are those that have been provided by the submitter of this metadata. They are not ordered and may be incomplete. Please refer to the associated publication and or documentation for more authoritative information.",
                     "step": step,
                 }
@@ -464,31 +468,27 @@ class SampleExtractor:
                     "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
                 }
             ]
-            if project_name := self._get_prop_value("project name"):
+            if project_name := self.record["project name"]:
                 participant.append({"@type": "ResearchProject", "name": project_name})
             return participant if len(participant) > 1 else participant[0]
 
         def build_additional_property() -> list[dict[str, Any]] | dict[str, Any] | None:
             additional_property = []
-            if checklist := self._get_prop("checklist") or self._get_prop(
-                "ENA-CHECKLIST"
-            ):
-                # check that it is a checklist from ENA
+            if checklist := self.record.raw_property(
+                "checklist"
+            ) or self.record.raw_property("ENA-CHECKLIST"):
                 if "ERC" in checklist["value"]:
                     additional_property.append(
                         Checklist(value=checklist["value"]).model_dump(
                             by_alias=True, exclude_none=True
                         )
                     )
-                # otherwise just add it as is
                 else:
                     additional_property.append(checklist)
-            if protocol_label := self._build_prop("protocol label"):
+            if protocol_label := self.record.as_property("protocol label"):
                 additional_property.append(protocol_label)
-
             if not additional_property:
                 return None
-
             return (
                 additional_property
                 if len(additional_property) > 1
@@ -502,10 +502,13 @@ class SampleExtractor:
                 "sampling process",
                 "https://purl.obolibrary.org/obo/OBI_0000744",
             ],
-            "@id": f"Action_{self.sample_id}.jsonld",
-            "name": f"Sampling process for sample {self.sample_id}",
-            "result": {"@type": "Product", "@id": f"Product_{self.sample_id}.jsonld"},
-            "startTime": self._get_prop_value("collection date"),
+            "@id": f"Action_{self.record.sample_id}.jsonld",
+            "name": f"Sampling process for sample {self.record.sample_id}",
+            "result": {
+                "@type": "Product",
+                "@id": f"Product_{self.record.sample_id}.jsonld",
+            },
+            "startTime": self.record["collection date"],
             "location": build_location(),
             "instrument": build_instrument(),
             "object": build_object(),
@@ -513,24 +516,6 @@ class SampleExtractor:
             "participant": build_participant(),
             "additionalProperty": build_additional_property(),
         }
-
-    def _build_remaining_props(self) -> list[dict[str, Any]]:
-        excluded_values = ["not applicable"]
-        remaining_props = []
-
-        for prop in self.sample_record["mainEntity"]["additionalProperty"]:
-            if (
-                prop.get("name") not in self._used_props
-                and prop.get("value") not in excluded_values
-            ):
-                # build prop to handle empty value reference and resolving terminologies
-                prop = self._build_prop(prop.get("name"))
-                # remove empty units
-                if prop.get("unitText") == "":
-                    prop.pop("unitText")
-
-                remaining_props.append(prop)
-        return remaining_props
 
     @staticmethod
     def _append_remaining_props(
@@ -542,14 +527,13 @@ class SampleExtractor:
                 remaining_props = additional_property + remaining_props
             else:
                 remaining_props.insert(0, additional_property)
-
         schema_dict["additionalProperty"] = remaining_props
         return schema_dict
 
     def build_dicts(self) -> tuple[dict[str, Any], dict[str, Any]]:
         product_dict = self._build_product_dict()
         action_dict = self._build_action_dict()
-        remaining_props = self._build_remaining_props()
+        remaining_props = self.record.remaining()
         if remaining_props:
             product_dict = self._append_remaining_props(product_dict, remaining_props)
             action_dict = self._append_remaining_props(action_dict, remaining_props)
