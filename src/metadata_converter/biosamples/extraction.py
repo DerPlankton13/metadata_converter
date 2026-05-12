@@ -167,6 +167,12 @@ class SampleRecord:
         self.sample_id = sample_id
         self._used: set[str] = set()
 
+    @staticmethod
+    def _normalize_prop(prop: dict) -> dict:
+        if prop.get("unitText") == "":
+            prop.pop("unitText")
+        return prop
+
     def __getitem__(self, prop_name: str) -> str | None:
         self._used.add(prop_name)
         return get_value(self._raw, prop_name)
@@ -183,11 +189,13 @@ class SampleRecord:
 
     def as_property(self, prop_name: str, prop_id: str | None = None) -> dict | None:
         self._used.add(prop_name)
-        return build_property(self._raw, prop_name, prop_id)
+        prop = build_property(self._raw, prop_name, prop_id)
+        return self._normalize_prop(prop) if prop else None
 
     def raw_property(self, prop_name: str) -> dict | None:
         self._used.add(prop_name)
-        return get_property(self._raw, prop_name)
+        prop = get_property(self._raw, prop_name)
+        return self._normalize_prop(prop) if prop else None
 
     def remaining(self) -> list[dict]:
         excluded_values = ["not applicable"]
@@ -198,8 +206,6 @@ class SampleRecord:
                 and prop.get("value") not in excluded_values
             ):
                 prop = self.as_property(prop.get("name"))
-                if prop.get("unitText") == "":
-                    prop.pop("unitText")
                 remaining_props.append(prop)
         return remaining_props
 
