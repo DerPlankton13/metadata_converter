@@ -2,16 +2,9 @@ import requests
 
 
 def fetch_metadata(url: str) -> dict:
-    try:
-        response = requests.get(url, timeout=10)
-        response.raise_for_status()  # raises an exception for 4xx/5xx status codes
-        return response.json()
-    except requests.exceptions.HTTPError as e:
-        print(f"HTTP error: {e}")
-    except requests.exceptions.ConnectionError:
-        print("Could not connect")
-    except requests.exceptions.Timeout:
-        print("Request timed out")
+    response = requests.get(url, timeout=10)
+    response.raise_for_status()
+    return response.json()
 
 
 def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dict:
