@@ -514,14 +514,13 @@ class SampleExtractor:
             "additionalProperty": build_additional_property(),
         }
 
-    def _append_remaining_props(self, schema_dict: dict[str, Any]):
-        used_props = set(self._used_props)
+    def _build_remaining_props(self) -> list[dict[str, Any]]:
         excluded_values = ["not applicable"]
         remaining_props = []
 
         for prop in self.sample_record["mainEntity"]["additionalProperty"]:
             if (
-                prop.get("name") not in used_props
+                prop.get("name") not in self._used_props
                 and prop.get("value") not in excluded_values
             ):
                 # build prop to handle empty value reference and resolving terminologies
@@ -550,6 +549,8 @@ class SampleExtractor:
     def build_dicts(self) -> tuple[dict[str, Any], dict[str, Any]]:
         product_dict = self._build_product_dict()
         action_dict = self._build_action_dict()
-        self._append_remaining_props(product_dict)
-        self._append_remaining_props(action_dict)
+        remaining_props = self._build_remaining_props()
+        if remaining_props:
+            product_dict = self._append_remaining_props(product_dict, remaining_props)
+            action_dict = self._append_remaining_props(action_dict, remaining_props)
         return product_dict, action_dict
