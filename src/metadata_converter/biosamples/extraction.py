@@ -160,6 +160,8 @@ def convert_to_https(link: str) -> str:
 
 
 class SampleRecord:
+    __slots__ = ("_raw", "sample_id", "_used")
+
     def __init__(self, raw: dict, sample_id: str):
         self._raw = raw
         self.sample_id = sample_id
