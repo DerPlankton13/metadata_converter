@@ -209,9 +209,10 @@ class BaseBuilder:
         self.record = record
 
     def _build_checklist(self) -> dict | None:
-        if checklist := self.record.raw_property(
-            "checklist"
-        ) or self.record.raw_property("ENA-CHECKLIST"):
+        checklist_prop = self.record.raw_property("checklist")
+        ena_checklist_prop = self.record.raw_property("ENA-CHECKLIST")
+        checklist = checklist_prop or ena_checklist_prop
+        if checklist:
             # check that it is a checklist from ENA
             if "ERC" in checklist["value"]:
                 return Checklist(value=checklist["value"]).model_dump(
