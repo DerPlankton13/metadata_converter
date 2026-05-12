@@ -1,18 +1,9 @@
-from pathlib import Path
-
 import pandas as pd
 
 from metadata_converter.flat_data.transform_helpers import (
     create_full_names,
     split_field,
 )
-from metadata_converter.linked_data.biosamples_handling import (
-    extract_sample,
-    extract_sampling_action,
-    get_metadata,
-)
-from metadata_converter.load import load_to_jsonld
-from metadata_converter.schema_org_models.schemaorg_models import Action, Product
 
 
 def wide(df: pd.DataFrame) -> pd.DataFrame:
@@ -71,20 +62,6 @@ def preprocess_datahub(data_dict: dict[str, pd.DataFrame]) -> dict[str, pd.DataF
 
     # split keywords entries into separate rows
     data_dict[dataset_sheet] = split_field(data_dict[dataset_sheet], "dataset:keywords")
-
-    # ====== handle samples ======
-
-    # download the corresponding metadata
-    for sample_id in samples_w["sample:pid"].unique():
-        meta_data = get_metadata(sample_id)
-        product_dict = extract_sample(meta_data, sample_id)
-        product_dict.pop("@context")
-        product = Product(**product_dict)
-        action_dict = extract_sampling_action(meta_data, sample_id)
-        action_dict.pop("@context")
-        action = Action(**action_dict)
-        load_to_jsonld(product, output_path=Path("output"))
-        load_to_jsonld(action, output_path=Path("output"))
 
     # we need the mapping between sample and analysis from the sample sheet, but
     # we do not need these data for creating .jsonld files, as the desired data
