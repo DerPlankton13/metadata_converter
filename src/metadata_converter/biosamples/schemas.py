@@ -1,6 +1,6 @@
 import re
 
-from pydantic import AnyUrl, field_validator, model_validator
+from pydantic import field_validator, model_validator
 
 from metadata_converter.schema_org_models.custom_models import search_pattern
 from metadata_converter.schema_org_models.schemaorg_models import *
@@ -9,7 +9,7 @@ from metadata_converter.schema_org_models.schemaorg_models import *
 class SRA(PropertyValue):
     name: str = "Short Read Archive Accession"
     alternateName: str = "SRA"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/insdc.sra"
+    propertyID: str = "https://registry.identifiers.org/registry/insdc.sra"
 
     @field_validator("value")
     @classmethod
@@ -27,7 +27,7 @@ class SRA(PropertyValue):
 class BioSample(PropertyValue):
     name: str = "BioSamples Accession"
     alternateName: str = "BioSample"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/biosample"
+    propertyID: str = "https://registry.identifiers.org/registry/biosample"
 
     def model_post_init(self, __context) -> None:
         object.__setattr__(
