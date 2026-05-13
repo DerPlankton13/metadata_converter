@@ -11,7 +11,7 @@ from metadata_converter.config import BiosamplesConfig, BiosamplesInput
 logger = logging.getLogger(__name__)
 
 
-def extract_sample_ids(excel_file: Path, config: BiosamplesInput) -> set(str) | None:
+def get_sample_ids(excel_file: Path, config: BiosamplesInput) -> set(str) | None:
     df = pd.read_excel(
         excel_file,
         sheet_name=config.sheet_name,
@@ -51,7 +51,7 @@ def write(metadata: dict, output_path: Path) -> None:
     output_path.write_text(jsonld_str, encoding="utf-8")
 
 
-def run_biosamples_extraction(config: BiosamplesConfig):
+def get_raw_biosamples(config: BiosamplesConfig):
     logger.info("Starting biosamples extraction workflow")
 
     input_cfg = config.input
@@ -66,7 +66,7 @@ def run_biosamples_extraction(config: BiosamplesConfig):
     for excel_file in tqdm(excel_files, desc="Excel files", unit="file"):
         logger.debug("Processing %s", excel_file.name)
 
-        sample_ids = extract_sample_ids(excel_file, input_cfg)
+        sample_ids = get_sample_ids(excel_file, input_cfg)
         if not sample_ids:
             continue
 
