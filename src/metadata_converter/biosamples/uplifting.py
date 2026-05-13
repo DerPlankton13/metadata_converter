@@ -124,7 +124,7 @@ def build_defined_term(value: str) -> dict[str, str] | None:
     name = re.split(r"[\[(]", value)[0].strip()
     terminology = Terminology.from_term_code(term_code)
     if not terminology:
-        logger.warning(
+        logger.debug(
             "Could not identify a known terminology from '%s'. Available terminologies: %s",
             value,
             ", ".join(t.name for t in Terminology),
