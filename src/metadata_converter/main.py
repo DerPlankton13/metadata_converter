@@ -131,10 +131,10 @@ def main():
                     raw = json.load(f)
                 try:
                     uplifter = SampleUplifter(raw)
+                    product_dict, action_dict = uplifter.build_dicts()
                 except Exception as e:
                     logger.error("Failed to uplift %s: %s", path.name, e)
                     continue
-                product_dict, action_dict = uplifter.build_dicts()
                 try:
                     product = Product(**product_dict)
                     load_to_jsonld(product, output_path=config.uplifting.output_path)
