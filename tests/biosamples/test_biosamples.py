@@ -5,7 +5,13 @@ import pytest
 from deepdiff import DeepDiff
 
 from metadata_converter.biosamples.fetch import fuse_metadata
-from metadata_converter.biosamples.uplifting import SampleUplifter, build_defined_term, build_property
+from metadata_converter.biosamples.uplifting import (
+    ActionBuilder,
+    SampleRecord,
+    SampleUplifter,
+    build_defined_term,
+    build_property,
+)
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -42,6 +48,24 @@ def strip_none(d: dict) -> dict:
         return v
 
     return {k: process(v) for k, v in d.items() if v is not None}
+
+
+def make_record(*props: dict) -> dict:
+    return {
+        "@id": "biosample:SAMEA000000",
+        "mainEntity": {"additionalProperty": list(props)},
+    }
+
+
+def make_property(name: str, value: str, value_reference=None) -> dict:
+    prop = {"@type": "PropertyValue", "name": name, "value": value}
+    if value_reference is not None:
+        prop["valueReference"] = value_reference
+    return prop
+
+
+def make_coord_property(name: str, value: str, unit: str) -> dict:
+    return {"@type": "PropertyValue", "name": name, "value": value, "unitText": unit}
 
 
 # ---------------------------------------------------------------------------
@@ -132,22 +156,26 @@ def test_build_defined_term(input, expected):
 
 
 def test_build_property_multi_value():
-    record = {
-        "mainEntity": {
-            "additionalProperty": [
+    record = make_record(
+        make_property(
+            name="broad-scale environmental context",
+            value="terrestrial biome [ENVO:00000446]|forest biome [ENVO:01000174]|coastal scrubland [ENVO:01000237]",
+            value_reference=[
                 {
-                    "@type": "PropertyValue",
-                    "name": "broad-scale environmental context",
-                    "value": "terrestrial biome [ENVO:00000446]|forest biome [ENVO:01000174]|coastal scrubland [ENVO:01000237]",
-                    "valueReference": [
-                        {"@id": "http://purl.obolibrary.org/obo/ENVO_00000446", "@type": "DefinedTerm"},
-                        {"@id": "http://purl.obolibrary.org/obo/ENVO_01000174", "@type": "DefinedTerm"},
-                        {"@id": "http://purl.obolibrary.org/obo/ENVO_01000237", "@type": "DefinedTerm"},
-                    ],
-                }
-            ]
-        }
-    }
+                    "@id": "http://purl.obolibrary.org/obo/ENVO_00000446",
+                    "@type": "DefinedTerm",
+                },
+                {
+                    "@id": "http://purl.obolibrary.org/obo/ENVO_01000174",
+                    "@type": "DefinedTerm",
+                },
+                {
+                    "@id": "http://purl.obolibrary.org/obo/ENVO_01000237",
+                    "@type": "DefinedTerm",
+                },
+            ],
+        )
+    )
     expected = {
         "@type": "PropertyValue",
         "name": "broad-scale environmental context",
@@ -182,3 +210,183 @@ def test_build_property_multi_value():
     }
     result = build_property(record, "broad-scale environmental context")
     assert_no_diff(expected, result)
+
+
+def test_build_property_fallback_fixes_https():
+    record = make_record(
+        make_property(
+            name="sample collection device",
+            value="CTD rosette",
+            value_reference={
+                "@type": "DefinedTerm",
+                "@id": "http://vocab.nerc.ac.uk/collection/L22/current/TOOL0017/",
+            },
+        )
+    )
+    result = build_property(record, "sample collection device")
+    assert result["valueReference"] == {
+        "@type": "DefinedTerm",
+        "@id": "https://vocab.nerc.ac.uk/collection/L22/current/TOOL0017/",
+    }
+
+
+def test_build_property_fallback_removes_empty_value_reference():
+    record = make_record(
+        make_property(
+            name="sample collection device",
+            value="CTD rosette",
+            value_reference={"@type": "DefinedTerm"},
+        )
+    )
+    result = build_property(record, "sample collection device")
+    assert "valueReference" not in result
+
+
+def test_build_property_fallback_removes_value_reference_without_information():
+    record = make_record(
+        make_property(
+            name="sample collection device",
+            value="CTD rosette",
+            value_reference={"@type": "DefinedTerm", "@id": ""},
+        )
+    )
+    result = build_property(record, "sample collection device")
+    assert "valueReference" not in result
+
+
+def test_build_property_raises_for_multi_element_single_value():
+    record = make_record(
+        make_property(
+            name="sample collection device",
+            value="CTD rosette",
+            value_reference=[
+                {"@type": "DefinedTerm", "@id": "http://example.com/1"},
+                {"@type": "DefinedTerm", "@id": "http://example.com/2"},
+            ],
+        )
+    )
+    with pytest.raises(ValueError):
+        build_property(record, "sample collection device")
+
+
+def test_build_location_both_region_and_country():
+    record = make_record(
+        make_property("geographic location (region and locality)", "Ligurian Sea"),
+        make_property("geographic location (country and/or sea)", "Mediterranean Sea"),
+        make_property("sampling design label", "SDL-001"),
+    )
+    expected = {
+        "@type": "Place",
+        "name": "Ligurian Sea, Mediterranean Sea",
+        "geo": None,
+        "additionalProperty": [
+            {
+                "@type": "PropertyValue",
+                "propertyID": "https://w3id.org/mixs/0000010",
+                "name": "geographic location (country and/or sea,region)",
+                "value": "Mediterranean Sea: , Ligurian Sea",
+            },
+            {
+                "@type": "PropertyValue",
+                "name": "sampling design label",
+                "description": "Sampling Design Label (SDL) is a unique identifier used to track all samples and data originating from the same sampling location. (https://biocean5d.embl.de/faq.cgi)",
+                "propertyID": "sampling design label",
+                "value": "SDL-001",
+            },
+        ],
+    }
+    result = ActionBuilder(SampleRecord(record))._build_location()
+    assert_no_diff(expected, result)
+
+
+def test_build_location_country_only():
+    record = make_record(
+        make_property("geographic location (country and/or sea)", "Mediterranean Sea"),
+    )
+    expected = {
+        "@type": "Place",
+        "name": "Mediterranean Sea",
+        "geo": None,
+        "additionalProperty": None,
+    }
+    result = ActionBuilder(SampleRecord(record))._build_location()
+    assert_no_diff(expected, result)
+
+
+def test_build_location_with_coordinates():
+    record = make_record(
+        make_coord_property("geographic location (latitude)", "43.5", "DD"),
+        make_coord_property("geographic location (longitude)", "7.8", "DD"),
+        make_coord_property("elevation", "10", "m"),
+    )
+    result = ActionBuilder(SampleRecord(record))._build_location()
+
+    assert result["name"] is None
+    assert result["geo"] == {
+        "@type": "GeoCoordinates",
+        "latitude": "43.5 DD",
+        "longitude": "7.8 DD",
+        "elevation": "10 m",
+    }
+
+
+def test_build_location_empty():
+    record = make_record()
+    result = ActionBuilder(SampleRecord(record))._build_location()
+
+    assert result["name"] is None
+    assert result["geo"] is None
+    assert result["additionalProperty"] is None
+
+
+def test_build_instrument_single_value():
+    record = make_record(
+        make_property(
+            name="sample collection device",
+            value="CTD rosette",
+            value_reference={
+                "@type": "DefinedTerm",
+                "@id": "http://vocab.nerc.ac.uk/collection/L22/current/TOOL0017/",
+            },
+        )
+    )
+    result = ActionBuilder(SampleRecord(record))._build_instrument()
+    assert result == [
+        {
+            "@type": "Product",
+            "description": "sample collection device",
+            "name": "CTD rosette",
+            "category": "https://vocab.nerc.ac.uk/collection/L22/current/TOOL0017/",
+        }
+    ]
+
+
+def test_build_instrument_multi_value():
+    record = make_record(
+        make_property(
+            name="sample collection device",
+            value="CTD rosette|Niskin bottle",
+            value_reference=[
+                {
+                    "@type": "DefinedTerm",
+                    "@id": "http://vocab.nerc.ac.uk/collection/L22/current/TOOL0017/",
+                },
+                {
+                    "@type": "DefinedTerm",
+                    "@id": "http://vocab.nerc.ac.uk/collection/L22/current/TOOL0412/",
+                },
+            ],
+        )
+    )
+    result = ActionBuilder(SampleRecord(record))._build_instrument()
+    assert result == [
+        {
+            "@type": "Product",
+            "description": "sample collection device",
+            "name": ["CTD rosette", "Niskin bottle"],
+            "category": [
+                "https://vocab.nerc.ac.uk/collection/L22/current/TOOL0017/",
+                "https://vocab.nerc.ac.uk/collection/L22/current/TOOL0412/",
+            ],
+        }
+    ]
