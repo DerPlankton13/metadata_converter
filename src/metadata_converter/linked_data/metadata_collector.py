@@ -72,6 +72,7 @@ Requirements
 
 import functools
 import json
+import logging
 import time
 from collections.abc import Callable
 
@@ -81,6 +82,8 @@ from pydantic import BaseModel
 
 from metadata_converter.config import ApiExtractorConfig
 from metadata_converter.linked_data.query_models import Query, QueryGroup, QueryTerm
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Record
@@ -235,6 +238,7 @@ def _query_zenodo(
     data = _get(session, config.api_url, config, params=params).json()
     total = data["hits"]["total"]
     records: list[Record] = []
+    logger.info("Zenodo: %d record(s) found", total)
 
     def _parse(hits: list[dict]) -> None:
         for hit in hits:
@@ -252,6 +256,7 @@ def _query_zenodo(
     _parse(data["hits"]["hits"])
     while len(records) < total:
         params["page"] += 1
+        logger.debug("Fetching page %d (%d/%d) ...", params["page"], len(records), total)
         time.sleep(config.request_delay)
         _parse(
             _get(session, config.api_url, config, params=params).json()["hits"]["hits"]
@@ -272,6 +277,7 @@ def _query_datacite(
     data = _get(session, config.api_url, config, params=params).json()
     total = data["meta"]["total"]
     records: list[Record] = []
+    logger.info("DataCite: %d record(s) found", total)
 
     def _parse(items: list[dict]) -> None:
         for item in items:
@@ -291,6 +297,7 @@ def _query_datacite(
     _parse(data["data"])
     while len(records) < total:
         params["page[number]"] += 1
+        logger.debug("Fetching page %d (%d/%d) ...", params["page[number]"], len(records), total)
         time.sleep(config.request_delay)
         _parse(_get(session, config.api_url, config, params=params).json()["data"])
 
@@ -350,6 +357,7 @@ def _query_seanoe(
     data = _post(session, config.api_url, config, json=_payload(1)).json()
     total = data.get("entriesCount", 0)
     records: list[Record] = []
+    logger.info("SEANOE: %d record(s) found", total)
 
     def _parse(entries: list[dict]) -> None:
         for entry in entries:
@@ -368,6 +376,7 @@ def _query_seanoe(
     while len(records) < total:
         time.sleep(config.request_delay)
         page = len(records) // config.page_size + 1
+        logger.debug("Fetching page %d (%d/%d) ...", page, len(records), total)
         _parse(
             _post(session, config.api_url, config, json=_payload(page))
             .json()
@@ -422,13 +431,16 @@ def _query_figshare(
 
     items = _post(session, config.api_url, config, json=_payload(page)).json()
     _parse(items)
+    logger.info("Figshare: fetching records ...")
     # Figshare signals end-of-results with a page shorter than page_size
     while len(items) == config.page_size:
         page += 1
+        logger.debug("Fetching page %d (%d records so far) ...", page, len(records))
         time.sleep(config.request_delay)
         items = _post(session, config.api_url, config, json=_payload(page)).json()
         _parse(items)
 
+    logger.info("Figshare: %d record(s) found", len(records))
     return records
 
 

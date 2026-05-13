@@ -1,6 +1,9 @@
+import logging
 import tomllib
 from pathlib import Path
 from typing import Annotated, Any, Literal, Union
+
+logger = logging.getLogger(__name__)
 
 from pydantic import (
     BaseModel,
@@ -121,8 +124,8 @@ class ApiExtractorConfig(BaseModel):
     @model_validator(mode="after")
     def _export_template_has_placeholder(self) -> "ApiExtractorConfig":
         if (
-            self.fetch_strategy == "export_endpoint"
-            and "{record_id}" not in self.export_url_template
+                self.fetch_strategy == "export_endpoint"
+                and "{record_id}" not in self.export_url_template
         ):
             raise ValueError(
                 "export_url_template must contain {record_id} "
@@ -181,15 +184,15 @@ def load_config(path: str) -> Config:
             config_file = tomllib.load(f)
             config = TypeAdapter(Config).validate_python(config_file)
     except FileNotFoundError:
-        print(f"Error: config file not found: {path}")
+        logger.error("Config file not found: %s", path)
         raise SystemExit(1)
     except ValidationError as e:
-        print(f"Error: invalid config:\n{e}")
-        print(
-            e.errors()[0]["msg"],
-            e.errors()[0]["loc"],
-            "but input was:",
-            e.errors()[0]["input"],
+        first = e.errors()[0]
+        logger.error(
+            "Invalid config — %s at %s (input was: %s)",
+            first["msg"],
+            first["loc"],
+            first["input"],
         )
         raise SystemExit(1)
     return config

@@ -1,9 +1,13 @@
+import logging
+
 import pandas as pd
 
 from metadata_converter.flat_data.transform_helpers import (
     create_full_names,
     split_field,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def wide(df: pd.DataFrame) -> pd.DataFrame:
@@ -32,6 +36,7 @@ def get_one_to_many_id_mapping(
 
 
 def preprocess_datahub(data_dict: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    logger.info("Preprocessing datahub data ...")
     # hardcode the sheet names for now
     author_sheet = "author"
     dataset_sheet = "dataset"
@@ -103,18 +108,17 @@ def preprocess_datahub(data_dict: dict[str, pd.DataFrame]) -> dict[str, pd.DataF
     # the analysis field in the file sheet is optional, thus we have to check whether a mapping is actually provided
     missing_analysis = pd.isna(files_w["file:analysis"])
     if all(missing_analysis):
-        print(
-            "No analysis was provided in the input file's 'file' sheet. "
-            "If only one analysis is provided, check whether this was used "
+        logger.warning(
+            "No analysis was provided in the 'file' sheet. "
+            "If only one analysis exists, check whether this was used "
             "to create all files and adopt the input data accordingly or "
             "consider changing the behaviour of the code, if the datahub "
-            "team can confirm that this assumption is true.\n"
+            "team can confirm that this assumption is true."
         )
     elif sum(missing_analysis) > 0:
-        print("Some files are missing a link to the analysis:")
+        logger.warning("Some files are missing a link to the analysis:")
         for file in files_w[pd.isna(files_w["file:analysis"])]["file:name"]:
-            print(f"  - missing analysis for {file}")
-        print("\n")
+            logger.warning("  - missing analysis for %s", file)
     else:
         results = get_one_to_many_id_mapping(
             addend=analysis,
@@ -138,12 +142,11 @@ def preprocess_datahub(data_dict: dict[str, pd.DataFrame]) -> dict[str, pd.DataF
     # the sample field in the file sheet is optional, thus we have to check whether a mapping is actually provided
     missing_sample = pd.isna(files_w["file:sample"])
     if all(missing_sample):
-        print("No samples were provided in the input file's 'file' sheet.\n")
+        logger.warning("No samples were provided in the 'file' sheet.")
     elif sum(missing_sample) > 0:
-        print("Some files are missing a link to the sample:")
+        logger.warning("Some files are missing a link to the sample:")
         for file in files_w[pd.isna(files_w["file:sample"])]["file:name"]:
-            print(f"  - missing sample for {file}")
-        print("\n")
+            logger.warning("  - missing sample for %s", file)
     else:
         results = get_one_to_many_id_mapping(
             addend=files,

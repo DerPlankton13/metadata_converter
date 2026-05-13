@@ -1,3 +1,4 @@
+import logging
 import re
 from typing import Any
 
@@ -11,6 +12,8 @@ from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (
     SchemaOrgBase,
 )
+
+logger = logging.getLogger(__name__)
 
 
 def _run_plugins(df: pd.DataFrame, plugins: list[CleaningPlugin]) -> pd.DataFrame:
@@ -182,14 +185,11 @@ def instantiate_schema(
         return schema_class(**schema_properties)
     except ValidationError as e:
         for err in e.errors():
-            print(
-                f"Could not create a class of {schema_type}:",
-                err["msg"],
-                err["loc"],
-                "but input was:",
-                err.get("input"),
+            logger.warning(
+                "Could not create %s: %s at %s (input: %s)",
+                schema_type, err["msg"], err["loc"], err.get("input"),
             )
-        print(f"The following properties were provided: {schema_properties}")
+        logger.debug("Properties provided: %s", schema_properties)
         return None
 
 
@@ -414,11 +414,14 @@ def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrg
         A list of instantiated and Pydantic-validated schema.org objects.
     """
     schemas = []
+    groups = list(df.groupby("id"))
+    logger.info("Building schemas for %d record(s) ...", len(groups))
 
-    for _, entity in df.groupby("id"):
+    for _, entity in groups:
         entity = entity.groupby("header")["value"].apply(list).to_dict()
         result = build_schema(entity, mapping)
         if result is not None:
             schemas.extend(result)
 
+    logger.info("Built %d schema(s) successfully", len(schemas))
     return schemas
