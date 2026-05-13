@@ -15,8 +15,8 @@ from pydantic import (
     model_validator,
 )
 
+from metadata_converter.api_fetching.query_models import Query
 from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin, load_plugins
-from metadata_converter.linked_data.query_models import Query
 
 
 class ExtractorConfigBase(BaseModel):
@@ -124,8 +124,8 @@ class ApiExtractorConfig(BaseModel):
     @model_validator(mode="after")
     def _export_template_has_placeholder(self) -> "ApiExtractorConfig":
         if (
-                self.fetch_strategy == "export_endpoint"
-                and "{record_id}" not in self.export_url_template
+            self.fetch_strategy == "export_endpoint"
+            and "{record_id}" not in self.export_url_template
         ):
             raise ValueError(
                 "export_url_template must contain {record_id} "
