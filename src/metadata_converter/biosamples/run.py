@@ -11,7 +11,7 @@ from metadata_converter.config import BiosamplesConfig, BiosamplesInput
 logger = logging.getLogger(__name__)
 
 
-def get_sample_ids(excel_file: Path, config: BiosamplesInput) -> set(str) | None:
+def get_sample_ids(excel_file: Path, config: BiosamplesInput) -> set[str] | None:
     df = pd.read_excel(
         excel_file,
         sheet_name=config.sheet_name,
