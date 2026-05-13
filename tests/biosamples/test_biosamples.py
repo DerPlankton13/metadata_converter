@@ -5,7 +5,7 @@ import pytest
 from deepdiff import DeepDiff
 
 from metadata_converter.biosamples.fetch import fuse_metadata
-from metadata_converter.biosamples.uplifting import SampleUplifter, build_defined_term
+from metadata_converter.biosamples.uplifting import SampleUplifter, build_defined_term, build_property
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -129,3 +129,56 @@ EXPECTED_NCBI = {
 def test_build_defined_term(input, expected):
     defined_term = build_defined_term(input)
     assert_no_diff(expected, defined_term)
+
+
+def test_build_property_multi_value():
+    record = {
+        "mainEntity": {
+            "additionalProperty": [
+                {
+                    "@type": "PropertyValue",
+                    "name": "broad-scale environmental context",
+                    "value": "terrestrial biome [ENVO:00000446]|forest biome [ENVO:01000174]|coastal scrubland [ENVO:01000237]",
+                    "valueReference": [
+                        {"@id": "http://purl.obolibrary.org/obo/ENVO_00000446", "@type": "DefinedTerm"},
+                        {"@id": "http://purl.obolibrary.org/obo/ENVO_01000174", "@type": "DefinedTerm"},
+                        {"@id": "http://purl.obolibrary.org/obo/ENVO_01000237", "@type": "DefinedTerm"},
+                    ],
+                }
+            ]
+        }
+    }
+    expected = {
+        "@type": "PropertyValue",
+        "name": "broad-scale environmental context",
+        "value": [
+            "terrestrial biome [ENVO:00000446]",
+            "forest biome [ENVO:01000174]",
+            "coastal scrubland [ENVO:01000237]",
+        ],
+        "valueReference": [
+            {
+                "@type": "DefinedTerm",
+                "name": "terrestrial biome",
+                "termCode": "ENVO:00000446",
+                "url": "https://purl.obolibrary.org/obo/ENVO_00000446",
+                "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
+            },
+            {
+                "@type": "DefinedTerm",
+                "name": "forest biome",
+                "termCode": "ENVO:01000174",
+                "url": "https://purl.obolibrary.org/obo/ENVO_01000174",
+                "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
+            },
+            {
+                "@type": "DefinedTerm",
+                "name": "coastal scrubland",
+                "termCode": "ENVO:01000237",
+                "url": "https://purl.obolibrary.org/obo/ENVO_01000237",
+                "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
+            },
+        ],
+    }
+    result = build_property(record, "broad-scale environmental context")
+    assert_no_diff(expected, result)
