@@ -177,9 +177,12 @@ def convert_to_https(link: str) -> str:
 class SampleRecord:
     __slots__ = ("_raw", "sample_id", "_used")
 
-    def __init__(self, raw: dict, sample_id: str):
+    def __init__(self, raw: dict):
         self._raw = raw
-        self.sample_id = sample_id
+        try:
+            self.sample_id = raw["@id"].split(":")[-1]
+        except KeyError:
+            raise ValueError("The provided input does not contain an '@id' key.")
         self._used: set[str] = set()
 
     @staticmethod
@@ -513,8 +516,8 @@ class ActionBuilder(BaseBuilder):
 
 
 class SampleUplifter:
-    def __init__(self, raw: dict, sample_id: str):
-        self.record = SampleRecord(raw, sample_id)
+    def __init__(self, raw: dict):
+        self.record = SampleRecord(raw)
 
     @staticmethod
     def _append_remaining_props(
