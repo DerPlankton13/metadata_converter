@@ -60,7 +60,9 @@ def get_value_with_unit(
             value = prop["value"]
             unit = prop["unitText"]
         except KeyError:
-            logger.debug("Property '%s' is missing 'value' or 'unitText': %s", prop_name, prop)
+            logger.debug(
+                "Property '%s' is missing 'value' or 'unitText': %s", prop_name, prop
+            )
         except Exception as e:
             logger.error(e)
     return value, unit
@@ -510,7 +512,7 @@ class ActionBuilder(BaseBuilder):
         }
 
 
-class SampleExtractor:
+class SampleUplifter:
     def __init__(self, raw: dict, sample_id: str):
         self.record = SampleRecord(raw, sample_id)
 
