@@ -22,7 +22,9 @@ def get_property(sample_record: dict, prop_name: str) -> dict | None:
         return None
     if len(results) > 1:
         logger.warning(
-            "Ambiguous property '%s': found %d matches, expected 1", prop_name, len(results)
+            "Ambiguous property '%s': found %d matches, expected 1",
+            prop_name,
+            len(results),
         )
         logger.debug("The searched sample_record was: %s", sample_record)
         return None
@@ -153,22 +155,31 @@ def build_property(
     if prop_id:
         prop["propertyID"] = prop_id
 
-    # try to build a value reference from the value and overwrite any existing one
-    value_reference = build_defined_term(prop.get("value"))
-    if value_reference:
-        prop["valueReference"] = value_reference
+    parts = [p.strip() for p in str(prop.get("value", "")).split("|")]
+    multi = len(parts) > 1
+    if multi:
+        prop["value"] = parts
+
+    # try to build value references from the value parts and overwrite any existing ones
+    defined_terms = [dt for p in parts if (dt := build_defined_term(p)) is not None]
+    if defined_terms:
+        prop["valueReference"] = defined_terms if multi else defined_terms[0]
     # otherwise check if there is an existing value reference and clean it up if needed
     elif existing := prop.get("valueReference"):
-        if isinstance(existing, list) and len(existing) == 1:
-            existing = existing[0]
-        # remove any existing valueReference that contain no information
-        if not any(v for k, v in existing.items() if k != "@type"):
-            prop.pop("valueReference")
+        entries = existing if isinstance(existing, list) else [existing]
+        if not multi and len(entries) > 1:
+            raise ValueError(
+                f"Expected valueReference to be a dict or single-element list for a single value, "
+                f"got list of length {len(entries)} ({entries}) for property '{prop_name}'"
+            )
+        # remove entries that contain no information beyond @type
+        entries = [e for e in entries if any(v for k, v in e.items() if k != "@type")]
         # fix http links
+        entries = [{k: convert_to_https(v) for k, v in e.items()} for e in entries]
+        if entries:
+            prop["valueReference"] = entries if multi else entries[0]
         else:
-            prop["valueReference"] = {
-                k: convert_to_https(v) for k, v in existing.items()
-            }
+            prop.pop("valueReference")
 
     return prop
 
