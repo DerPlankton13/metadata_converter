@@ -17,9 +17,12 @@ def get_property(sample_record: dict, prop_name: str) -> dict | None:
 
     results = [p for p in props if p.get("name") == prop_name]
 
-    if len(results) != 1:
+    if len(results) == 0:
+        logger.debug("Property '%s' not found in sample record", prop_name)
+        return None
+    if len(results) > 1:
         logger.warning(
-            "No unique match found for '%s' (got %d results)", prop_name, len(results)
+            "Ambiguous property '%s': found %d matches, expected 1", prop_name, len(results)
         )
         logger.debug("The searched sample_record was: %s", sample_record)
         return None
