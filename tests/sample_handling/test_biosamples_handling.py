@@ -4,8 +4,8 @@ from pathlib import Path
 import pytest
 from deepdiff import DeepDiff
 
-from metadata_converter.biosamples.extraction import SampleUplifter, build_defined_term
 from metadata_converter.biosamples.fetch import fuse_metadata
+from metadata_converter.biosamples.uplifting import SampleUplifter, build_defined_term
 
 # ---------------------------------------------------------------------------
 # Constants
