@@ -65,7 +65,7 @@ def test_extract_product(sample_id):
     expected = load_json(DATA_DIR / f"Product_{sample_id}.jsonld")
     data = load_json(DATA_DIR / f"{sample_id}_with_units.jsonld")
 
-    product, _ = SampleUplifter(data, sample_id).build_dicts()
+    product, _ = SampleUplifter(data).build_dicts()
     # I consider the dicts the be equal, even if they contain additional None entries
     assert_no_diff(strip_none(expected), strip_none(product))
 
@@ -75,7 +75,7 @@ def test_extract_action(sample_id):
     expected = load_json(DATA_DIR / f"Action_{sample_id}.jsonld")
     data = load_json(DATA_DIR / f"{sample_id}_with_units.jsonld")
 
-    _, action = SampleUplifter(data, sample_id).build_dicts()
+    _, action = SampleUplifter(data).build_dicts()
     # I consider the dicts the be equal, even if they contain additional None entries
     assert_no_diff(strip_none(expected), strip_none(action))
 
