@@ -8,4 +8,7 @@ skiprows = [1, 2]
 header_name = "sample:pid"
 
 [output]
-output_path = "output/biosamples"
+output_path = "output/raw/biosamples"
+
+[uplifting]
+output_path = "output/uplifted/biosamples"

@@ -148,6 +148,11 @@ class OutputConfig(BaseModel):
     output_path: Path
 
 
+class UpliftingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    output_path: Path
+
+
 class FlatDataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workflow_type: Literal["flat_data"] = "flat_data"
@@ -170,6 +175,7 @@ class BiosamplesConfig(BaseModel):
     workflow_type: Literal["biosamples"] = "biosamples"
     input: BiosamplesInput
     output: OutputConfig
+    uplifting: UpliftingConfig | None = None
 
 
 Config = Annotated[
