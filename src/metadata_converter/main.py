@@ -3,7 +3,8 @@ import logging
 
 from tqdm import tqdm
 
-from metadata_converter.biosamples.run import run_biosamples_extraction
+from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
+from metadata_converter.biosamples.run import get_raw_biosamples
 from metadata_converter.config import (
     BiosamplesConfig,
     FlatDataConfig,
@@ -17,7 +18,6 @@ from metadata_converter.flat_data.transform import (
     convert_to_long,
     extract_schemas,
 )
-from metadata_converter.linked_data.metadata_collector import fetch_jsonld, query_source
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.logging_setup import setup_logging
 from metadata_converter.parse import parse_cli
@@ -119,7 +119,7 @@ def main():
             load_to_jsonld(schema, output_path=config.output.output_path)
 
     elif isinstance(config, BiosamplesConfig):
-        run_biosamples_extraction(config)
+        get_raw_biosamples(config)
 
 
 if __name__ == "__main__":
