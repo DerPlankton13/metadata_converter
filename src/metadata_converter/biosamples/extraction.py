@@ -1,3 +1,4 @@
+import logging
 import re
 from enum import Enum
 from typing import Any, Literal
@@ -8,6 +9,8 @@ from metadata_converter.biosamples.schemas import (
     Checklist,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def get_property(sample_record: dict, prop_name: str) -> dict | None:
     props = sample_record["mainEntity"]["additionalProperty"]
@@ -15,7 +18,10 @@ def get_property(sample_record: dict, prop_name: str) -> dict | None:
     results = [p for p in props if p.get("name") == prop_name]
 
     if len(results) != 1:
-        print(f"No unique match found for {prop_name} within {sample_record}")
+        logger.warning(
+            "No unique match found for '%s' (got %d results)", prop_name, len(results)
+        )
+        logger.debug("The searched sample_record was: %s", sample_record)
         return None
 
     return results[0].copy()
@@ -24,12 +30,16 @@ def get_property(sample_record: dict, prop_name: str) -> dict | None:
 def get_value(sample_record: dict, prop_name: str) -> str | None:
     """
     Safely extract a property value from the data without raising exceptions.
-    Returns the default value if the property is not found.
+    Returns None if the property is not found.
     """
-    try:
-        return get_property(sample_record, prop_name)["value"]
-    except Exception:
-        return None
+    if prop := get_property(sample_record, prop_name):
+        try:
+            return prop["value"]
+        except KeyError:
+            logger.debug("Property '%s' has no 'value' key: %s", prop_name, prop)
+        except Exception as e:
+            logger.error(e)
+    return None
 
 
 def get_value_with_unit(
@@ -45,12 +55,14 @@ def get_value_with_unit(
         (value, unit) tuple
     """
     value, unit = None, "Unit unknown"
-    try:
-        prop = get_property(sample_record, prop_name)
-        value = prop["value"]
-        unit = prop["unitText"]
-    except Exception:
-        pass
+    if prop := get_property(sample_record, prop_name):
+        try:
+            value = prop["value"]
+            unit = prop["unitText"]
+        except KeyError:
+            logger.debug("Property '%s' is missing 'value' or 'unitText': %s", prop_name, prop)
+        except Exception as e:
+            logger.error(e)
     return value, unit
 
 
@@ -107,9 +119,10 @@ def build_defined_term(value: str) -> dict[str, str] | None:
     name = re.split(r"[\[(]", value)[0].strip()
     terminology = Terminology.from_term_code(term_code)
     if not terminology:
-        print(
-            f"Could not identify a known terminology from {value}. Available terminologies are: ",
-            ", ".join([t.name for t in Terminology]),
+        logger.warning(
+            "Could not identify a known terminology from '%s'. Available terminologies: %s",
+            value,
+            ", ".join(t.name for t in Terminology),
         )
         return None
 
@@ -400,7 +413,6 @@ class ActionBuilder(BaseBuilder):
                     if isinstance(value_reference, list) and len(value_reference) == 1:
                         value_reference = value_reference[0]
                     category = value_reference.get("@id")
-                print(category)
                 instrument.append(
                     {
                         "@type": "Product",
