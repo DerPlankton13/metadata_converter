@@ -1,10 +1,12 @@
 import json
 import logging
 
+from pydantic import ValidationError
 from tqdm import tqdm
 
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.biosamples.run import get_raw_biosamples
+from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import (
     BiosamplesConfig,
     FlatDataConfig,
@@ -22,14 +24,16 @@ from metadata_converter.load import load_to_jsonld
 from metadata_converter.logging_setup import setup_logging
 from metadata_converter.parse import parse_cli
 from metadata_converter.schema_org_models.custom_models import get_schema
-from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
+from metadata_converter.schema_org_models.schemaorg_models import (
+    Action,
+    Product,
+    SchemaOrgBase,
+)
 
 logger = logging.getLogger(__name__)
 
 
 def _log_validation_error(error) -> None:
-    from pydantic import ValidationError
-
     if not isinstance(error, ValidationError):
         return
     error_list = [{**e, "depth": len(e["loc"])} for e in error.errors()]
@@ -120,6 +124,29 @@ def main():
 
     elif isinstance(config, BiosamplesConfig):
         get_raw_biosamples(config)
+        if config.uplifting is not None:
+            raw_files = config.output.output_path.glob("**/*.jsonld")
+            for path in tqdm(list(raw_files), desc="Uplifting samples", unit="sample"):
+                with path.open() as f:
+                    raw = json.load(f)
+                try:
+                    uplifter = SampleUplifter(raw)
+                except Exception as e:
+                    logger.error("Failed to uplift %s: %s", path.name, e)
+                    continue
+                product_dict, action_dict = uplifter.build_dicts()
+                try:
+                    product = Product(**product_dict)
+                    load_to_jsonld(product, output_path=config.uplifting.output_path)
+                except ValidationError as e:
+                    logger.error("Failed to build product for %s.", path.name)
+                    _log_validation_error(e)
+                try:
+                    action = Action(**action_dict)
+                    load_to_jsonld(action, output_path=config.uplifting.output_path)
+                except ValidationError as e:
+                    logger.error("Failed to build action for %s.", path.name)
+                    _log_validation_error(e)
 
 
 if __name__ == "__main__":
