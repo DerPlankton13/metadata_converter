@@ -72,6 +72,10 @@ def get_raw_biosamples(config: BiosamplesConfig):
 
         logger.info("Found %d sample ID(s) in '%s'", len(sample_ids), excel_file.name)
         for sample_id in tqdm(sorted(sample_ids), desc=excel_file.name, unit="sample"):
+            output_path = config.output.output_path / f"{sample_id}.jsonld"
+            if output_path.exists():
+                logger.debug("Skipping %s, already exists", sample_id)
+                continue
             logger.debug("Fetching metadata for sample %s", sample_id)
             try:
                 metadata = get_metadata(sample_id)
@@ -85,9 +89,6 @@ def get_raw_biosamples(config: BiosamplesConfig):
                 continue
 
             metadata = modify_context(metadata, sample_id)
-            write(
-                metadata,
-                output_path=config.output.output_path / f"{sample_id}.jsonld",
-            )
+            write(metadata, output_path=output_path)
 
     logger.info("Biosamples extraction complete. Output: %s", config.output.output_path)
