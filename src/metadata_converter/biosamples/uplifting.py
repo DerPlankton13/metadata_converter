@@ -427,16 +427,29 @@ class ActionBuilder(BaseBuilder):
         instrument = []
         for prop_name in ["sample collection device", "sampling platform"]:
             if prop := self.record.raw_property(prop_name):
+                # also handle multiple values
+                parts = [p.strip() for p in str(prop.get("value", "")).split("|")]
+                value = parts if len(parts) > 1 else parts[0] if parts else None
+
                 category = None
                 if value_reference := prop.get("valueReference"):
-                    if isinstance(value_reference, list) and len(value_reference) == 1:
-                        value_reference = value_reference[0]
-                    category = value_reference.get("@id")
+                    value_reference = (
+                        value_reference
+                        if isinstance(value_reference, list)
+                        else [value_reference]
+                    )
+                    ids = [
+                        convert_to_https(e.get("@id"))
+                        for e in value_reference
+                        if e.get("@id")
+                    ]
+                    category = ids if len(ids) > 1 else ids[0] if ids else None
+
                 instrument.append(
                     {
                         "@type": "Product",
                         "description": prop_name,
-                        "name": prop.get("value"),
+                        "name": value,
                         "category": category,
                     }
                 )
