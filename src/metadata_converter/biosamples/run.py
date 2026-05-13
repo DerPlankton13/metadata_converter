@@ -87,7 +87,7 @@ def get_raw_biosamples(config: BiosamplesConfig):
             metadata = modify_context(metadata, sample_id)
             write(
                 metadata,
-                output_path=config.output.output_path / f"raw/{sample_id}.jsonld",
+                output_path=config.output.output_path / f"{sample_id}.jsonld",
             )
 
     logger.info("Biosamples extraction complete. Output: %s", config.output.output_path)
