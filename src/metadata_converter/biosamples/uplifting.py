@@ -334,7 +334,7 @@ class ProductBuilder(BaseBuilder):
 
     def build(self) -> dict:
         return {
-            "@context": {"@vocab": "https://schema.org"},
+            "@context": {"@vocab": "https://schema.org/"},
             "@type": "Product",
             "additionalType": [
                 "sample",

@@ -37,7 +37,7 @@ def modify_context(metadata: dict, sample_id: str) -> dict:
     else:
         try:
             terms = context[1]
-            context = {"@vocab": "https://schema.org", **terms}
+            context = {"@vocab": "https://schema.org/", **terms}
             metadata["@context"] = context
         except (IndexError, TypeError):
             logger.error("Unexpected @context for sample %s: %s", sample_id, context)
