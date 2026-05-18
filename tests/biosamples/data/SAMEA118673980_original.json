@@ -1,0 +1,130 @@
+{
+  "name" : "SBR_B5D_471",
+  "accession" : "SAMEA118673980",
+  "sraAccession" : "ERS25164901",
+  "webinSubmissionAccountId" : "Webin-13474",
+  "taxId" : 749907,
+  "status" : "PUBLIC",
+  "release" : "2025-07-07T00:00:00Z",
+  "update" : "2025-07-07T07:36:54.658Z",
+  "submitted" : "2025-07-07T07:36:54.655Z",
+  "characteristics" : {
+    "SRA accession" : [ {
+      "text" : "ERS25164901"
+    } ],
+    "broad_scale environmental context" : [ {
+      "text" : "sediment (ENVO:00002007)",
+      "ontologyTerms" : [ "http://purl.obolibrary.org/obo/ENVO_00002007" ],
+      "unit" : ""
+    } ],
+    "checklist" : [ {
+      "text" : "BSDC00001"
+    } ],
+    "collection date" : [ {
+      "text" : "2023-07-03",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "depth" : [ {
+      "text" : "0.2",
+      "ontologyTerms" : [ "" ],
+      "unit" : "m"
+    } ],
+    "elevation" : [ {
+      "text" : "0",
+      "ontologyTerms" : [ "" ],
+      "unit" : "m"
+    } ],
+    "environmental medium" : [ {
+      "text" : "intertidal sediment (ENVO:00002179)",
+      "ontologyTerms" : [ "http://purl.obolibrary.org/obo/ENVO_00002179" ],
+      "unit" : ""
+    } ],
+    "geographic location (country and/or sea)" : [ {
+      "text" : "France",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "geographic location (latitude)" : [ {
+      "text" : "48.608",
+      "ontologyTerms" : [ "" ],
+      "unit" : "DD"
+    } ],
+    "geographic location (longitude)" : [ {
+      "text" : "-3.94",
+      "ontologyTerms" : [ "" ],
+      "unit" : "DD"
+    } ],
+    "local environmental context" : [ {
+      "text" : "sediment surface (ENVO:01001192)",
+      "ontologyTerms" : [ "http://purl.obolibrary.org/obo/ENVO_01001192" ],
+      "unit" : ""
+    } ],
+    "organism" : [ {
+      "text" : "sediment metagenome",
+      "ontologyTerms" : [ "http://purl.obolibrary.org/obo/NCBITaxon_749907" ],
+      "unit" : ""
+    } ],
+    "pcr primers" : [ {
+      "text" : "GGWACWGGWTGAACWGTWTAYCCYCC TAIACYTCIGGRTGICCRAARAAYCA",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "project name" : [ {
+      "text" : "BIOcean5D",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "sample collection device" : [ {
+      "text" : "corer (20 cm)",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "sample description" : [ {
+      "text" : "This sample (SBR_B5D_471), which is part of PRJEB89433, was collected during the Douarmor expeditions (project BIOcean5D) along a transect from the Penze River to the adjacent marine waters (Bay of Morlaix in the Western English Channel)",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "sample title" : [ {
+      "text" : "P1_B1_230703",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "sampling campaign" : [ {
+      "text" : "Douarmor",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "sampling platform" : [ {
+      "text" : "Aurelia",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ],
+    "sampling site" : [ {
+      "text" : "Penze (P1)",
+      "ontologyTerms" : [ "" ],
+      "unit" : ""
+    } ]
+  },
+  "submittedVia" : "FILE_UPLOADER",
+  "create" : "2025-07-07T07:36:54.655Z",
+  "_links" : {
+    "self" : {
+      "href" : "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980"
+    },
+    "applyCurations" : {
+      "href" : "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980{?applyCurations}",
+      "templated" : true
+    },
+    "curationLinks" : {
+      "href" : "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980/curationlinks"
+    },
+    "curationLink" : {
+      "href" : "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980/curationlinks/{hash}",
+      "templated" : true
+    },
+    "structuredData" : {
+      "href" : "https://www.ebi.ac.uk/biosamples/structureddata/SAMEA118673980"
+    }
+  }
+}

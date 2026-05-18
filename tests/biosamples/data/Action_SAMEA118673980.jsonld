@@ -1,0 +1,128 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Action",
+  "additionalType": [
+    "sampling process",
+    "https://purl.obolibrary.org/obo/OBI_0000744"
+  ],
+  "@id": "Action_SAMEA118673980.jsonld",
+  "name": "Sampling process for sample SAMEA118673980",
+  "result": {
+    "@type": "Product",
+    "@id": "Product_SAMEA118673980.jsonld"
+  },
+  "startTime": "2023-07-03",
+  "location": {
+    "@type": "Place",
+    "name": "France",
+    "geo": {
+      "@type": "GeoCoordinates",
+      "latitude": "48.608 DD",
+      "longitude": "-3.94 DD",
+      "elevation": "0 m"
+    },
+    "additionalProperty": [
+      {
+        "@type": "PropertyValue",
+        "name": "local environmental context",
+        "value": "sediment surface (ENVO:01001192)",
+        "valueReference": {
+          "@type": "DefinedTerm",
+          "url": "https://purl.obolibrary.org/obo/ENVO_01001192",
+          "name": "sediment surface",
+          "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
+          "termCode": "ENVO:01001192"
+        },
+        "propertyID": "https://w3id.org/mixs/0000013"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "depth",
+        "value": "0.2",
+        "unitText": "m",
+        "propertyID": "https://w3id.org/mixs/0000018"
+      }
+    ]
+  },
+  "instrument": [
+    {
+      "@type": "Product",
+      "description": "sample collection device",
+      "name": "corer (20 cm)"
+    },
+    {
+      "@type": "Product",
+      "description": "sampling platform",
+      "name": "Aurelia"
+    }
+  ],
+  "object": [
+    {
+      "@type": "PropertyValue",
+      "name": "environmental medium",
+      "propertyID": "https://w3id.org/mixs/0000014",
+      "value": "intertidal sediment (ENVO:00002179)",
+      "valueReference": {
+        "@type": "DefinedTerm",
+        "url": "https://purl.obolibrary.org/obo/ENVO_00002179",
+        "name": "intertidal sediment",
+        "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
+        "termCode": "ENVO:00002179"
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "organism",
+      "value": "sediment metagenome",
+      "valueReference": {
+        "@id": "https://purl.obolibrary.org/obo/NCBITaxon_749907",
+        "@type": "DefinedTerm"
+      }
+    }
+  ],
+  "participant": {
+    "@type": "ResearchProject",
+    "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld"
+  },
+  "additionalProperty": [
+    {
+      "@type": "PropertyValue",
+      "name": "checklist",
+      "value": "BSDC00001"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "broad_scale environmental context",
+      "value": "sediment (ENVO:00002007)",
+      "valueReference": {
+        "@type": "DefinedTerm",
+        "url": "https://purl.obolibrary.org/obo/ENVO_00002007",
+        "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
+        "termCode": "ENVO:00002007",
+        "name": "sediment"
+      }
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "pcr primers",
+      "value": "GGWACWGGWTGAACWGTWTAYCCYCC TAIACYTCIGGRTGICCRAARAAYCA"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "sample title",
+      "value": "P1_B1_230703"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "sampling campaign",
+      "value": "Douarmor"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "sampling site",
+      "value": "Penze (P1)"
+    }
+  ]
+}
