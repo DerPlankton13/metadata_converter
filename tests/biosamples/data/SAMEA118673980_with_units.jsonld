@@ -1,0 +1,261 @@
+{
+  "@context": [
+    "http://schema.org",
+    {
+      "OBI": "http://purl.obolibrary.org/obo/OBI_",
+      "biosample": "http://identifiers.org/biosample/"
+    }
+  ],
+  "@type": "DataRecord",
+  "@id": "biosample:SAMEA118673980",
+  "identifier": "biosample:SAMEA118673980",
+  "dateCreated": "2025-07-07T07:36:54.655Z",
+  "dateModified": "2025-07-07T07:36:54.658Z",
+  "dateReleased": "2025-07-07T00:00:00Z",
+  "dateSubmitted": "2025-07-07T07:36:54.655Z",
+  "mainEntity": {
+    "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980",
+    "@type": [
+      "Sample",
+      "OBI:0000747"
+    ],
+    "identifier": [
+      "biosample:SAMEA118673980"
+    ],
+    "name": "SBR_B5D_471",
+    "url": "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980",
+    "additionalProperty": [
+      {
+        "@type": "PropertyValue",
+        "name": "SRA accession",
+        "value": "ERS25164901"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "broad_scale environmental context",
+        "value": "sediment (ENVO:00002007)",
+        "valueReference": [
+          {
+            "@id": "http://purl.obolibrary.org/obo/ENVO_00002007",
+            "@type": "DefinedTerm"
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "checklist",
+        "value": "BSDC00001"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "collection date",
+        "value": "2023-07-03",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "depth",
+        "value": "0.2",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": "m"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "elevation",
+        "value": "0",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": "m"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "environmental medium",
+        "value": "intertidal sediment (ENVO:00002179)",
+        "valueReference": [
+          {
+            "@id": "http://purl.obolibrary.org/obo/ENVO_00002179",
+            "@type": "DefinedTerm"
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "geographic location (country and/or sea)",
+        "value": "France",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "geographic location (latitude)",
+        "value": "48.608",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": "DD"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "geographic location (longitude)",
+        "value": "-3.94",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": "DD"
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "local environmental context",
+        "value": "sediment surface (ENVO:01001192)",
+        "valueReference": [
+          {
+            "@id": "http://purl.obolibrary.org/obo/ENVO_01001192",
+            "@type": "DefinedTerm"
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "organism",
+        "value": "sediment metagenome",
+        "valueReference": [
+          {
+            "@id": "http://purl.obolibrary.org/obo/NCBITaxon_749907",
+            "@type": "DefinedTerm"
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "pcr primers",
+        "value": "GGWACWGGWTGAACWGTWTAYCCYCC TAIACYTCIGGRTGICCRAARAAYCA",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "project name",
+        "value": "BIOcean5D",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "sample collection device",
+        "value": "corer (20 cm)",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "sample description",
+        "value": "This sample (SBR_B5D_471), which is part of PRJEB89433, was collected during the Douarmor expeditions (project BIOcean5D) along a transect from the Penze River to the adjacent marine waters (Bay of Morlaix in the Western English Channel)",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "sample title",
+        "value": "P1_B1_230703",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "sampling campaign",
+        "value": "Douarmor",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "sampling platform",
+        "value": "Aurelia",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      },
+      {
+        "@type": "PropertyValue",
+        "name": "sampling site",
+        "value": "Penze (P1)",
+        "valueReference": [
+          {
+            "@type": "DefinedTerm",
+            "termCode": ""
+          }
+        ],
+        "unitText": ""
+      }
+    ],
+    "sameAs": "http://identifiers.org/biosample/SAMEA118673980"
+  },
+  "isPartOf": {
+    "@type": "Dataset",
+    "@id": "https://www.ebi.ac.uk/biosamples/samples"
+  }
+}
