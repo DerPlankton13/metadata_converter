@@ -60,22 +60,19 @@
   },
   "object": [
     {
-      "@type": "PropertyValue",
-      "name": "environmental medium",
-      "value": "brackish water (ENVO:00002019)",
-      "propertyID": "https://w3id.org/mixs/0000014",
-      "valueReference": {
-        "@type": "DefinedTerm",
+      "@type": "Thing",
+      "name": "brackish water",
+      "subjectOf": {
+        "@type": "CreativeWork",
         "url": "https://purl.obolibrary.org/obo/ENVO_00002019",
-        "name": "brackish water",
-        "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
-        "termCode": "ENVO:00002019"
+        "partOf": "https://purl.obolibrary.org/obo/envo.owl",
+        "identifier": "ENVO:00002019",
+        "name": "brackish water"
       }
     },
     {
-      "@type": "PropertyValue",
-      "name": "organism",
-      "value": "aquatic metagenome"
+      "@type": "Thing",
+      "name": "aquatic metagenome"
     }
   ],
   "participant": [

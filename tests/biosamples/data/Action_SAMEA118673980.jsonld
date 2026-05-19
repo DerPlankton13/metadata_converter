@@ -60,25 +60,25 @@
   ],
   "object": [
     {
-      "@type": "PropertyValue",
-      "name": "environmental medium",
-      "propertyID": "https://w3id.org/mixs/0000014",
-      "value": "intertidal sediment (ENVO:00002179)",
-      "valueReference": {
-        "@type": "DefinedTerm",
+      "@type": "Thing",
+      "name": "intertidal sediment",
+      "subjectOf": {
+        "@type": "CreativeWork",
         "url": "https://purl.obolibrary.org/obo/ENVO_00002179",
-        "name": "intertidal sediment",
-        "inDefinedTermSet": "https://purl.obolibrary.org/obo/envo.owl",
-        "termCode": "ENVO:00002179"
+        "partOf": "https://purl.obolibrary.org/obo/envo.owl",
+        "identifier": "ENVO:00002179",
+        "name": "intertidal sediment"
       }
     },
     {
-      "@type": "PropertyValue",
-      "name": "organism",
-      "value": "sediment metagenome",
-      "valueReference": {
-        "@id": "https://purl.obolibrary.org/obo/NCBITaxon_749907",
-        "@type": "DefinedTerm"
+      "@type": "Thing",
+      "name": "sediment metagenome",
+      "subjectOf": {
+        "@type": "CreativeWork",
+        "url": "https://purl.obolibrary.org/obo/NCBITaxon_749907",
+        "partOf": "https://www.ncbi.nlm.nih.gov/Taxonomy",
+        "identifier": "749907",
+        "name": "sediment metagenome"
       }
     }
   ],
