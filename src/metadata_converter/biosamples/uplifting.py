@@ -92,7 +92,7 @@ class Terminology(Enum):
     def from_term_code(cls, term_code: str) -> "Terminology | None":
         if "ENVO" in term_code:
             return cls.ENVO
-        elif "txid" in term_code:
+        elif "txid" in term_code or "NCBITaxon" in term_code:
             return cls.NCBI
         elif "NERC" in term_code:
             return cls.NERC
@@ -100,7 +100,11 @@ class Terminology(Enum):
 
     def normalize_term_code(self, term_code: str) -> str:
         if self == Terminology.NCBI:
-            return term_code.split("txid")[-1]
+            if "txid" in term_code:
+                return term_code.split("txid")[-1]
+            if "NCBITaxon_" in term_code:
+                return term_code.split("NCBITaxon_")[-1]
+            return term_code
         if self == Terminology.NERC:
             return term_code.split("NERC:")[-1]
         return term_code
@@ -117,24 +121,70 @@ class Terminology(Enum):
             return self.base_url + vocab + "/current/" + concept
         return self.base_url
 
+    @classmethod
+    def extract(cls, value: str) -> tuple["Terminology", str, str] | None:
+        """Extract (terminology, name, normalized_term_code) from a value string, or None."""
+        matches = re.findall(r"[\[(](.*?)[\])]", value)
+        if len(matches) != 1:
+            return None
+        term_code = matches[0]
+        name = re.split(r"[\[(]", value)[0].strip()
+        terminology = cls.from_term_code(term_code)
+        if not terminology:
+            logger.debug(
+                "Could not identify a known terminology from '%s'. Available terminologies: %s",
+                value,
+                ", ".join(t.name for t in cls),
+            )
+            return None
+        return terminology, name, terminology.normalize_term_code(term_code)
+
+
+def build_subject_of(terminology: Terminology, name: str, term_code: str) -> dict:
+    """Build a subjectOf CreativeWork dict from a pre-extracted Terminology term."""
+    subject_of: dict = {
+        "@type": "CreativeWork",
+        "url": terminology.build_url(term_code),
+        "identifier": term_code,
+        "name": name,
+    }
+    if terminology.defined_termset:
+        subject_of["partOf"] = terminology.defined_termset
+    return subject_of
+
+
+def build_thing(value: str, reference_url: str | None = None) -> dict:
+    """Build a Thing dict with an optional subjectOf from a value string or OBO reference URL."""
+    subject_of = None
+    additional_type = None
+    name = value.strip()
+
+    result = Terminology.extract(value)
+    if result is None and reference_url and "/obo/" in reference_url:
+        obo_name = reference_url.split("/obo/")[-1]
+        if terminology := Terminology.from_term_code(obo_name):
+            result = terminology, name, terminology.normalize_term_code(obo_name)
+
+    if result:
+        terminology, name, term_code = result
+        subject_of = build_subject_of(terminology, name, term_code)
+        if terminology == Terminology.ENVO:
+            additional_type = [subject_of["url"], name, term_code]
+
+    return {
+        "@type": "Thing",
+        "additionalType": additional_type,
+        "name": name,
+        "subjectOf": subject_of,
+    }
+
 
 def build_defined_term(value: str) -> dict[str, str] | None:
-    matches = re.findall(r"[\[(](.*?)[\])]", value)
-    if len(matches) != 1:
+    """Build a DefinedTerm dict from a value string containing a bracketed term code, or None."""
+    if not (result := Terminology.extract(value)):
         return None
-    term_code = matches[0]
-    name = re.split(r"[\[(]", value)[0].strip()
-    terminology = Terminology.from_term_code(term_code)
-    if not terminology:
-        logger.debug(
-            "Could not identify a known terminology from '%s'. Available terminologies: %s",
-            value,
-            ", ".join(t.name for t in Terminology),
-        )
-        return None
-
-    term_code = terminology.normalize_term_code(term_code)
-    defined_term_dict = {
+    terminology, name, term_code = result
+    defined_term_dict: dict = {
         "@type": "DefinedTerm",
         "name": name,
         "termCode": term_code,
