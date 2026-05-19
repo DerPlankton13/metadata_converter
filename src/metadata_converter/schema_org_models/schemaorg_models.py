@@ -31,6 +31,10 @@ class SchemaOrgBase(BaseModel):
         validate_assignment=True,
     )
 
+    # these are all not schema.org properties, but they are needed for jsonld
+    context: str | dict[str, Any] | None = Field(
+        default={"@vocab": "https://schema.org/"}, alias="@context"
+    )
     # The schema.org class name, will be set automatically by each generated subclass.
     type: str = Field(alias="@type")
     id: str | None = Field(default=None, alias="@id")
