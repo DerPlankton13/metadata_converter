@@ -6,9 +6,9 @@ from tqdm import tqdm
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.biosamples.run import fetch_raw_biosamples, uplift_biosamples
 from metadata_converter.config import (
+    ApiFetchingConfig,
     BiosamplesConfig,
     FlatDataConfig,
-    MetadataCollectorConfig,
 )
 from metadata_converter.flat_data.run import generate_jsonld
 from metadata_converter.load import load_to_jsonld
@@ -29,7 +29,7 @@ def main():
     if isinstance(config, FlatDataConfig):
         generate_jsonld(config)
 
-    elif isinstance(config, MetadataCollectorConfig):
+    elif isinstance(config, ApiFetchingConfig):
         results: dict[str, SchemaOrgBase] = {}
         raw_output_path = config.output.output_path / "raw"
         raw_output_path.mkdir(parents=True, exist_ok=True)
