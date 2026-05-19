@@ -456,17 +456,18 @@ class ActionBuilder(BaseBuilder):
         return instrument if instrument else None
 
     def _build_object(self) -> list[dict] | None:
-        object = []
-        for prop_name, prop_id in {
-            "environmental medium": "https://w3id.org/mixs/0000014",
-            "organism": None,
-        }.items():
-            prop = self.record.as_property(prop_name, prop_id)
-            if prop:
-                object.append(prop)
-        # Todo clarify organism
-        # weird, unclear if this is to be understood as the object or the result - intuition is to use object, if this was a penguin, I'd assume that the penguin was the object of sampling and not the result
-        return object if object else None
+        objects = []
+        for prop_name in ["environmental medium", "organism"]:
+            prop = self.record.raw_property(prop_name)
+            if prop is None:
+                continue
+            value = prop.get("value", "")
+            reference_url = None
+            if vr := prop.get("valueReference"):
+                entry = vr[0] if isinstance(vr, list) else vr
+                reference_url = entry.get("@id")
+            objects.append(build_thing(value, reference_url))
+        return objects if objects else None
 
     def _build_action_process(self) -> dict | None:
         step = []
