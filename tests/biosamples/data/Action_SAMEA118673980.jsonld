@@ -80,7 +80,7 @@
       "name": "sediment metagenome",
       "subjectOf": {
         "@type": "CreativeWork",
-        "url": "https://purl.obolibrary.org/obo/NCBITaxon_749907",
+        "url": "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=749907",
         "partOf": "https://www.ncbi.nlm.nih.gov/Taxonomy",
         "identifier": "749907",
         "name": "sediment metagenome"
