@@ -163,7 +163,7 @@ class FlatDataConfig(BaseModel):
     mapping: dict[str, dict[str, Any]]
 
 
-class MetadataCollectorConfig(BaseModel):
+class ApiFetchingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workflow_type: Literal["metadata_collector"] = "metadata_collector"
     extractor: ApiExtractorConfig
@@ -179,7 +179,7 @@ class BiosamplesConfig(BaseModel):
 
 
 Config = Annotated[
-    Union[FlatDataConfig, MetadataCollectorConfig, BiosamplesConfig],
+    Union[FlatDataConfig, ApiFetchingConfig, BiosamplesConfig],
     Field(discriminator="workflow_type"),
 ]
 
