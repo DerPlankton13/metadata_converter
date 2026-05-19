@@ -12,14 +12,7 @@ from metadata_converter.config import (
     FlatDataConfig,
     MetadataCollectorConfig,
 )
-from metadata_converter.extract import extract_data
-from metadata_converter.flat_data.preprocess_datahub import preprocess_datahub
-from metadata_converter.flat_data.transform import (
-    add_id,
-    clean_dataframe,
-    convert_to_long,
-    extract_schemas,
-)
+from metadata_converter.flat_data.run import generate_jsonld
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.logging_setup import setup_logging
 from metadata_converter.parse import parse_cli
@@ -54,35 +47,7 @@ def main():
     setup_logging(logging_level, output_path=config.output.output_path)
 
     if isinstance(config, FlatDataConfig):
-        logger.info("Starting flat-data workflow")
-
-        # Extract Step
-        logger.info("Extracting data from %s", config.extractor.file_path)
-        data_dict = extract_data(config)
-
-        # Transform Step
-        for name, data in data_dict.items():
-            logger.info("Cleaning sheet '%s'", name)
-            data = clean_dataframe(data, config.cleaning)
-            data = add_id(data, config.mapping[name]["type"])
-            data = convert_to_long(data)
-            data_dict[name] = data
-
-        data_dict = preprocess_datahub(data_dict)
-
-        # Build schemas
-        results = {}
-        for name, data in data_dict.items():
-            logger.info("Building schemas for sheet '%s'", name)
-            results[name] = extract_schemas(data, config.mapping[name])
-
-        # Load Step
-        schemas = [s for schemas in results.values() for s in schemas]
-        logger.info(
-            "Writing %d JSON-LD file(s) to %s", len(schemas), config.output.output_path
-        )
-        for schema in schemas:
-            load_to_jsonld(schema, output_path=config.output.output_path)
+        generate_jsonld(config)
 
     elif isinstance(config, MetadataCollectorConfig):
         results: dict[str, SchemaOrgBase] = {}
