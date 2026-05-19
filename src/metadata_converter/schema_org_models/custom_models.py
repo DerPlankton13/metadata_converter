@@ -1,6 +1,7 @@
 import re
 
 from pydantic import (
+    computed_field,
     field_validator,
     model_validator,
 )
@@ -92,8 +93,8 @@ class DOI(PropertyValue):
 
     @field_validator("value")
     @classmethod
-    def search_doi(cls, v: str) -> str:
-        return search_pattern(v, DOI_PATTERN, "DOI")
+    def check_doi(cls, v: str) -> str:
+        return check_pattern(v, DOI_PATTERN, "DOI")
 
     @model_validator(mode="after")
     def set_url(self):
@@ -122,11 +123,18 @@ class UrlIdentifier(PropertyValue):
 # ---------------------------------------------------------------------------
 # Dynamic lookup
 # ---------------------------------------------------------------------------
+SCHEMA_TYPE_REGISTRY: dict[str, type[SchemaOrgBase]] = {
+    k.lower(): v
+    for k, v in globals().items()
+    if isinstance(v, type) and issubclass(v, SchemaOrgBase)
+}
 
 
 def get_schema(type_name: str) -> type[SchemaOrgBase]:
     """
     Return the Pydantic model class for a schema.org type name.
+
+    It works for all naming styles, as the comparison is done on the lowercase names.
 
     Parameters
     ----------
@@ -149,8 +157,8 @@ def get_schema(type_name: str) -> type[SchemaOrgBase]:
         cls = get_schema("Person")
         instance = cls(**data)
     """
-    cls = globals().get(type_name)
-    if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
+    cls = SCHEMA_TYPE_REGISTRY.get(type_name.lower())
+    if cls is None:
         raise KeyError(
             f"{type_name!r} is not a known schema.org type. Ensure that it is available in schema.org and update the Pydantic models if necessary."
         )

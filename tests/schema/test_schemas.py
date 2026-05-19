@@ -3,7 +3,7 @@ import json
 import pytest
 from pydantic import ValidationError
 
-from metadata_converter.schema_org_models.schemaorg_models import *
+from metadata_converter import get_schema
 
 INPUT_FILES = [f"Example{i}.jsonld" for i in range(1, 10)]
 OUT_OF_SCOPE = ["Example3.jsonld", "Example7.jsonld"]  # mark these as xfail

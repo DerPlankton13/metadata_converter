@@ -1,30 +1,19 @@
 import argparse
-import tomllib
+import logging
 from pathlib import Path
 
-from pydantic import ValidationError
-
-from metadata_converter.config import Config
+from metadata_converter.config import Config, load_config
 
 
-def parse_cli() -> Config:
+def parse_cli() -> tuple[Config, int]:
     parser = argparse.ArgumentParser(description="Metadata Converter")
     parser.add_argument("config", type=Path, help="Path to TOML config file")
+    parser.add_argument(
+        "--log-level",
+        choices=["debug", "info", "warning", "error"],
+        default="info",
+        help="Set logging verbosity (default: info)",
+    )
     args = parser.parse_args()
-
-    try:
-        with open(args.config, "rb") as f:
-            config = Config(**tomllib.load(f))
-    except FileNotFoundError:
-        print(f"Error: config file not found: {args.config}")
-        raise SystemExit(1)
-    except ValidationError as e:
-        print(f"Error: invalid config:\n{e}")
-        print(
-            e.errors()[0]["msg"],
-            e.errors()[0]["loc"],
-            "but input was:",
-            e.errors()[0]["input"],
-        )
-        raise SystemExit(1)
-    return config
+    logging_level = getattr(logging, args.log_level.upper())
+    return load_config(args.config), logging_level

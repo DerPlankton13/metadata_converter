@@ -1,0 +1,16 @@
+workflow_type = "metadata_collector"
+
+[extractor]
+type = "api"
+api_url = "https://zenodo.org/api/records"
+fetch_strategy = "export_endpoint"
+export_url_template = "https://zenodo.org/records/{record_id}/export/json-ld"
+page_size = 25
+request_delay = 0.5
+
+[extractor.query]
+field = "communities"
+value = "horizoneurope_biocean5d"
+
+[output]
+output_path = "output/zenodo"
