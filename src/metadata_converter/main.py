@@ -14,7 +14,7 @@ from metadata_converter.config import (
 )
 from metadata_converter.flat_data.run import generate_jsonld
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.logging_setup import setup_logging
+from metadata_converter.logging import _log_validation_error, setup_logging
 from metadata_converter.parse import parse_cli
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (
@@ -24,22 +24,6 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _log_validation_error(error) -> None:
-    if not isinstance(error, ValidationError):
-        return
-    error_list = [{**e, "depth": len(e["loc"])} for e in error.errors()]
-    max_depth = max(e["depth"] for e in error_list)
-    deepest = [e for e in error_list if e["depth"] == max_depth]
-    logger.error(
-        "Validation error in '%s' for property '%s'",
-        deepest[0]["loc"][0],
-        deepest[0]["loc"][-2],
-    )
-    for e in deepest:
-        logger.error("  %s", e["msg"])
-    logger.error("Input was: %s", deepest[0]["input"])
 
 
 def main():
@@ -78,7 +62,7 @@ def main():
                 results[record.doi] = get_schema(schema_type)(**jsonld)
             except Exception as e:
                 logger.error("Failed to extract schema for DOI: %s", record.doi)
-                _log_validation_error(e)
+                _log_validation_error(e, logger)
 
         # Load Step
         logger.info(
@@ -105,13 +89,13 @@ def main():
                     load_to_jsonld(product, output_path=config.uplifting.output_path)
                 except ValidationError as e:
                     logger.error("Failed to build product for %s.", path.name)
-                    _log_validation_error(e)
+                    _log_validation_error(e, logger)
                 try:
                     action = Action(**action_dict)
                     load_to_jsonld(action, output_path=config.uplifting.output_path)
                 except ValidationError as e:
                     logger.error("Failed to build action for %s.", path.name)
-                    _log_validation_error(e)
+                    _log_validation_error(e, logger)
 
 
 if __name__ == "__main__":
