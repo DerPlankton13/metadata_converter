@@ -93,6 +93,11 @@
   "object": [
     {
       "@type": "Thing",
+      "additionalType": [
+        "https://purl.obolibrary.org/obo/ENVO_01001964",
+        "seawater",
+        "ENVO:01001964"
+      ],
       "name": "seawater",
       "subjectOf": {
         "@type": "CreativeWork",

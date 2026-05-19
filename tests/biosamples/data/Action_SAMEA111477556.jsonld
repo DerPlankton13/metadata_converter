@@ -61,6 +61,11 @@
   "object": [
     {
       "@type": "Thing",
+      "additionalType": [
+        "https://purl.obolibrary.org/obo/ENVO_00002019",
+        "brackish water",
+        "ENVO:00002019"
+      ],
       "name": "brackish water",
       "subjectOf": {
         "@type": "CreativeWork",
