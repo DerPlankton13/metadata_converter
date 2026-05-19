@@ -1,5 +1,6 @@
 import logging
 import re
+from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal
 
@@ -121,35 +122,62 @@ class Terminology(Enum):
             return self.base_url + vocab + "/current/" + concept
         return self.base_url
 
+
+
+@dataclass(frozen=True)
+class Term:
+    name: str
+    identifier: str  # normalised term code
+    terminology: Terminology
+
+    @property
+    def url(self) -> str:
+        return self.terminology.build_url(self.identifier)
+
+    @property
+    def defined_termset(self) -> str | None:
+        return self.terminology.defined_termset
+
     @classmethod
-    def extract(cls, value: str) -> tuple["Terminology", str, str] | None:
-        """Extract (terminology, name, normalized_term_code) from a value string, or None."""
+    def from_value(cls, value: str) -> "Term | None":
+        """Parse 'name (TERM:code)' into a Term, or None."""
         matches = re.findall(r"[\[(](.*?)[\])]", value)
         if len(matches) != 1:
             return None
-        term_code = matches[0]
+        raw_code = matches[0]
         name = re.split(r"[\[(]", value)[0].strip()
-        terminology = cls.from_term_code(term_code)
+        terminology = Terminology.from_term_code(raw_code)
         if not terminology:
             logger.debug(
                 "Could not identify a known terminology from '%s'. Available terminologies: %s",
                 value,
-                ", ".join(t.name for t in cls),
+                ", ".join(t.name for t in Terminology),
             )
             return None
-        return terminology, name, terminology.normalize_term_code(term_code)
+        return cls(name=name, identifier=terminology.normalize_term_code(raw_code), terminology=terminology)
+
+    @classmethod
+    def from_obo_url(cls, url: str, name: str) -> "Term | None":
+        """Parse an OBO purl URL into a Term using the given name, or None."""
+        if "/obo/" not in url:
+            return None
+        obo_name = url.split("/obo/")[-1]
+        terminology = Terminology.from_term_code(obo_name)
+        if not terminology:
+            return None
+        return cls(name=name, identifier=terminology.normalize_term_code(obo_name), terminology=terminology)
 
 
-def build_subject_of(terminology: Terminology, name: str, term_code: str) -> dict:
-    """Build a subjectOf CreativeWork dict from a pre-extracted Terminology term."""
+def build_subject_of(term: Term) -> dict:
+    """Build a subjectOf CreativeWork dict from a Term."""
     subject_of: dict = {
         "@type": "CreativeWork",
-        "url": terminology.build_url(term_code),
-        "identifier": term_code,
-        "name": name,
+        "url": term.url,
+        "identifier": term.identifier,
+        "name": term.name,
     }
-    if terminology.defined_termset:
-        subject_of["partOf"] = terminology.defined_termset
+    if term.defined_termset:
+        subject_of["partOf"] = term.defined_termset
     return subject_of
 
 
@@ -159,17 +187,15 @@ def build_thing(value: str, reference_url: str | None = None) -> dict:
     additional_type = None
     name = value.strip()
 
-    result = Terminology.extract(value)
-    if result is None and reference_url and "/obo/" in reference_url:
-        obo_name = reference_url.split("/obo/")[-1]
-        if terminology := Terminology.from_term_code(obo_name):
-            result = terminology, name, terminology.normalize_term_code(obo_name)
+    term = Term.from_value(value)
+    if term is None and reference_url:
+        term = Term.from_obo_url(reference_url, name)
 
-    if result:
-        terminology, name, term_code = result
-        subject_of = build_subject_of(terminology, name, term_code)
-        if terminology == Terminology.ENVO:
-            additional_type = [subject_of["url"], name, term_code]
+    if term:
+        name = term.name
+        subject_of = build_subject_of(term)
+        if term.terminology == Terminology.ENVO:
+            additional_type = [term.url, name, term.identifier]
 
     return {
         "@type": "Thing",
@@ -181,17 +207,16 @@ def build_thing(value: str, reference_url: str | None = None) -> dict:
 
 def build_defined_term(value: str) -> dict[str, str] | None:
     """Build a DefinedTerm dict from a value string containing a bracketed term code, or None."""
-    if not (result := Terminology.extract(value)):
+    if not (term := Term.from_value(value)):
         return None
-    terminology, name, term_code = result
     defined_term_dict: dict = {
         "@type": "DefinedTerm",
-        "name": name,
-        "termCode": term_code,
-        "url": terminology.build_url(term_code),
+        "name": term.name,
+        "termCode": term.identifier,
+        "url": term.url,
     }
-    if terminology.defined_termset:
-        defined_term_dict["inDefinedTermSet"] = terminology.defined_termset
+    if term.defined_termset:
+        defined_term_dict["inDefinedTermSet"] = term.defined_termset
     return defined_term_dict
 
 
