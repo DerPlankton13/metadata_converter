@@ -3,10 +3,15 @@ import logging
 from pathlib import Path
 
 import pandas as pd
+from pydantic import ValidationError
 from tqdm import tqdm
 
 from metadata_converter.biosamples.fetch import get_metadata
+from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import BiosamplesConfig, BiosamplesInput
+from metadata_converter.load import load_to_jsonld
+from metadata_converter.logging import _log_validation_error
+from metadata_converter.schema_org_models.schemaorg_models import Action, Product
 
 logger = logging.getLogger(__name__)
 
@@ -92,3 +97,27 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
             write(metadata, output_path=output_path)
 
     logger.info("Biosamples extraction complete. Output: %s", config.output.output_path)
+
+def uplift_biosamples(config: BiosamplesConfig):
+    raw_files = config.output.output_path.glob("**/*.jsonld")
+    for path in tqdm(list(raw_files), desc="Uplifting samples", unit="sample"):
+        with path.open() as f:
+            raw = json.load(f)
+        try:
+            uplifter = SampleUplifter(raw)
+            product_dict, action_dict = uplifter.build_dicts()
+        except Exception as e:
+            logger.error("Failed to uplift %s: %s", path.name, e)
+            continue
+        try:
+            product = Product(**product_dict)
+            load_to_jsonld(product, output_path=config.uplifting.output_path)
+        except ValidationError as e:
+            logger.error("Failed to build product for %s.", path.name)
+            _log_validation_error(e, logger)
+        try:
+            action = Action(**action_dict)
+            load_to_jsonld(action, output_path=config.uplifting.output_path)
+        except ValidationError as e:
+            logger.error("Failed to build action for %s.", path.name)
+            _log_validation_error(e, logger)

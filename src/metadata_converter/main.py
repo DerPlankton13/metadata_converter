@@ -1,12 +1,10 @@
 import json
 import logging
 
-from pydantic import ValidationError
 from tqdm import tqdm
 
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
-from metadata_converter.biosamples.run import fetch_raw_biosamples
-from metadata_converter.biosamples.uplifting import SampleUplifter
+from metadata_converter.biosamples.run import fetch_raw_biosamples, uplift_biosamples
 from metadata_converter.config import (
     BiosamplesConfig,
     FlatDataConfig,
@@ -18,8 +16,6 @@ from metadata_converter.logging import _log_validation_error, setup_logging
 from metadata_converter.parse import parse_cli
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (
-    Action,
-    Product,
     SchemaOrgBase,
 )
 
@@ -74,28 +70,7 @@ def main():
     elif isinstance(config, BiosamplesConfig):
         fetch_raw_biosamples(config)
         if config.uplifting is not None:
-            raw_files = config.output.output_path.glob("**/*.jsonld")
-            for path in tqdm(list(raw_files), desc="Uplifting samples", unit="sample"):
-                with path.open() as f:
-                    raw = json.load(f)
-                try:
-                    uplifter = SampleUplifter(raw)
-                    product_dict, action_dict = uplifter.build_dicts()
-                except Exception as e:
-                    logger.error("Failed to uplift %s: %s", path.name, e)
-                    continue
-                try:
-                    product = Product(**product_dict)
-                    load_to_jsonld(product, output_path=config.uplifting.output_path)
-                except ValidationError as e:
-                    logger.error("Failed to build product for %s.", path.name)
-                    _log_validation_error(e, logger)
-                try:
-                    action = Action(**action_dict)
-                    load_to_jsonld(action, output_path=config.uplifting.output_path)
-                except ValidationError as e:
-                    logger.error("Failed to build action for %s.", path.name)
-                    _log_validation_error(e, logger)
+            uplift_biosamples(config)
 
 
 if __name__ == "__main__":
