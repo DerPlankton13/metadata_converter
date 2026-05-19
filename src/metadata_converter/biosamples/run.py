@@ -51,7 +51,7 @@ def write(metadata: dict, output_path: Path) -> None:
     output_path.write_text(jsonld_str, encoding="utf-8")
 
 
-def get_raw_biosamples(config: BiosamplesConfig):
+def fetch_raw_biosamples(config: BiosamplesConfig):
     logger.info("Starting biosamples extraction workflow")
 
     input_cfg = config.input

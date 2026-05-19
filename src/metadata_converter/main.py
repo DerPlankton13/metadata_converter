@@ -5,7 +5,7 @@ from pydantic import ValidationError
 from tqdm import tqdm
 
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
-from metadata_converter.biosamples.run import get_raw_biosamples
+from metadata_converter.biosamples.run import fetch_raw_biosamples
 from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import (
     BiosamplesConfig,
@@ -123,7 +123,7 @@ def main():
             load_to_jsonld(schema, output_path=config.output.output_path)
 
     elif isinstance(config, BiosamplesConfig):
-        get_raw_biosamples(config)
+        fetch_raw_biosamples(config)
         if config.uplifting is not None:
             raw_files = config.output.output_path.glob("**/*.jsonld")
             for path in tqdm(list(raw_files), desc="Uplifting samples", unit="sample"):
