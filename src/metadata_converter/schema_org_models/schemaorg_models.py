@@ -12712,5 +12712,19 @@ class _3DModel(MediaObject):
 
 
 # ---------------------------------------------------------------------------
+# Add a strict mode
+# ---------------------------------------------------------------------------
+
+
+def make_strict(cls):
+    """Allows creating a strict version of the pydantic models that forbid extra parameters."""
+    return type(
+        f"Strict{cls.__name__}",
+        (cls,),
+        {"model_config": ConfigDict(**{**cls.model_config, "extra": "forbid"})},
+    )
+
+
+# ---------------------------------------------------------------------------
 # Dynamic lookup
 # ---------------------------------------------------------------------------
