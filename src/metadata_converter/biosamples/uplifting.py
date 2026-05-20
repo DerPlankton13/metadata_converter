@@ -117,11 +117,10 @@ class Terminology(Enum):
         elif self == Terminology.NCBI:
             return self.base_url + normalized
         elif self == Terminology.NERC:
-            vocab = normalized.split(":")[1]
+            collection = normalized.split(":")[1]
             concept = normalized.split("::")[-1]
-            return self.base_url + vocab + "/current/" + concept
+            return self.base_url + collection + "/current/" + concept
         return self.base_url
-
 
 
 @dataclass(frozen=True)
@@ -152,6 +151,12 @@ class Term:
                 "Could not identify a known terminology from '%s'. Available terminologies: %s",
                 value,
                 ", ".join(t.name for t in Terminology),
+            )
+            return None
+        if terminology == Terminology.NERC and "::" not in raw_code:
+            logger.warning(
+                "Invalid NERC term code '%s': expected format 'NERC:<namespace>:<collection>::<concept>' (e.g. 'NERC:SDN:L22::TOOL0412')",
+                raw_code,
             )
             return None
         return cls(name=name, identifier=terminology.normalize_term_code(raw_code), terminology=terminology)
@@ -196,6 +201,8 @@ def build_thing(value: str, reference_url: str | None = None) -> dict:
         subject_of = build_subject_of(term)
         if term.terminology == Terminology.ENVO:
             additional_type = [term.url, name, term.identifier]
+    elif reference_url:
+        subject_of = {"@type": "CreativeWork", "url": reference_url}
 
     return {
         "@type": "Thing",
