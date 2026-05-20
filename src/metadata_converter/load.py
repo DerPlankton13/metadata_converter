@@ -14,5 +14,8 @@ def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:
     jsonld_dict = {"@context": {"@vocab": "https://schema.org"}, **jsonld_dict}
     jsonld_str = json.dumps(jsonld_dict, indent=2, ensure_ascii=False, default=str)
 
-    output_path = output_path / jsonld_dict["@id"]
+    file_name = jsonld_dict["@id"].split("/")[-1]
+    if not file_name.endswith(".jsonld"):
+        file_name += ".jsonld"
+    output_path = output_path / file_name
     output_path.write_text(jsonld_str, encoding="utf-8")
