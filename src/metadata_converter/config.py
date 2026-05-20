@@ -94,8 +94,12 @@ class ApiExtractorConfig(BaseModel):
     user_agent :
         Value of the ``User-Agent`` HTTP header sent with every request.
     max_redirects :
-        Maximum number of HTTP redirects to follow. Set to ``0`` to
-        disallow redirects entirely. Defaults to ``0``.
+        Maximum number of HTTP redirects to follow. Defaults to ``0``,
+        which disallows redirects entirely. This is intentionally strict:
+        most repository APIs return direct responses. Raise this value (e.g.
+        to ``5``) only when the source requires redirect following — for
+        example when ``export_url_template`` goes through a DOI resolver or
+        a ``302``-based landing-page redirect.
     max_response_mb :
         Maximum acceptable response body size in megabytes. Requests
         exceeding this limit raise `ValueError`. Defaults to ``10.0``.
