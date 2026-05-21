@@ -10,6 +10,7 @@ strict : False
 from __future__ import annotations
 
 from datetime import date, datetime, time, timedelta
+from functools import cache
 from typing import Any
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
@@ -12716,6 +12717,7 @@ class _3DModel(MediaObject):
 # ---------------------------------------------------------------------------
 
 
+@cache
 def make_strict(cls):
     """Allows creating a strict version of the pydantic models that forbid extra parameters."""
     return type(
