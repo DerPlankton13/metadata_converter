@@ -102,6 +102,7 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
 
     logger.info("Biosamples extraction complete. Output: %s", config.output.output_path)
 
+
 def uplift_biosamples(config: BiosamplesConfig):
     raw_files = config.output.output_path.glob("**/*.jsonld")
     for path in tqdm(list(raw_files), desc="Uplifting samples", unit="sample"):
@@ -116,12 +117,24 @@ def uplift_biosamples(config: BiosamplesConfig):
         try:
             product = Product(**product_dict)
             load_to_jsonld(product, output_path=config.uplifting.output_path)
+            try:
+                make_strict(Product).model_validate(product_dict)
+            except ValidationError as e:
+                logger.warning(
+                    "Strict validation failed for Product from %s", path.name
+                )
+                _log_validation_error(e, logger, level="warning")
         except ValidationError as e:
-            logger.error("Failed to build product for %s.", path.name)
+            logger.error("Failed to build Product for %s.", path.name)
             _log_validation_error(e, logger)
         try:
             action = Action(**action_dict)
             load_to_jsonld(action, output_path=config.uplifting.output_path)
+            try:
+                make_strict(Action).model_validate(action_dict)
+            except ValidationError as e:
+                logger.warning("Strict validation failed for Action from %s", path.name)
+                _log_validation_error(e, logger, level="warning")
         except ValidationError as e:
-            logger.error("Failed to build action for %s.", path.name)
+            logger.error("Failed to build Action for %s.", path.name)
             _log_validation_error(e, logger)
