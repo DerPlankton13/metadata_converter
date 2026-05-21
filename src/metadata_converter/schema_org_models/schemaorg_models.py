@@ -38,6 +38,11 @@ class SchemaOrgBase(BaseModel):
     type: str = Field(alias="@type")
     id: str | None = Field(default=None, alias="@id")
 
+    # this is our modification of schema.org, saying, that we always allow additionalProperty
+    additionalProperty: PropertyValue | str | list[str | PropertyValue] | None = Field(
+        default=None
+    )
+
 
 class Thing(SchemaOrgBase):
     """The most generic type of item."""
@@ -12730,3 +12735,21 @@ def make_strict(cls):
 # ---------------------------------------------------------------------------
 # Dynamic lookup
 # ---------------------------------------------------------------------------
+
+
+def rebuild_all_models():
+    import sys
+
+    module = sys.modules[__name__]
+
+    models = [
+        obj
+        for obj in module.__dict__.values()
+        if isinstance(obj, type)
+        and issubclass(obj, BaseModel)
+        and obj is not BaseModel
+        and not getattr(obj, "__pydantic_generic_metadata__", None)
+    ]
+
+    for m in models:
+        m.model_rebuild(force=True)
