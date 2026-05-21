@@ -5,14 +5,17 @@ from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 
 def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:
-    if type(output_path) is str:
+    if isinstance(output_path, str):
         output_path = Path(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
 
     jsonld_dict = schema.model_dump(by_alias=True, exclude_none=True)
     # prepend context
-    jsonld_dict = {"@context": "https://schema.org", **jsonld_dict}
-    jsonld_str = json.dumps(jsonld_dict, indent=2)
+    jsonld_dict = {"@context": {"@vocab": "https://schema.org"}, **jsonld_dict}
+    jsonld_str = json.dumps(jsonld_dict, indent=2, ensure_ascii=False, default=str)
 
-    output_path = output_path / (jsonld_dict["@id"] + ".jsonld")
-    output_path.write_text(jsonld_str)
+    file_name = jsonld_dict["@id"].split("/")[-1]
+    if not file_name.endswith(".jsonld"):
+        file_name += ".jsonld"
+    output_path = output_path / file_name
+    output_path.write_text(jsonld_str, encoding="utf-8")

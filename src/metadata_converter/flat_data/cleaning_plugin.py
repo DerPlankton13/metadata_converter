@@ -39,7 +39,9 @@ class CleaningPlugin(ABC):
         ...
 
 
-def load_plugins(plugin_dir: str | Path) -> list[CleaningPlugin]:
+def load_plugins(
+    plugin_dir: str | Path, plugin_name: str | list[str] | None = None
+) -> list[CleaningPlugin]:
     """
     Discover and instantiate all cleaning plugins in a directory.
 
@@ -76,8 +78,13 @@ def load_plugins(plugin_dir: str | Path) -> list[CleaningPlugin]:
     if not plugin_dir.is_dir():
         raise NotADirectoryError(f"Plugin directory not found: {plugin_dir}")
 
+    if not isinstance(plugin_name, list):
+        plugin_name = [plugin_name]
+
     plugins = []
     for path in sorted(plugin_dir.glob("*.py")):
+        if path.name not in plugin_name:
+            continue
         spec = importlib.util.spec_from_file_location(path.stem, path)
         module = importlib.util.module_from_spec(spec)
 

@@ -100,46 +100,54 @@ class SchemaOrgBase(BaseModel):
     Provides the two fields common to all JSON-LD nodes and configures
     Pydantic to accept both Python attribute names and JSON-LD @-prefixed
     aliases interchangeably.
+    Defers build until first model validation to massively reduce run
+    time as most models are not used and ensures that each new
+    assignment is also validated.
     """
 
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    model_config = ConfigDict(
+        extra="allow",
+        populate_by_name=True,
+        defer_build=True,
+        validate_assignment=True,
+    )
 
     # The schema.org class name, will be set automatically by each generated subclass.
     type: str = Field(alias="@type")
     id: str | None = Field(default=None, alias="@id")
 
 
-def get_schema(type_name: str) -> type[SchemaOrgBase]:
-    """
-    Return the Pydantic model class for a schema.org type name.
-
-    Parameters
-    ----------
-    type_name : str
-        Schema.org class name (e.g. "Person").
-
-    Returns
-    -------
-    type[SchemaOrgBase]
-
-    Raises
-    ------
-    KeyError
-        If the type_name is not available.
-
-    Examples
-    --------
-    ::
-
-        cls = get_schema("Person")
-        instance = cls(**data)
-    """
-    cls = globals().get(type_name)
-    if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
-        raise KeyError(
-            f"{type_name!r} is not a known schema.org type. Ensure that it is available in schema.org and update the Pydantic models if necessary."
-        )
-    return cls
+# def get_schema(type_name: str) -> type[SchemaOrgBase]:
+#     """
+#     Return the Pydantic model class for a schema.org type name.
+#
+#     Parameters
+#     ----------
+#     type_name : str
+#         Schema.org class name (e.g. "Person").
+#
+#     Returns
+#     -------
+#     type[SchemaOrgBase]
+#
+#     Raises
+#     ------
+#     KeyError
+#         If the type_name is not available.
+#
+#     Examples
+#     --------
+#     ::
+#
+#         cls = get_schema("Person")
+#         instance = cls(**data)
+#     """
+#     cls = globals().get(type_name)
+#     if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
+#         raise KeyError(
+#             f"{type_name!r} is not a known schema.org type. Ensure that it is available in schema.org and update the Pydantic models if necessary."
+#         )
+#     return cls
 
 
 def _local(iri: str) -> str:
@@ -464,7 +472,14 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
     for class_name in order:
         cls = models[class_name]
 
-        parent = cls["parents"][0] if cls["parents"] else "SchemaOrgBase"
+        if not cls["parents"]:
+            parent = "SchemaOrgBase"
+        else:
+            # ensures that class inheritance is respecting subclass-before-superclass
+            parent_order = {p: order.index(p) for p in cls["parents"]}
+            parent = ", ".join(
+                sorted(cls["parents"], key=parent_order.get, reverse=True)
+            )
         lines.append(f"class {class_name}({parent}):")
 
         doc = cls["comment"] or f"schema.org/{class_name}"
@@ -489,7 +504,7 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         "# ---------------------------------------------------------------------------"
     )
     lines.append("")
-    lines.append(inspect.getsource(get_schema))
+    # lines.append(inspect.getsource(get_schema))
 
     return "\n".join(lines)
 

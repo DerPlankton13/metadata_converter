@@ -1,29 +1,33 @@
-from pathlib import Path
+import logging
 
-from metadata_converter.extract import load_data
-from metadata_converter.load import load_to_jsonld
-from metadata_converter.parse import parse_cli
-from metadata_converter.transform import (
-    clean_dataframe,
-    combine_columns,
-    extract_schemas,
+from metadata_converter.api_fetching.run import fetch_from_api
+from metadata_converter.biosamples.run import fetch_raw_biosamples, uplift_biosamples
+from metadata_converter.config import (
+    ApiFetchingConfig,
+    BiosamplesConfig,
+    FlatDataConfig,
 )
+from metadata_converter.flat_data.run import generate_jsonld
+from metadata_converter.log_setup import setup_logging
+from metadata_converter.parse import parse_cli
+
+logger = logging.getLogger(__name__)
 
 
 def main():
-    config = parse_cli()
+    config, logging_level = parse_cli()
+    setup_logging(logging_level, output_path=config.output.output_path)
 
-    # Extract Step
-    data = load_data(config)
+    if isinstance(config, FlatDataConfig):
+        generate_jsonld(config)
 
-    # Transform Step
-    data = clean_dataframe(data, config.input.cleaning)
-    data = combine_columns(data, config.mapping)
-    schema_list = extract_schemas(data, config)
+    elif isinstance(config, ApiFetchingConfig):
+        fetch_from_api(config)
 
-    # Load Step
-    for schema in schema_list:
-        load_to_jsonld(schema, output_path=Path("output"))
+    elif isinstance(config, BiosamplesConfig):
+        fetch_raw_biosamples(config)
+        if config.uplifting is not None:
+            uplift_biosamples(config)
 
 
 if __name__ == "__main__":
