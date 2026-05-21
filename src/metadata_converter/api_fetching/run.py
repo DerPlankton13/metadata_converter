@@ -7,7 +7,7 @@ from metadata_converter import get_schema
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.config import ApiFetchingConfig
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.logging import _log_validation_error
+from metadata_converter.log_setup import _log_validation_error
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 logger = logging.getLogger(__name__)

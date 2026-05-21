@@ -10,8 +10,12 @@ from metadata_converter.biosamples.fetch import get_metadata
 from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import BiosamplesConfig, BiosamplesInput
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.logging import _log_validation_error
-from metadata_converter.schema_org_models.schemaorg_models import Action, Product
+from metadata_converter.log_setup import _log_validation_error
+from metadata_converter.schema_org_models.schemaorg_models import (
+    Action,
+    Product,
+    make_strict,
+)
 
 logger = logging.getLogger(__name__)
 

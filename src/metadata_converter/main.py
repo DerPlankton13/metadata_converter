@@ -8,7 +8,7 @@ from metadata_converter.config import (
     FlatDataConfig,
 )
 from metadata_converter.flat_data.run import generate_jsonld
-from metadata_converter.logging import setup_logging
+from metadata_converter.log_setup import setup_logging
 from metadata_converter.parse import parse_cli
 
 logger = logging.getLogger(__name__)
