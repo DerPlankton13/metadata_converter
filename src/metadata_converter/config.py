@@ -152,8 +152,9 @@ class OutputConfig(BaseModel):
     output_path: Path
 
 
-class UpliftingConfig(BaseModel):
+class SourceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
+    input_path: Path
     output_path: Path
 
 
@@ -179,11 +180,18 @@ class BiosamplesConfig(BaseModel):
     workflow_type: Literal["biosamples"] = "biosamples"
     input: BiosamplesInput
     output: OutputConfig
-    uplifting: UpliftingConfig | None = None
+
+
+class UpliftingConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    workflow_type: Literal["uplifting"] = "uplifting"
+    biosamples: SourceConfig | None = None
+    api_fetching: SourceConfig | None = None
+    flat_data: SourceConfig | None = None
 
 
 Config = Annotated[
-    Union[FlatDataConfig, ApiFetchingConfig, BiosamplesConfig],
+    Union[FlatDataConfig, ApiFetchingConfig, BiosamplesConfig, UpliftingConfig],
     Field(discriminator="workflow_type"),
 ]
 

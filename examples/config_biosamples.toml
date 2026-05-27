@@ -9,6 +9,3 @@ header_name = "sample:pid"
 
 [output]
 output_path = "output/raw/biosamples"
-
-[uplifting]
-output_path = "output/uplifted/biosamples"

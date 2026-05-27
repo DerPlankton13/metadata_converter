@@ -8,7 +8,7 @@ from tqdm import tqdm
 
 from metadata_converter.biosamples.fetch import get_metadata
 from metadata_converter.biosamples.uplifting import SampleUplifter
-from metadata_converter.config import BiosamplesConfig, BiosamplesInput
+from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourceConfig
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.log_setup import _log_validation_error
 from metadata_converter.schema_org_models.schemaorg_models import (
@@ -103,11 +103,14 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples extraction complete. Output: %s", config.output.output_path)
 
 
-def uplift_biosamples(config: BiosamplesConfig):
-    raw_files = config.output.output_path.glob("**/*.jsonld")
-    for path in tqdm(list(raw_files), desc="Uplifting samples", unit="sample"):
+def uplift_biosamples(config: SourceConfig):
+    raw_files = list(config.input_path.glob("**/*.jsonld"))
+    logger.debug("Found %d raw file(s) in %s", len(raw_files), config.input_path)
+    logger.debug("Found: %s", raw_files)
+    for path in tqdm(raw_files, desc="Uplifting samples", unit="sample"):
         with path.open() as f:
             raw = json.load(f)
+            logger.debug("Processing %s: %s", path.name, raw)
         try:
             uplifter = SampleUplifter(raw)
             product_dict, action_dict = uplifter.build_dicts()
@@ -116,7 +119,7 @@ def uplift_biosamples(config: BiosamplesConfig):
             continue
         try:
             product = Product(**product_dict)
-            load_to_jsonld(product, output_path=config.uplifting.output_path)
+            load_to_jsonld(product, output_path=config.output_path)
             try:
                 make_strict(Product).model_validate(product_dict)
             except ValidationError as e:
@@ -129,7 +132,7 @@ def uplift_biosamples(config: BiosamplesConfig):
             _log_validation_error(e, logger)
         try:
             action = Action(**action_dict)
-            load_to_jsonld(action, output_path=config.uplifting.output_path)
+            load_to_jsonld(action, output_path=config.output_path)
             try:
                 make_strict(Action).model_validate(action_dict)
             except ValidationError as e:
