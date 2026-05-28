@@ -1,5 +1,6 @@
 import json
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
@@ -60,8 +61,17 @@ def write(metadata: dict, output_path: Path) -> None:
     output_path.write_text(jsonld_str, encoding="utf-8")
 
 
+def _fetch_sample(sample_id: str, output_path: Path) -> None:
+    try:
+        metadata = get_metadata(sample_id)
+        metadata = modify_context(metadata, sample_id)
+        write(metadata, output_path=output_path)
+    except Exception as e:
+        logger.error("Could not fetch sample '%s': %s", sample_id, e)
+
+
 def fetch_raw_biosamples(config: BiosamplesConfig):
-    logger.info("Starting biosamples extraction workflow")
+    logger.info("Starting biosamples metadata fetching workflow")
 
     input_cfg = config.input
     excel_files = sorted(input_cfg.input_path.glob("*.xlsx")) + sorted(
@@ -72,35 +82,53 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
         return
     logger.info("Found %d Excel file(s) in %s", len(excel_files), input_cfg.input_path)
 
-    for excel_file in tqdm(excel_files, desc="Excel files", unit="file"):
-        logger.debug("Processing %s", excel_file.name)
-
+    all_sample_ids: set[str] = set()
+    for excel_file in excel_files:
         sample_ids = get_sample_ids(excel_file, input_cfg)
-        if not sample_ids:
-            continue
+        if sample_ids:
+            logger.info(
+                "Found %d sample ID(s) in '%s'", len(sample_ids), excel_file.name
+            )
+            all_sample_ids.update(sample_ids)
 
-        logger.info("Found %d sample ID(s) in '%s'", len(sample_ids), excel_file.name)
-        for sample_id in tqdm(sorted(sample_ids), desc=excel_file.name, unit="sample"):
-            output_path = config.output.output_path / f"{sample_id}.jsonld"
-            if output_path.exists():
-                logger.debug("Skipping %s, already exists", sample_id)
-                continue
-            logger.debug("Fetching metadata for sample %s", sample_id)
-            try:
-                metadata = get_metadata(sample_id)
-            except Exception as e:
-                logger.error(
-                    "Could not fetch metadata for sample '%s' from '%s': %s",
-                    sample_id,
-                    excel_file.name,
-                    e,
-                )
-                continue
+    if not all_sample_ids:
+        logger.warning("No sample IDs found across all files")
+        return
 
-            metadata = modify_context(metadata, sample_id)
-            write(metadata, output_path=output_path)
+    config.output.output_path.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Biosamples extraction complete. Output: %s", config.output.output_path)
+    already_fetched = {
+        sid
+        for sid in all_sample_ids
+        if (config.output.output_path / f"{sid}.jsonld").exists()
+    }
+    pending = all_sample_ids - already_fetched
+    if already_fetched:
+        logger.info("Skipping %d already-fetched sample(s)", len(already_fetched))
+    if not pending:
+        logger.info("All samples already fetched")
+        return
+
+    logger.info(
+        "Fetching %d sample(s) with %d worker(s)", len(pending), config.max_workers
+    )
+
+    with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
+        submitted = [
+            executor.submit(
+                _fetch_sample, sid, config.output.output_path / f"{sid}.jsonld"
+            )
+            for sid in pending
+        ]
+        for future in tqdm(
+            as_completed(submitted),
+            total=len(submitted),
+            desc="Fetching samples",
+            unit="sample",
+        ):
+            future.result()
+
+    logger.info("Biosamples metadata fetching complete. Output: %s", config.output.output_path)
 
 
 def uplift_biosamples(config: SourceConfig):

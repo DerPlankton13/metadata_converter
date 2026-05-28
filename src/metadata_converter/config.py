@@ -180,6 +180,7 @@ class BiosamplesConfig(BaseModel):
     workflow_type: Literal["biosamples"] = "biosamples"
     input: BiosamplesInput
     output: OutputConfig
+    max_workers: int = 10
 
 
 class UpliftingConfig(BaseModel):
