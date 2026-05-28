@@ -64,14 +64,16 @@ def write(metadata: dict, output_path: Path) -> None:
     output_path.write_text(jsonld_str, encoding="utf-8")
 
 
-def _fetch_sample(sample_id: str, output_path: Path, config: BiosamplesConfig) -> None:
+def _fetch_sample(sample_id: str, output_path: Path, config: BiosamplesConfig) -> bool:
     session = make_session(config.user_agent)
     try:
         metadata = get_metadata(sample_id, session)
         metadata = modify_context(metadata, sample_id)
         write(metadata, output_path=output_path)
+        return True
     except Exception as e:
         logger.error("Could not fetch sample '%s': %s", sample_id, e)
+        return False
 
 
 def fetch_raw_biosamples(config: BiosamplesConfig):
@@ -124,6 +126,7 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
             )
             for sid in pending
         ]
+        failures = 0
         try:
             for future in tqdm(
                 as_completed(submitted),
@@ -132,11 +135,18 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
                 unit="sample",
                 file=sys.stdout,
             ):
-                future.result()
+                if not future.result():
+                    failures += 1
         except KeyboardInterrupt:
             logger.info("Interrupted — cancelling pending fetches")
             executor.shutdown(wait=False, cancel_futures=True)
             raise
+
+    if failures:
+        raise RuntimeError(
+            f"{failures} of {len(pending)} sample(s) failed to fetch — "
+            "check the log for details and rerun to retry"
+        )
 
     logger.info("Biosamples metadata fetching complete. Output: %s", config.output.output_path)
 
