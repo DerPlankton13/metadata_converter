@@ -82,6 +82,7 @@ from pydantic import BaseModel
 
 from metadata_converter.api_fetching.query_models import Query, QueryGroup, QueryTerm
 from metadata_converter.config import ApiExtractorConfig
+from metadata_converter.http import make_session
 
 logger = logging.getLogger(__name__)
 
@@ -120,12 +121,6 @@ class Record(BaseModel):
 # HTTP helpers
 # ---------------------------------------------------------------------------
 
-
-def _make_session(config: ApiExtractorConfig) -> requests.Session:
-    session = requests.Session()
-    session.headers.update({"User-Agent": config.user_agent})
-    session.max_redirects = config.max_redirects
-    return session
 
 
 def _checked(fn):
@@ -549,7 +544,7 @@ def query_source(config: ApiExtractorConfig) -> list[Record]:
     requests.TooManyRedirects
         If the number of redirects exceeds ``config.max_redirects``.
     """
-    session = _make_session(config)
+    session = make_session(config.user_agent, config.max_redirects)
     return _find_query_handler(config.api_url)(config, session)
 
 
@@ -586,5 +581,5 @@ def fetch_jsonld(record: Record, config: ApiExtractorConfig) -> dict:
     requests.TooManyRedirects
         If the number of redirects exceeds ``config.max_redirects``.
     """
-    session = _make_session(config)
+    session = make_session(config.user_agent, config.max_redirects)
     return _FETCH_HANDLERS[config.fetch_strategy](record, config, session)

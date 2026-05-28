@@ -181,6 +181,7 @@ class BiosamplesConfig(BaseModel):
     input: BiosamplesInput
     output: OutputConfig
     max_workers: int = 10
+    user_agent: str = "metadata-collector/1.0"
 
 
 class UpliftingConfig(BaseModel):
