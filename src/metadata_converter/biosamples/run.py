@@ -122,13 +122,18 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
             )
             for sid in pending
         ]
-        for future in tqdm(
-            as_completed(submitted),
-            total=len(submitted),
-            desc="Fetching samples",
-            unit="sample",
-        ):
-            future.result()
+        try:
+            for future in tqdm(
+                as_completed(submitted),
+                total=len(submitted),
+                desc="Fetching samples metadata",
+                unit="sample",
+            ):
+                future.result()
+        except KeyboardInterrupt:
+            logger.info("Interrupted — cancelling pending fetches")
+            executor.shutdown(wait=False, cancel_futures=True)
+            raise
 
     logger.info("Biosamples metadata fetching complete. Output: %s", config.output.output_path)
 
