@@ -1,5 +1,6 @@
 import json
 import logging
+import sys
 
 from tqdm import tqdm
 
@@ -25,7 +26,7 @@ def fetch_from_api(config: ApiFetchingConfig) -> None:
         "Found %d record(s), fetching JSON-LD to %s", len(records), raw_output_path
     )
 
-    for record in tqdm(records, desc="Fetching records", unit="rec"):
+    for record in tqdm(records, desc="Fetching records", unit="rec", file=sys.stdout):
         logger.debug("Fetching %s", record.doi)
         jsonld = fetch_jsonld(record, config.extractor)
 

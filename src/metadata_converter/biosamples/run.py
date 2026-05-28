@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 from pydantic import ValidationError
+import sys
+
 from tqdm import tqdm
 
 from metadata_converter.biosamples.fetch import get_metadata
@@ -128,6 +130,7 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
                 total=len(submitted),
                 desc="Fetching samples metadata",
                 unit="sample",
+                file=sys.stdout,
             ):
                 future.result()
         except KeyboardInterrupt:
@@ -142,7 +145,7 @@ def uplift_biosamples(config: SourceConfig):
     raw_files = list(config.input_path.glob("**/*.jsonld"))
     logger.debug("Found %d raw file(s) in %s", len(raw_files), config.input_path)
     logger.debug("Found: %s", raw_files)
-    for path in tqdm(raw_files, desc="Uplifting samples", unit="sample"):
+    for path in tqdm(raw_files, desc="Uplifting samples", unit="sample", file=sys.stdout):
         with path.open() as f:
             raw = json.load(f)
             logger.debug("Processing %s: %s", path.name, raw)
