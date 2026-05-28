@@ -131,5 +131,4 @@ only the final filename component is used.
 
 Test fixtures live in `tests/biosamples/data/`. For each sample there are three input files (`_original.json`,
 `_original.jsonld`, `_with_units.jsonld`) and two expected outputs (`Product_*.jsonld`, `Action_*.jsonld`). The
-`_with_units.jsonld` is the fused intermediate used as input to uplifting. `generate_expected.py` in the root can
-regenerate expected outputs from live data.
+`_with_units.jsonld` is the fused intermediate used as input to uplifting.
