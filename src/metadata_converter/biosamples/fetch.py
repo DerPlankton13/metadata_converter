@@ -3,16 +3,16 @@ import time
 import requests
 
 
-def fetch_metadata(url: str, retries: int = 2) -> dict:
-    for attempt in range(retries + 1):
+def fetch_metadata(url: str, session: requests.Session) -> dict:
+    for attempt in range(4):
         try:
-            response = requests.get(url, timeout=10)
+            response = session.get(url, timeout=10)
             response.raise_for_status()
             return response.json()
         except requests.RequestException:
-            if attempt == retries:
+            if attempt == 3:
                 raise
-            time.sleep(attempt + 1)
+            time.sleep(2**attempt)
 
 
 def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dict:
@@ -30,8 +30,8 @@ def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dic
     return structured_metadata
 
 
-def get_metadata(sample_id: str) -> dict:
+def get_metadata(sample_id: str, session: requests.Session) -> dict:
     base_url = f"https://www.ebi.ac.uk/biosamples/samples/{sample_id}"
-    structured_metadata = fetch_metadata(base_url + ".ldjson")
-    unstructured_metadata = fetch_metadata(base_url + ".json")
+    structured_metadata = fetch_metadata(base_url + ".ldjson", session)
+    unstructured_metadata = fetch_metadata(base_url + ".json", session)
     return fuse_metadata(structured_metadata, unstructured_metadata)

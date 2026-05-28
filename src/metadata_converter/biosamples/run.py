@@ -8,6 +8,7 @@ from pydantic import ValidationError
 from tqdm import tqdm
 
 from metadata_converter.biosamples.fetch import get_metadata
+from metadata_converter.http import make_session
 from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourceConfig
 from metadata_converter.load import load_to_jsonld
@@ -61,9 +62,10 @@ def write(metadata: dict, output_path: Path) -> None:
     output_path.write_text(jsonld_str, encoding="utf-8")
 
 
-def _fetch_sample(sample_id: str, output_path: Path) -> None:
+def _fetch_sample(sample_id: str, output_path: Path, config: BiosamplesConfig) -> None:
+    session = make_session(config.user_agent)
     try:
-        metadata = get_metadata(sample_id)
+        metadata = get_metadata(sample_id, session)
         metadata = modify_context(metadata, sample_id)
         write(metadata, output_path=output_path)
     except Exception as e:
@@ -116,7 +118,7 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         submitted = [
             executor.submit(
-                _fetch_sample, sid, config.output.output_path / f"{sid}.jsonld"
+                _fetch_sample, sid, config.output.output_path / f"{sid}.jsonld", config
             )
             for sid in pending
         ]
