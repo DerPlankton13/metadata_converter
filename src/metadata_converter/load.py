@@ -1,6 +1,6 @@
-import json
 from pathlib import Path
 
+from metadata_converter.io import write_json
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 
@@ -10,12 +10,9 @@ def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:
     output_path.mkdir(parents=True, exist_ok=True)
 
     jsonld_dict = schema.model_dump(by_alias=True, exclude_none=True)
-    # prepend context
     jsonld_dict = {"@context": {"@vocab": "https://schema.org"}, **jsonld_dict}
-    jsonld_str = json.dumps(jsonld_dict, indent=2, ensure_ascii=False, default=str)
 
     file_name = jsonld_dict["@id"].split("/")[-1]
     if not file_name.endswith(".jsonld"):
         file_name += ".jsonld"
-    output_path = output_path / file_name
-    output_path.write_text(jsonld_str, encoding="utf-8")
+    write_json(jsonld_dict, output_path / file_name)

@@ -1,8 +1,9 @@
-import json
 import time
 from pathlib import Path
 
 import requests
+
+from metadata_converter.io import write_json
 
 
 def fetch_metadata(url: str, session: requests.Session) -> dict:
@@ -36,9 +37,5 @@ def get_metadata(sample_id: str, session: requests.Session, fetched_path: Path) 
     base_url = f"https://www.ebi.ac.uk/biosamples/samples/{sample_id}"
     structured = fetch_metadata(base_url + ".ldjson", session)
     unstructured = fetch_metadata(base_url + ".json", session)
-    (fetched_path / f"{sample_id}.ldjson").write_text(
-        json.dumps(structured, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
-    )
-    (fetched_path / f"{sample_id}.json").write_text(
-        json.dumps(unstructured, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
-    )
+    write_json(structured, fetched_path / f"{sample_id}.ldjson")
+    write_json(unstructured, fetched_path / f"{sample_id}.json")

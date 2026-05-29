@@ -24,12 +24,9 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
     for record in tqdm(records, desc="Fetching records", unit="rec", file=sys.stdout):
         logger.debug("Fetching %s", record.doi)
         jsonld = fetch_jsonld(record, config.extractor)
-        output_path = fetched_path / f"{record.source_id}.jsonld"
-        logger.debug("Writing raw JSON-LD to %s", output_path)
-        output_path.write_text(
-            json.dumps(jsonld, indent=2, ensure_ascii=False, default=str),
-            encoding="utf-8",
-        )
+        fetched_file = fetched_path / f"{record.source_id}.jsonld"
+        logger.debug("Writing fetched JSON-LD to %s", fetched_file)
+        write_json(jsonld, fetched_file)
 
     logger.info("Fetching complete. Output: %s", fetched_path)
 

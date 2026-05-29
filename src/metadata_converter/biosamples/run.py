@@ -169,11 +169,7 @@ def ingest_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
-        output_path = config.output.ingested / f"{sample_id}.jsonld"
-        output_path.write_text(
-            json.dumps(fused, indent=2, ensure_ascii=False, default=str),
-            encoding="utf-8",
-        )
+        write_json(fused, config.output.ingested / f"{sample_id}.jsonld")
 
     if failures:
         raise RuntimeError(
