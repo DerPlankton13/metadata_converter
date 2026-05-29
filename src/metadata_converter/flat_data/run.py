@@ -1,14 +1,15 @@
 import logging
 
-from metadata_converter.config import FlatDataConfig
+from metadata_converter.config import FlatDataConfig, SourceConfig
 from metadata_converter.extract import extract_data
-from metadata_converter.flat_data.preprocess_datahub import preprocess_datahub
 from metadata_converter.flat_data.transform import (
     add_id,
     clean_dataframe,
+    combine_columns,
     convert_to_long,
     extract_schemas,
 )
+from metadata_converter.flat_data.transform_helpers import split_field
 from metadata_converter.load import load_to_jsonld
 
 logger = logging.getLogger(__name__)
@@ -25,11 +26,12 @@ def ingest_flat_data(config: FlatDataConfig) -> None:
     for name, data in data_dict.items():
         logger.info("Cleaning sheet '%s'", name)
         data = clean_dataframe(data, config.cleaning)
+        combine_columns(data, config.mapping[name])
         data = add_id(data, config.mapping[name]["type"])
         data = convert_to_long(data)
+        for field in config.split_fields.get(name, []):
+            data = split_field(data, field)
         data_dict[name] = data
-
-    data_dict = preprocess_datahub(data_dict)
 
     # Build schemas
     results = {}
@@ -44,3 +46,10 @@ def ingest_flat_data(config: FlatDataConfig) -> None:
     )
     for schema in schemas:
         load_to_jsonld(schema, output_path=config.output.ingested)
+
+
+def uplift_flat_data(config: SourceConfig) -> None:
+    """Resolve cross-references in ingested flat_data JSON-LD."""
+    from metadata_converter.flat_data.uplifting import DatahubLinker
+
+    DatahubLinker(config).run()

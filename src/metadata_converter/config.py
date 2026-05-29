@@ -174,6 +174,7 @@ class FlatDataConfig(BaseModel):
     output: OutputConfig
     sheet_type_mapping: dict[str, str] | None = None
     mapping: dict[str, dict[str, Any]]
+    split_fields: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class ApiFetchingConfig(BaseModel):

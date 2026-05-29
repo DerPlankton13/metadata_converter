@@ -12,7 +12,7 @@ from metadata_converter.config import (
     FlatDataConfig,
     UpliftingConfig,
 )
-from metadata_converter.flat_data.run import ingest_flat_data
+from metadata_converter.flat_data.run import ingest_flat_data, uplift_flat_data
 from metadata_converter.log_setup import setup_logging
 from metadata_converter.parse import parse_cli
 
@@ -35,7 +35,10 @@ def main():
         case ("ingest", ApiFetchingConfig()):
             ingest_api_data(config)
         case ("uplift", UpliftingConfig()):
-            uplift_biosamples(config.biosamples)
+            if config.biosamples:
+                uplift_biosamples(config.biosamples)
+            if config.flat_data:
+                uplift_flat_data(config.flat_data)
         case _:
             logger.error(
                 "Phase '%s' is not supported for workflow_type '%s'",

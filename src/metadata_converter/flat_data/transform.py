@@ -133,18 +133,35 @@ def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
     return df.reset_index(drop=True)
 
 
-def combine_columns(df: pd.DataFrame, mapping: dict[str, Any]) -> pd.DataFrame:
-    """Adds new combined columns to the dataframe"""
-    for model, props in mapping.items():
-        if type(props) is dict:
-            for key, value in props.items():
-                if "+" in value:
-                    # adds the values from the columns
-                    columns = [col.strip() for col in value.split("+")]
-                    df[key] = df[columns].agg(" ".join, axis=1)
-                    mapping[model][key] = key
+def combine_columns(df: pd.DataFrame, mapping_value: Any) -> None:
+    """Add combined columns to ``df`` from ``"col1 + col2"`` mapping values.
 
-    return df
+    Mutates ``df`` in place (adds the new columns) and ``mapping_value`` in place
+    (rewrites the ``"+"`` expression to the new column name so downstream code
+    treats it as a normal column lookup). Recurses into nested dicts and lists so
+    combinations work at any depth of the mapping.
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        Wide-format dataframe for a single sheet.
+    mapping_value : Any
+        A single sheet's mapping (dict), a nested mapping (dict), or a list of
+        nested mappings. Strings and other scalars are ignored.
+    """
+    if isinstance(mapping_value, dict):
+        for key, value in list(mapping_value.items()):
+            if key == "type":
+                continue
+            if isinstance(value, str) and "+" in value:
+                columns = [col.strip() for col in value.split("+")]
+                df[key] = df[columns].agg(" ".join, axis=1)
+                mapping_value[key] = key
+            elif isinstance(value, (dict, list)):
+                combine_columns(df, value)
+    elif isinstance(mapping_value, list):
+        for item in mapping_value:
+            combine_columns(df, item)
 
 
 def convert_to_long(df: pd.DataFrame, sheet_name: str = None) -> pd.DataFrame:
@@ -256,12 +273,17 @@ def build_schema(
     return schemas
 
 
+LITERAL_PREFIX = "Literal:"
+
+
 def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
     """
     Extract and resolve schema properties from an entity using a mapping definition.
 
-    Iterates over the mapping and resolves each entry as a simple field lookup,
-    a nested schema object, or a list of nested schema objects.
+    Iterates over the mapping and resolves each entry as a literal, a simple field
+    lookup, a nested schema object, or a list of nested schema objects. String values
+    prefixed with ``"Literal:"`` are treated as literal strings (with the prefix
+    stripped); all other strings are looked up as column names in ``entity``.
 
     Parameters
     ----------
@@ -290,6 +312,9 @@ def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
 
     for prop, value in mapping.items():
         if isinstance(value, str):
+            if value.startswith(LITERAL_PREFIX):
+                schema_properties[prop] = value[len(LITERAL_PREFIX):]
+                continue
             var = get_field_value(entity, value)
             if var is not None:
                 schema_properties[prop] = var
