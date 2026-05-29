@@ -12,6 +12,7 @@ from metadata_converter.biosamples.fetch import fuse_metadata, get_metadata
 from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourceConfig
 from metadata_converter.http import make_session
+from metadata_converter.io import write_json
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.log_setup import _log_validation_error
 from metadata_converter.schema_org_models.schemaorg_models import (
@@ -66,8 +67,8 @@ def _fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) 
         return False
 
 
-def fetch_raw_biosamples(config: BiosamplesConfig):
-    logger.info("Starting biosamples metadata fetching")
+def fetch_biosamples(config: BiosamplesConfig):
+    logger.info("Starting biosamples fetch")
 
     input_cfg = config.input
     excel_files = sorted(input_cfg.input_path.glob("*.xlsx")) + sorted(
@@ -137,10 +138,12 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
             "check the log for details and rerun to retry"
         )
 
-    logger.info("Biosamples metadata fetching complete. Output: %s", fetched_path)
+    logger.info("Biosamples fetch complete. Output: %s", fetched_path)
 
 
 def ingest_biosamples(config: BiosamplesConfig):
+    logger.info("Starting biosamples ingest")
+
     fetched_path = config.output.fetched
     ldjson_files = list(fetched_path.glob("*.ldjson"))
     logger.info("Found %d fetched sample(s) in %s", len(ldjson_files), fetched_path)
@@ -176,10 +179,12 @@ def ingest_biosamples(config: BiosamplesConfig):
             f"{failures} of {len(ldjson_files)} sample(s) failed to ingest — "
             "check the log for details"
         )
-    logger.info("Biosamples ingestion complete. Output: %s", config.output.ingested)
+    logger.info("Biosamples ingest complete. Output: %s", config.output.ingested)
 
 
 def uplift_biosamples(config: SourceConfig):
+    logger.info("Starting biosamples uplift")
+
     files = list(config.input_path.glob("**/*.jsonld"))
     logger.info("Found %d ingested file(s) in %s", len(files), config.input_path)
     config.output_path.mkdir(parents=True, exist_ok=True)
@@ -187,9 +192,9 @@ def uplift_biosamples(config: SourceConfig):
     failures = 0
     for path in tqdm(files, desc="Uplifting biosamples", unit="sample", file=sys.stdout):
         with path.open() as f:
-            raw = json.load(f)
+            data = json.load(f)
         try:
-            uplifter = SampleUplifter(raw)
+            uplifter = SampleUplifter(data)
             product_dict, action_dict = uplifter.build_dicts()
         except Exception as e:
             logger.error("Failed to uplift %s: %s", path.name, e)

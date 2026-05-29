@@ -7,6 +7,7 @@ from tqdm import tqdm
 from metadata_converter import get_schema
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.config import ApiFetchingConfig
+from metadata_converter.io import write_json
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.log_setup import _log_validation_error
 
@@ -14,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_api_data(config: ApiFetchingConfig) -> None:
+    logger.info("Starting API fetch from %s", config.extractor.api_url)
+
     fetched_path = config.output.fetched
     fetched_path.mkdir(parents=True, exist_ok=True)
 
-    logger.info("Querying %s ...", config.extractor.api_url)
     records = query_source(config.extractor)
     logger.info("Found %d record(s), fetching JSON-LD to %s", len(records), fetched_path)
 
@@ -28,32 +30,34 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
         logger.debug("Writing fetched JSON-LD to %s", fetched_file)
         write_json(jsonld, fetched_file)
 
-    logger.info("Fetching complete. Output: %s", fetched_path)
+    logger.info("API fetch complete. Output: %s", fetched_path)
 
 
 def ingest_api_data(config: ApiFetchingConfig) -> None:
+    logger.info("Starting API ingest")
+
     fetched_path = config.output.fetched
-    raw_files = list(fetched_path.glob("*.jsonld"))
-    logger.info("Found %d fetched record(s) in %s", len(raw_files), fetched_path)
+    fetched_files = list(fetched_path.glob("*.jsonld"))
+    logger.info("Found %d fetched record(s) in %s", len(fetched_files), fetched_path)
 
     config.output.ingested.mkdir(parents=True, exist_ok=True)
 
     failures = 0
-    for raw_file in tqdm(raw_files, desc="Ingesting records", unit="rec", file=sys.stdout):
+    for fetched_file in tqdm(fetched_files, desc="Ingesting records", unit="rec", file=sys.stdout):
         try:
-            with raw_file.open() as f:
+            with fetched_file.open() as f:
                 jsonld = json.load(f)
             schema_type = jsonld["@type"].split("/")[-1]
             schema = get_schema(schema_type)(**jsonld)
             load_to_jsonld(schema, output_path=config.output.ingested)
         except Exception as e:
-            logger.error("Failed to ingest %s", raw_file.name)
+            logger.error("Failed to ingest %s", fetched_file.name)
             _log_validation_error(e, logger)
             failures += 1
 
     if failures:
         raise RuntimeError(
-            f"{failures} of {len(raw_files)} record(s) failed to ingest — "
+            f"{failures} of {len(fetched_files)} record(s) failed to ingest — "
             "check the log for details"
         )
-    logger.info("Ingestion complete. Output: %s", config.output.ingested)
+    logger.info("API ingest complete. Output: %s", config.output.ingested)
