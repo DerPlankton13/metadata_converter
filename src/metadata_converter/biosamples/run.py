@@ -228,8 +228,10 @@ def uplift_biosamples(config: SourceConfig):
             failures += 1
 
     if failures:
-        raise RuntimeError(
-            f"{failures} of {len(files)} sample(s) failed to uplift — "
-            "check the log for details"
+        logger.warning(
+            "Biosamples uplift completed with %d failure(s) out of %d sample(s) — "
+            "check the log for details",
+            failures, len(files),
         )
-    logger.info("Biosamples uplift complete. Output: %s", config.output_path)
+    else:
+        logger.info("Biosamples uplift complete. Output: %s", config.output_path)
