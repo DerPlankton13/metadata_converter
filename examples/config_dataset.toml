@@ -1,4 +1,4 @@
-ouworkflow_type = "flat_data"
+workflow_type = "flat_data"
 
 [extractor]
 type = "excel"
