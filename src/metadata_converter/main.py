@@ -12,7 +12,7 @@ from metadata_converter.config import (
     FlatDataConfig,
     UpliftingConfig,
 )
-from metadata_converter.flat_data.run import generate_jsonld
+from metadata_converter.flat_data.run import ingest_flat_data
 from metadata_converter.log_setup import setup_logging
 from metadata_converter.parse import parse_cli
 
@@ -29,7 +29,7 @@ def main():
         case ("fetch", ApiFetchingConfig()):
             fetch_api_data(config)
         case ("ingest", FlatDataConfig()):
-            generate_jsonld(config)
+            ingest_flat_data(config)
         case ("ingest", BiosamplesConfig()):
             ingest_biosamples(config)
         case ("ingest", ApiFetchingConfig()):

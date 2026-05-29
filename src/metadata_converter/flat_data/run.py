@@ -13,7 +13,8 @@ from metadata_converter.load import load_to_jsonld
 
 logger = logging.getLogger(__name__)
 
-def generate_jsonld(config: FlatDataConfig)->None:
+
+def ingest_flat_data(config: FlatDataConfig) -> None:
     logger.info("Starting flat-data workflow")
 
     # Extract Step
