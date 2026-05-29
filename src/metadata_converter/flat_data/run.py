@@ -39,7 +39,7 @@ def generate_jsonld(config: FlatDataConfig)->None:
     # Load Step
     schemas = [s for schemas in results.values() for s in schemas]
     logger.info(
-        "Writing %d JSON-LD file(s) to %s", len(schemas), config.output.output_path
+        "Writing %d JSON-LD file(s) to %s", len(schemas), config.output.ingested
     )
     for schema in schemas:
-        load_to_jsonld(schema, output_path=config.output.output_path)
+        load_to_jsonld(schema, output_path=config.output.ingested)

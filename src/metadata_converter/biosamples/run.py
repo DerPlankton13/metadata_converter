@@ -1,18 +1,17 @@
 import json
 import logging
+import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
 from pydantic import ValidationError
-import sys
-
 from tqdm import tqdm
 
-from metadata_converter.biosamples.fetch import get_metadata
-from metadata_converter.http import make_session
+from metadata_converter.biosamples.fetch import fuse_metadata, get_metadata
 from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourceConfig
+from metadata_converter.http import make_session
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.log_setup import _log_validation_error
 from metadata_converter.schema_org_models.schemaorg_models import (
@@ -57,19 +56,10 @@ def modify_context(metadata: dict, sample_id: str) -> dict:
     return metadata
 
 
-def write(metadata: dict, output_path: Path) -> None:
-    output_path.parent.mkdir(parents=True, exist_ok=True)
-    logger.debug("Writing %s", output_path)
-    jsonld_str = json.dumps(metadata, indent=2, ensure_ascii=False, default=str)
-    output_path.write_text(jsonld_str, encoding="utf-8")
-
-
-def _fetch_sample(sample_id: str, output_path: Path, config: BiosamplesConfig) -> bool:
+def _fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) -> bool:
     session = make_session(config.user_agent)
     try:
-        metadata = get_metadata(sample_id, session)
-        metadata = modify_context(metadata, sample_id)
-        write(metadata, output_path=output_path)
+        get_metadata(sample_id, session, fetched_path)
         return True
     except Exception as e:
         logger.error("Could not fetch sample '%s': %s", sample_id, e)
@@ -77,7 +67,7 @@ def _fetch_sample(sample_id: str, output_path: Path, config: BiosamplesConfig) -
 
 
 def fetch_raw_biosamples(config: BiosamplesConfig):
-    logger.info("Starting biosamples metadata fetching workflow")
+    logger.info("Starting biosamples metadata fetching")
 
     input_cfg = config.input
     excel_files = sorted(input_cfg.input_path.glob("*.xlsx")) + sorted(
@@ -101,12 +91,14 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
         logger.warning("No sample IDs found across all files")
         return
 
-    config.output.output_path.mkdir(parents=True, exist_ok=True)
+    fetched_path = config.output.fetched
+    fetched_path.mkdir(parents=True, exist_ok=True)
 
     already_fetched = {
         sid
         for sid in all_sample_ids
-        if (config.output.output_path / f"{sid}.jsonld").exists()
+        if (fetched_path / f"{sid}.ldjson").exists()
+        and (fetched_path / f"{sid}.json").exists()
     }
     pending = all_sample_ids - already_fetched
     if already_fetched:
@@ -121,10 +113,7 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
 
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         submitted = [
-            executor.submit(
-                _fetch_sample, sid, config.output.output_path / f"{sid}.jsonld", config
-            )
-            for sid in pending
+            executor.submit(_fetch_sample, sid, fetched_path, config) for sid in pending
         ]
         failures = 0
         try:
@@ -148,22 +137,67 @@ def fetch_raw_biosamples(config: BiosamplesConfig):
             "check the log for details and rerun to retry"
         )
 
-    logger.info("Biosamples metadata fetching complete. Output: %s", config.output.output_path)
+    logger.info("Biosamples metadata fetching complete. Output: %s", fetched_path)
+
+
+def ingest_biosamples(config: BiosamplesConfig):
+    fetched_path = config.output.fetched
+    ldjson_files = list(fetched_path.glob("*.ldjson"))
+    logger.info("Found %d fetched sample(s) in %s", len(ldjson_files), fetched_path)
+    config.output.ingested.mkdir(parents=True, exist_ok=True)
+
+    failures = 0
+    for ldjson_path in tqdm(
+        ldjson_files, desc="Ingesting biosamples", unit="sample", file=sys.stdout
+    ):
+        sample_id = ldjson_path.stem
+        json_path = fetched_path / f"{sample_id}.json"
+        if not json_path.exists():
+            logger.error("Missing unstructured metadata for %s, skipping", sample_id)
+            failures += 1
+            continue
+
+        try:
+            with ldjson_path.open() as f:
+                structured = json.load(f)
+            with json_path.open() as f:
+                unstructured = json.load(f)
+            fused = fuse_metadata(structured, unstructured)
+            fused = modify_context(fused, sample_id)
+        except Exception as e:
+            logger.error("Failed to ingest %s: %s", sample_id, e)
+            failures += 1
+            continue
+
+        output_path = config.output.ingested / f"{sample_id}.jsonld"
+        output_path.write_text(
+            json.dumps(fused, indent=2, ensure_ascii=False, default=str),
+            encoding="utf-8",
+        )
+
+    if failures:
+        raise RuntimeError(
+            f"{failures} of {len(ldjson_files)} sample(s) failed to ingest — "
+            "check the log for details"
+        )
+    logger.info("Biosamples ingestion complete. Output: %s", config.output.ingested)
 
 
 def uplift_biosamples(config: SourceConfig):
-    raw_files = list(config.input_path.glob("**/*.jsonld"))
-    logger.debug("Found %d raw file(s) in %s", len(raw_files), config.input_path)
-    logger.debug("Found: %s", raw_files)
-    for path in tqdm(raw_files, desc="Uplifting samples", unit="sample", file=sys.stdout):
+    files = list(config.input_path.glob("**/*.jsonld"))
+    logger.info("Found %d ingested file(s) in %s", len(files), config.input_path)
+    config.output_path.mkdir(parents=True, exist_ok=True)
+
+    failures = 0
+    for path in tqdm(files, desc="Uplifting biosamples", unit="sample", file=sys.stdout):
         with path.open() as f:
             raw = json.load(f)
-            logger.debug("Processing %s: %s", path.name, raw)
         try:
             uplifter = SampleUplifter(raw)
             product_dict, action_dict = uplifter.build_dicts()
         except Exception as e:
             logger.error("Failed to uplift %s: %s", path.name, e)
+            failures += 1
             continue
         try:
             product = Product(**product_dict)
@@ -178,6 +212,7 @@ def uplift_biosamples(config: SourceConfig):
         except ValidationError as e:
             logger.error("Failed to build Product for %s.", path.name)
             _log_validation_error(e, logger)
+            failures += 1
         try:
             action = Action(**action_dict)
             load_to_jsonld(action, output_path=config.output_path)
@@ -189,3 +224,11 @@ def uplift_biosamples(config: SourceConfig):
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)
             _log_validation_error(e, logger)
+            failures += 1
+
+    if failures:
+        raise RuntimeError(
+            f"{failures} of {len(files)} sample(s) failed to uplift — "
+            "check the log for details"
+        )
+    logger.info("Biosamples uplift complete. Output: %s", config.output_path)

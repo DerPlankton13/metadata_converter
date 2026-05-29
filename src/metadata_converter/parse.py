@@ -5,8 +5,13 @@ from pathlib import Path
 from metadata_converter.config import Config, load_config
 
 
-def parse_cli() -> tuple[Config, int]:
+def parse_cli() -> tuple[str, Config, int]:
     parser = argparse.ArgumentParser(description="Metadata Converter")
+    parser.add_argument(
+        "phase",
+        choices=["fetch", "ingest", "uplift"],
+        help="Pipeline phase to execute",
+    )
     parser.add_argument("config", type=Path, help="Path to TOML config file")
     parser.add_argument(
         "--log-level",
@@ -16,4 +21,4 @@ def parse_cli() -> tuple[Config, int]:
     )
     args = parser.parse_args()
     logging_level = getattr(logging, args.log_level.upper())
-    return load_config(args.config), logging_level
+    return args.phase, load_config(args.config), logging_level

@@ -148,8 +148,16 @@ class BiosamplesInput(BaseModel):
 
 
 class OutputConfig(BaseModel):
+    """Output config for sources with no fetch phase (flat_data)."""
     model_config = ConfigDict(extra="forbid")
-    output_path: Path
+    ingested: Path
+
+
+class FetchedOutputConfig(BaseModel):
+    """Output config for sources with a fetch phase (biosamples, api)."""
+    model_config = ConfigDict(extra="forbid")
+    fetched: Path
+    ingested: Path
 
 
 class SourceConfig(BaseModel):
@@ -172,14 +180,14 @@ class ApiFetchingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workflow_type: Literal["metadata_collector"] = "metadata_collector"
     extractor: ApiExtractorConfig
-    output: OutputConfig
+    output: FetchedOutputConfig
 
 
 class BiosamplesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     workflow_type: Literal["biosamples"] = "biosamples"
     input: BiosamplesInput
-    output: OutputConfig
+    output: FetchedOutputConfig
     max_workers: int = 10
     user_agent: str = "metadata-collector/1.0"
 

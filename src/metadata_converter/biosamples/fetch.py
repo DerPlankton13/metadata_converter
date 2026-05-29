@@ -1,4 +1,6 @@
+import json
 import time
+from pathlib import Path
 
 import requests
 
@@ -30,8 +32,13 @@ def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dic
     return structured_metadata
 
 
-def get_metadata(sample_id: str, session: requests.Session) -> dict:
+def get_metadata(sample_id: str, session: requests.Session, fetched_path: Path) -> None:
     base_url = f"https://www.ebi.ac.uk/biosamples/samples/{sample_id}"
-    structured_metadata = fetch_metadata(base_url + ".ldjson", session)
-    unstructured_metadata = fetch_metadata(base_url + ".json", session)
-    return fuse_metadata(structured_metadata, unstructured_metadata)
+    structured = fetch_metadata(base_url + ".ldjson", session)
+    unstructured = fetch_metadata(base_url + ".json", session)
+    (fetched_path / f"{sample_id}.ldjson").write_text(
+        json.dumps(structured, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
+    (fetched_path / f"{sample_id}.json").write_text(
+        json.dumps(unstructured, indent=2, ensure_ascii=False, default=str), encoding="utf-8"
+    )
