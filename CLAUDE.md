@@ -38,8 +38,8 @@ python -m pytest "tests/biosamples/test_biosamples.py::test_extract_action[SAMEA
 # Lint
 ruff check src/
 
-# Run the CLI
-converter <config.toml>
+# Run the CLI (phase is: fetch | ingest | uplift)
+converter <phase> <config.toml>
 ```
 
 Dependencies are managed with `uv`. The project uses `hatchling` as the build backend.
@@ -124,11 +124,23 @@ raise at runtime if a `QueryGroup` is supplied.
 Raw JSON-LD responses are written to `<output_path>/raw/` before Pydantic validation. The validated schema objects are
 written to `<output_path>/` directly.
 
+### `@id` and IRIs
+
+In JSON-LD, `@id` is an **IRI** (Internationalized Resource Identifier) — the entity's globally unique, dereferenceable
+identity in the knowledge graph. It is not merely a filename. During development, while the files are not yet hosted,
+relative filenames (e.g. `Person_abc123.jsonld`, `Product_SAMEA001.jsonld`) are used as stand-in IRIs. These will
+resolve to real URLs once a stable base IRI is established at publish time — **without any changes to the data files**,
+as long as the base IRI is applied consistently across all files and cross-references.
+
+Consequence: `ref_id_template` on a `LinkRule` must produce the same relative IRI that the target entity's file carries,
+so cross-references remain valid when both are resolved against the same base IRI.
+
 ### Serialization
 
 `load_to_jsonld` takes any `SchemaOrgBase` instance, serializes it with `model_dump(by_alias=True, exclude_none=True)`,
-prepends `@context`, and writes to `<output_path>/<@id>.jsonld`. The `@id` may contain a path separator, in which case
-only the final filename component is used.
+prepends `@context` (no `@base` — relative IRI resolution is left to the graph-build step), and writes to
+`<output_path>/<@id>.jsonld`. The output filename is the last path component of `@id`; this keeps filenames stable and
+means the relative `@id` value doubles as the filename.
 
 ### BioSamples test data
 
