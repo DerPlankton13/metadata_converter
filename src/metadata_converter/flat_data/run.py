@@ -25,9 +25,10 @@ def ingest_flat_data(config: FlatDataConfig) -> None:
     # Transform Step
     for name, data in data_dict.items():
         logger.info("Cleaning sheet '%s'", name)
+        sheet_mapping = config.mapping[name]
         data = clean_dataframe(data, config.cleaning)
-        combine_columns(data, config.mapping[name])
-        data = add_id(data, config.mapping[name]["type"])
+        combine_columns(data, sheet_mapping)
+        data = add_id(data, sheet_mapping["type"])
         data = convert_to_long(data)
         for field in config.split_fields.get(name, []):
             data = split_field(data, field)
