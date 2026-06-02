@@ -173,7 +173,7 @@ def convert_to_long(df: pd.DataFrame, sheet_name: str = None) -> pd.DataFrame:
 
 
 def add_id(data: pd.DataFrame, schema_type: str) -> pd.DataFrame:
-    """Generate a unique identifier for a schema instance."""
+    """Generate a nanoid-based ``@id`` column for each row: ``<schema_type>_<nanoid>.jsonld``."""
     data["@id"] = [f"{schema_type}_{generate()}.jsonld" for _ in range(len(data))]
     return data
 
@@ -204,7 +204,10 @@ def instantiate_schema(
         for err in e.errors():
             logger.warning(
                 "Could not create %s: %s at %s (input: %s)",
-                schema_type, err["msg"], err["loc"], err.get("input"),
+                schema_type,
+                err["msg"],
+                err["loc"],
+                err.get("input"),
             )
         logger.debug("Properties provided: %s", schema_properties)
         return None
@@ -313,7 +316,7 @@ def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
     for prop, value in mapping.items():
         if isinstance(value, str):
             if value.startswith(LITERAL_PREFIX):
-                schema_properties[prop] = value[len(LITERAL_PREFIX):]
+                schema_properties[prop] = value[len(LITERAL_PREFIX) :]
                 continue
             var = get_field_value(entity, value)
             if var is not None:
