@@ -1,5 +1,0 @@
-workflow_type = "uplifting"
-
-[biosamples]
-input_path = "output/raw/biosamples"
-output_path = "output/uplifted/biosamples"
