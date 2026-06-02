@@ -129,6 +129,12 @@ class LinkRule(BaseModel):
         None,
         description="Named additionalProperty entry on candidates to index by. Mutually exclusive with in_property.",
     )
+    ref_id_template: str | None = Field(
+        None,
+        description="Template for constructing the ref @id from the matched candidate. "
+        "Use {prop} placeholders for candidate property values, e.g. 'Product_{identifier}.jsonld'. "
+        "When omitted the candidate's own @id is used.",
+    )
 
     @model_validator(mode="after")
     def _check_match_and_in(self) -> LinkRule:
