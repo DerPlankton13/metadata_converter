@@ -1,304 +1,494 @@
-"""Datahub cross-reference linker.
+"""Generic JSON-LD cross-reference linker.
 
-Reads ingested flat_data JSON-LD (one file per entity row, no cross-refs resolved),
-resolves the links between Persons, the main Dataset, Actions, sample stubs and file
-Datasets, and writes linked JSON-LD to the uplift output directory.
+Reads JSON-LD entities from an input directory, validates each as its schema.org
+Pydantic model, applies a list of declarative link rules to resolve cross-references,
+and writes the results through the unified ``load_to_jsonld`` export.
 
-Linking model (see plan / preprocess_datahub for the original cross-sheet semantics):
+The engine is project-agnostic. All linking semantics live in
+``FlatDataUpliftConfig.links`` rules — see ``LinkRule`` in ``config.py``.
 
-- ``Dataset.creator``  ← Persons whose ``additionalProperty[name="author:is-dataset-author"]``
-  is truthy (1 / "1" / True / "true").
-- ``Action.agent``     ← Person whose ``identifier.value`` matches the Action's
-  ``agent.identifier`` (forward).
-- ``Action.object``    ← Product stubs whose ``additionalProperty[name="sample:analysis-pid"]``
-  matches the Action's ``identifier`` (reverse).
-- ``Action.result``    ← file Datasets whose ``additionalProperty[name="file:analysis"]``
-  matches the Action's ``identifier`` (reverse).
-- file ``Dataset.about`` ← biosamples Product ``Product_<sample:pid>.jsonld`` reference
-  derived from the file's ``about.identifier`` (forward, deterministic — no scan needed).
+How link rules work
+-------------------
+Each rule locates entities of ``in_type`` whose lookup value matches a value drawn
+from the entity being processed, then writes back a reference::
 
-Sample stubs are NOT copied to the uplifted directory; they are placeholders whose
-``@id`` namespace is owned by the biosamples uplift output.
+    for every entity of on_type:
+        value   = match_literal  OR  select_values(entity, match_value)
+        matches = [c for c in in_type if candidate_value(c) == value]
+        entity[target_property] = reference(s) to matches
+
+Candidate values are read either via ``in_property`` (a dot-selector on the model)
+or via ``in_additional_property`` (finds the ``additionalProperty`` item whose ``name``
+equals the specified string, then reads its ``value`` field).
+
+Selector expressions
+--------------------
+A selector is a dot-separated chain of field names:
+
+- ``identifier``       — read a single field
+- ``about.identifier`` — descend into a nested object first
+
+When the final step resolves to a PropertyValue-like model (one that carries a
+non-``None`` ``value`` field), the engine dereferences to that value automatically.
+This covers ``Orcid``, ``PropertyValue``, and similar schema.org wrappers — no
+need to append ``.value`` at the end of a selector.
 """
+
 import json
 import logging
+import re
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
-from metadata_converter.config import SourceConfig
-from metadata_converter.io import write_json
+from pydantic import BaseModel, ValidationError
+
+from metadata_converter.config import FlatDataUpliftConfig, LinkRule
+from metadata_converter.load import load_to_jsonld
+from metadata_converter.log_setup import _log_validation_error
+from metadata_converter.schema_org_models.custom_models import get_schema
+from metadata_converter.schema_org_models.schemaorg_models import (
+    PropertyValue,
+    SchemaOrgBase,
+)
 
 logger = logging.getLogger(__name__)
 
 
-_IS_DATASET_AUTHOR = "author:is-dataset-author"
-_SAMPLE_ANALYSIS_PID = "sample:analysis-pid"
-_FILE_ANALYSIS = "file:analysis"
+# ---------------------------------------------------------------------------
+# Selector evaluation primitives
+# ---------------------------------------------------------------------------
 
 
-def _as_list(value: Any) -> list:
-    """Wrap a scalar in a list; pass lists through; treat None as empty."""
+def select_values(obj: Any, selector: str) -> list:
+    """Return all values reached by walking ``selector`` on ``obj``.
+
+    ``selector`` is a dot-separated chain of field names applied left-to-right,
+    e.g. ``"agent.identifier"``. The result is always a list because any field
+    along the path may hold a list of models — in that case the remaining selector
+    is applied to every element and all results are merged::
+
+        select_values(action, "agent.identifier")
+        # → ["0000-0001-2345-6789"]  — even when there is only one agent
+
+    When the final field resolves to a model that carries a ``value`` attribute
+    (``Orcid``, ``PropertyValue``, …), that inner value is extracted automatically —
+    no need to append ``.value`` to the selector.
+
+    Parameters
+    ----------
+    obj : Any
+        Root object to start walking from. May be a Pydantic model, a list of
+        models, or any scalar. ``None`` produces an empty result.
+    selector : str
+        Dot-separated chain of field names, e.g. ``"agent.identifier"``.
+
+    Returns
+    -------
+    list
+        All values found at the end of the path. Empty when any segment is
+        missing or ``None``.
+    """
+    if obj is None:
+        return []
+    if selector == "":
+        return _unwrap_value(obj)
+
+    first_segment, _, remaining = selector.partition(".")
+
+    if isinstance(obj, list):
+        # Fan out: the full selector still needs to be applied to each element,
+        # because we haven't consumed any segment yet — we're just spreading across items.
+        results: list = []
+        for item in obj:
+            results.extend(select_values(item, selector))
+        return results
+
+    field_value = getattr(obj, first_segment, None)
+
+    if remaining:
+        return select_values(field_value, remaining)  # more segments to walk — recurse
+    else:
+        return _unwrap_value(field_value)  # last segment reached — extract value
+
+
+def _unwrap_value(value: Any) -> list:
+    """Flatten lists and extract ``.value`` from PropertyValue-like wrappers.
+
+    Returns a list to keep callers branch-free. Specifically:
+
+    - ``None`` → ``[]``
+    - list → flattened, collecting all leaf values
+    - Pydantic model with a non-``None`` ``value`` attribute → unwrap that value
+      (this is the schema.org idiom for ``Orcid``, ``PropertyValue``, etc.)
+    - anything else → ``[value]``
+    """
     if value is None:
         return []
     if isinstance(value, list):
-        return value
+        results: list = []
+        for item in value:
+            results.extend(_unwrap_value(item))
+        return results
+    if isinstance(value, BaseModel):
+        inner = getattr(value, "value", None)
+        if inner is not None:
+            return _unwrap_value(inner)
+        return [value]
     return [value]
 
 
-def _truthy(value: Any) -> bool:
-    """Loosely interpret 1 / "1" / True / "true" as truthy."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, (int, float)):
-        return value != 0
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes"}
-    return False
+def _to_lookup_key(value: Any) -> str | None:
+    """Convert a raw data value to the canonical string used for candidate matching.
 
+    Both sides of a link rule — the value read from an entity via ``match_value`` /
+    ``match_literal``, and the value read from a candidate via ``in_property`` /
+    ``in_additional_property`` — pass through this function before comparison.
+    Using the same normalization on both sides makes matches type-independent.
 
-def _find_additional_property(entity: dict, name: str) -> dict | None:
-    """Return the first additionalProperty entry with the given name, or None."""
-    for ap in _as_list(entity.get("additionalProperty")):
-        if isinstance(ap, dict) and ap.get("name") == name:
-            return ap
-    return None
-
-
-def _has_additional_property(entity: dict, name: str) -> bool:
-    return _find_additional_property(entity, name) is not None
-
-
-def _identifier_value(identifier: Any) -> str | None:
-    """Extract a PID from an identifier that may be a string, a PropertyValue dict, or a list."""
-    if identifier is None:
+    - ``None`` → ``None`` (caller skips these).
+    - ``bool`` → ``"true"`` / ``"false"`` so that ``match_literal = "true"`` matches them.
+    - ``float`` with an integer value (e.g. ``1.0``) → equivalent int string.
+      Pydantic's smart-mode union resolution coerces ``int 1`` to ``float 1.0``
+      when the target field's union prefers ``float``; this collapse lets
+      ``match_literal = "1"`` still match such a value.
+    - everything else → ``str(value).strip().lower()``.
+    """
+    if value is None:
         return None
-    if isinstance(identifier, str):
-        return identifier
-    if isinstance(identifier, dict):
-        val = identifier.get("value")
-        return str(val) if val is not None else None
-    if isinstance(identifier, list):
-        for item in identifier:
-            v = _identifier_value(item)
-            if v is not None:
-                return v
-    return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value).strip().lower()
 
 
-class DatahubLinker:
-    def __init__(self, config: SourceConfig):
+def _render_ref_id(template: str, candidate: SchemaOrgBase) -> str | None:
+    """Render a ref ``@id`` by substituting ``{prop}`` placeholders with candidate values.
+
+    Returns ``None`` when any placeholder cannot be resolved on ``candidate``.
+    """
+    result = template
+    for prop in re.findall(r'\{(\w+)\}', template):
+        values = select_values(candidate, prop)
+        if not values:
+            return None
+        result = result.replace(f'{{{prop}}}', str(values[0]))
+    return result
+
+
+def _find_additional_property(entity: SchemaOrgBase, name: str) -> list:
+    """Return unwrapped values from ``additionalProperty`` items matching ``name``."""
+    ap = entity.additionalProperty
+    if ap is None:
+        return []
+    items = ap if isinstance(ap, list) else [ap]
+    results: list = []
+    for item in items:
+        if isinstance(item, PropertyValue) and item.name == name:
+            results.extend(_unwrap_value(item.value))
+    return results
+
+
+# ---------------------------------------------------------------------------
+# Loading
+# ---------------------------------------------------------------------------
+
+
+def _load_as_model(data: dict, source: str) -> SchemaOrgBase | None:
+    """Instantiate the schema.org Pydantic model for one JSON-LD entity.
+
+    Returns ``None`` (with a warning log) when the entity has no scalar ``@type``,
+    an unknown ``@type``, or fails Pydantic validation; callers may skip such
+    entities cleanly.
+
+    Parameters
+    ----------
+    data : dict
+        Raw JSON-LD dict as loaded from a file.
+    source : str
+        Human-readable identifier used in log messages (typically the filename).
+
+    Returns
+    -------
+    SchemaOrgBase or None
+        Validated Pydantic model, or ``None`` if loading or validation failed.
+    """
+    entity_type = data.get("@type")
+    if not isinstance(entity_type, str):
+        logger.warning("%s: missing or non-scalar @type; skipping", source)
+        return None
+    try:
+        model_cls = get_schema(entity_type)
+    except KeyError:
+        logger.warning("%s: unknown schema.org @type %r; skipping", source, entity_type)
+        return None
+    try:
+        return model_cls(**data)
+    except ValidationError as e:
+        logger.warning(
+            "%s: Pydantic validation failed for @type %r", source, entity_type
+        )
+        _log_validation_error(e, logger, level="warning")
+        return None
+
+
+# ---------------------------------------------------------------------------
+# Engine
+# ---------------------------------------------------------------------------
+
+
+class LinkEngine:
+    """Generic, config-driven cross-reference linker for JSON-LD entities.
+
+    Configuration entirely determines which entities are modified and how. The
+    engine itself knows nothing about project-specific @types or property names —
+    rules in ``FlatDataUpliftConfig.links`` drive everything.
+
+    Lifecycle
+    ---------
+    1. ``_load_entities`` — read each ``*.jsonld`` file in ``input_path``,
+       validate as its schema.org Pydantic model, and group into ``by_type``.
+    2. ``_apply_rule`` (once per rule) — build a value→candidate lookup, then
+       find matches for each entity of ``on_type`` and set ``target_property``
+       in place. All rules operate on the same model instances in ``by_type``.
+    3. ``_write_entities`` — flatten ``by_type`` and export each model via
+       ``load_to_jsonld``. Entities whose ``@type`` is listed in
+       ``config.drop_types`` are skipped.
+    """
+
+    def __init__(self, config: FlatDataUpliftConfig) -> None:
+        self.config = config
         self.input_path = Path(config.input_path)
         self.output_path = Path(config.output_path)
-        # Loaded entities, keyed by source filename.
-        self._entities: dict[str, dict] = {}
-        # Buckets by @type / role.
-        self._persons: list[dict] = []
-        self._main_datasets: list[dict] = []
-        self._file_datasets: list[dict] = []
-        self._actions: list[dict] = []
-        self._sample_stubs: list[dict] = []
-        # Lookups built in _build_lookups.
-        self._person_by_pid: dict[str, str] = {}
-        self._samples_per_analysis: dict[str, list[str]] = {}  # analysis_pid → [sample_pid]
-        self._files_per_analysis: dict[str, list[str]] = {}    # analysis_pid → [file @id]
-        # Dataset creator @ids (resolved Person @ids).
-        self._dataset_creator_ids: list[str] = []
+        # @type name → list of models of that @type
+        self.by_type: dict[str, list[SchemaOrgBase]] = {}
 
     def run(self) -> None:
+        """Run all three phases in order: load → apply rules → write."""
         logger.info("Starting flat-data uplift from %s", self.input_path)
-        self._load()
-        self._classify()
-        self._build_lookups()
-        self._resolve_links()
-        self._write()
+        self._load_entities()
+        for rule in self.config.links:
+            self._apply_rule(rule)
+        self._write_entities()
         logger.info("Flat-data uplift complete. Output: %s", self.output_path)
 
     # --- Phase 1 — load -----------------------------------------------------
 
-    def _load(self) -> None:
+    def _load_entities(self) -> None:
+        """Read every ``*.jsonld`` file in ``input_path`` and group models into ``by_type``.
+
+        Files that fail to load or validate are logged and skipped — the rest of
+        the run continues. A warning is logged when the input directory is empty.
+        """
         files = sorted(self.input_path.glob("*.jsonld"))
         if not files:
             logger.warning("No JSON-LD files found in %s", self.input_path)
         for path in files:
             with path.open() as f:
-                self._entities[path.name] = json.load(f)
-        logger.info("Loaded %d entity file(s)", len(self._entities))
+                data = json.load(f)
+            model = _load_as_model(data, path.name)
+            if model is not None:
+                self.by_type.setdefault(model.type, []).append(model)
+        total = sum(len(models) for models in self.by_type.values())
+        logger.info("Loaded %d entity file(s)", total)
 
-    # --- Phase 2 — classify -------------------------------------------------
+    # --- Phase 2 — apply rules ----------------------------------------------
 
-    def _classify(self) -> None:
-        for entity in self._entities.values():
-            etype = entity.get("@type")
-            if etype == "Person":
-                self._persons.append(entity)
-            elif etype == "Action":
-                self._actions.append(entity)
-            elif etype == "Product":
-                self._sample_stubs.append(entity)
-            elif etype == "Dataset":
-                if _has_additional_property(entity, _FILE_ANALYSIS):
-                    self._file_datasets.append(entity)
-                else:
-                    self._main_datasets.append(entity)
+    def _build_candidates_by_value(
+        self, rule: LinkRule
+    ) -> dict[str, list[SchemaOrgBase]]:
+        """Index all candidates of ``rule.in_type`` by their normalized lookup value.
+
+        Returns a dict mapping each canonical string (produced by ``_to_lookup_key``)
+        to the list of candidate models whose property carries that value::
+
+            {
+                "0000-0001-2345-6789": [<Person model>],
+                "analysis-001":        [<Product model>, <Product model>],
+            }
+
+        The property read from each candidate is determined by the rule:
+
+        - ``in_property`` — dot-selector walked on the model
+        - ``in_additional_property`` — reads the ``value`` field of the
+          ``additionalProperty`` item whose ``name`` equals the specified string
+
+        Logs a warning when no candidates are found, since a rule with an empty
+        result will never produce any links.
+
+        Parameters
+        ----------
+        rule : LinkRule
+            The link rule whose ``in_type``, ``in_property``, and
+            ``in_additional_property`` fields determine what is indexed.
+
+        Returns
+        -------
+        dict[str, list[SchemaOrgBase]]
+            Normalized lookup value → list of candidate models carrying that value.
+        """
+        candidates_by_value: dict[str, list[SchemaOrgBase]] = {}
+        for candidate in self.by_type.get(rule.in_type, []):
+            if rule.in_additional_property:
+                values = _find_additional_property(
+                    candidate, rule.in_additional_property
+                )
             else:
-                logger.debug("Skipping entity with unrecognized @type: %r", etype)
+                values = select_values(candidate, rule.in_property)
+            for value in values:
+                key = _to_lookup_key(value)
+                if key is None:
+                    continue
+                candidates_by_value.setdefault(key, []).append(candidate)
 
-        if len(self._main_datasets) != 1:
+        if not candidates_by_value:
             logger.warning(
-                "Expected exactly 1 main Dataset, found %d", len(self._main_datasets)
+                "Rule %s.%s: no candidates of @type %r found in input; rule will have no effect",
+                rule.on_type,
+                rule.target_property,
+                rule.in_type,
             )
-        logger.info(
-            "Classified: %d Person, %d main Dataset, %d file Dataset, "
-            "%d Action, %d Product stub",
-            len(self._persons), len(self._main_datasets), len(self._file_datasets),
-            len(self._actions), len(self._sample_stubs),
-        )
+        return candidates_by_value
 
-    # --- Phase 3 — build lookups -------------------------------------------
+    def _apply_rule(self, rule: LinkRule) -> None:
+        """Apply a single link rule to every entity of type ``rule.on_type``.
 
-    def _build_lookups(self) -> None:
-        # Person ORCID PID → Person @id
-        for person in self._persons:
-            pid = _identifier_value(person.get("identifier"))
-            pid_str = str(pid) if pid is not None else None
-            pid_at = person.get("@id")
-            if pid_str and pid_at:
-                if pid_str in self._person_by_pid:
-                    logger.warning(
-                        "Multiple Persons share ORCID %s; using first match", pid_str
-                    )
-                else:
-                    self._person_by_pid[pid_str] = pid_at
+        1. Build ``candidates_by_value`` — a dict mapping each normalized property
+           value to the candidate models that carry it (via ``_build_candidates_by_value``).
+        2. For each entity of ``on_type``, resolve the lookup value via ``match_literal``
+           or ``match_value``, find matching candidates, and assign ``target_property``.
+           Because ``SchemaOrgBase`` sets ``validate_assignment=True``, Pydantic
+           validates the assignment immediately; a ``ValidationError`` is caught and
+           logged so a bad rule skips the entity rather than crashing the run.
+        """
+        candidates_by_value = self._build_candidates_by_value(rule)
 
-        # Dataset creators — Persons flagged is-dataset-author
-        for person in self._persons:
-            ap = _find_additional_property(person, _IS_DATASET_AUTHOR)
-            if ap and _truthy(ap.get("value")) and (pid_at := person.get("@id")):
-                self._dataset_creator_ids.append(pid_at)
+        try:
+            target_cls = get_schema(rule.in_type)
+        except KeyError:
+            logger.warning("Rule targets unknown @type %r; skipping rule", rule.in_type)
+            return
 
-        # samples_per_analysis (from Product stubs' additionalProperty)
-        for stub in self._sample_stubs:
-            ap = _find_additional_property(stub, _SAMPLE_ANALYSIS_PID)
-            if not ap:
+        applied = 0
+        for entity in self.by_type.get(rule.on_type, []):
+            lookup_values = self._lookup_values_for(rule, entity)
+            if not lookup_values:
                 continue
-            analysis_pid = ap.get("value")
-            sample_pid = _identifier_value(stub.get("identifier"))
-            if analysis_pid is None or sample_pid is None:
-                continue
-            self._samples_per_analysis.setdefault(str(analysis_pid), []).append(
-                str(sample_pid)
-            )
 
-        # files_per_analysis (from file Datasets' additionalProperty)
-        for file_ds in self._file_datasets:
-            ap = _find_additional_property(file_ds, _FILE_ANALYSIS)
-            if not ap:
+            matches = self._find_unique_matches(candidates_by_value, lookup_values)
+            if not matches:
                 continue
-            analysis_pid = ap.get("value")
-            file_at = file_ds.get("@id")
-            if analysis_pid is None or file_at is None:
-                continue
-            self._files_per_analysis.setdefault(str(analysis_pid), []).append(file_at)
 
-    # --- Phase 4 — resolve --------------------------------------------------
+            if rule.ref_id_template:
+                refs = []
+                for m in matches:
+                    ref_id = _render_ref_id(rule.ref_id_template, m)
+                    if ref_id is None:
+                        logger.warning(
+                            "Rule %s.%s: ref_id_template %r could not be rendered for candidate %r; skipping",
+                            rule.on_type, rule.target_property, rule.ref_id_template, m.id,
+                        )
+                        continue
+                    refs.append(target_cls(id=ref_id))
+                if not refs:
+                    continue
+            else:
+                refs = [target_cls(id=m.id) for m in matches]
 
-    def _resolve_links(self) -> None:
-        # Main Dataset(s): add creator
-        for ds in self._main_datasets:
-            if self._dataset_creator_ids:
-                ds["creator"] = _unwrap_single(
-                    [{"@type": "Person", "@id": pid} for pid in self._dataset_creator_ids]
+            try:
+                setattr(
+                    entity,
+                    rule.target_property,
+                    refs[0] if len(refs) == 1 else refs,
                 )
-
-        # Actions: resolve agent.identifier → @id; inject object + result
-        for action in self._actions:
-            self._resolve_agent(action)
-            self._inject_action_object(action)
-            self._inject_action_result(action)
-
-        # file Datasets: resolve about.identifier → deterministic Product_<pid>.jsonld
-        for file_ds in self._file_datasets:
-            self._resolve_file_about(file_ds)
-
-    def _resolve_agent(self, action: dict) -> None:
-        agent = action.get("agent")
-        agents = _as_list(agent)
-        resolved: list[dict] = []
-        for a in agents:
-            if not isinstance(a, dict):
-                continue
-            pid = _identifier_value(a.get("identifier"))
-            if pid is None:
-                resolved.append(a)
-                continue
-            pid_at = self._person_by_pid.get(str(pid))
-            if pid_at is None:
+            except ValidationError as e:
                 logger.warning(
-                    "Action %s: no Person found for agent ORCID %s; keeping stub",
-                    action.get("@id"), pid,
+                    "Rule %s.%s: assignment failed for entity %r — %s",
+                    rule.on_type, rule.target_property, entity.id, e,
                 )
-                resolved.append(a)
                 continue
-            resolved.append({"@type": "Person", "@id": pid_at})
-        if resolved:
-            action["agent"] = _unwrap_single(resolved)
+            applied += 1
 
-    def _inject_action_object(self, action: dict) -> None:
-        analysis_pid = _identifier_value(action.get("identifier"))
-        if analysis_pid is None:
-            return
-        sample_pids = self._samples_per_analysis.get(str(analysis_pid), [])
-        if not sample_pids:
-            return
-        action["object"] = _unwrap_single(
-            [
-                {"@type": "Product", "@id": f"Product_{pid}.jsonld"}
-                for pid in sample_pids
-            ]
-        )
-
-    def _inject_action_result(self, action: dict) -> None:
-        analysis_pid = _identifier_value(action.get("identifier"))
-        if analysis_pid is None:
-            return
-        file_ids = self._files_per_analysis.get(str(analysis_pid), [])
-        if not file_ids:
-            return
-        action["result"] = _unwrap_single(
-            [{"@type": "Dataset", "@id": fid} for fid in file_ids]
-        )
-
-    def _resolve_file_about(self, file_ds: dict) -> None:
-        about = file_ds.get("about")
-        if not isinstance(about, dict):
-            return
-        sample_pid = _identifier_value(about.get("identifier"))
-        if sample_pid is None:
-            return
-        file_ds["about"] = {
-            "@type": "Product",
-            "@id": f"Product_{sample_pid}.jsonld",
-        }
-
-    # --- Phase 5 — write ----------------------------------------------------
-
-    def _write(self) -> None:
-        self.output_path.mkdir(parents=True, exist_ok=True)
-        kept: Iterable[tuple[str, dict]] = (
-            (name, entity)
-            for name, entity in self._entities.items()
-            if entity.get("@type") != "Product"  # drop sample stubs
-        )
-        count = 0
-        for name, entity in kept:
-            write_json(entity, self.output_path / name)
-            count += 1
+        in_key = rule.in_additional_property or rule.in_property
         logger.info(
-            "Wrote %d uplifted file(s) to %s (dropped %d sample stub(s))",
-            count, self.output_path, len(self._sample_stubs),
+            "Rule %s.%s ← %s.%s: applied to %d %s entit%s",
+            rule.on_type,
+            rule.target_property,
+            rule.in_type,
+            in_key,
+            applied,
+            rule.on_type,
+            "y" if applied == 1 else "ies",
         )
 
+    @staticmethod
+    def _lookup_values_for(rule: LinkRule, entity: SchemaOrgBase) -> list:
+        """Compute the lookup value(s) for ``rule`` against ``entity``.
 
-def _unwrap_single(items: list) -> list | dict:
-    """Return a single dict when the list has one item, else the list itself."""
-    return items[0] if len(items) == 1 else items
+        Returns ``[match_literal]`` when the rule carries a constant, otherwise
+        evaluates ``match_value`` as a selector on the entity. Always a list so
+        the caller can iterate uniformly.
+        """
+        if rule.match_literal is not None:
+            return [rule.match_literal]
+        return select_values(entity, rule.match_value)
+
+    @staticmethod
+    def _find_unique_matches(
+        candidates_by_value: dict[str, list[SchemaOrgBase]],
+        lookup_values: list,
+    ) -> list[SchemaOrgBase]:
+        """Look up each lookup value in ``candidates_by_value`` and return matching candidates.
+
+        Candidates without an ``@id`` are skipped — they cannot be turned into a reference.
+        Deduplication by ``@id`` prevents duplicates when multiple lookup values resolve
+        to the same candidate.
+
+        Parameters
+        ----------
+        candidates_by_value : dict[str, list[SchemaOrgBase]]
+            Index built by ``_build_candidates_by_value``.
+        lookup_values : list
+            Values to look up, as returned by ``_lookup_values_for``.
+
+        Returns
+        -------
+        list[SchemaOrgBase]
+            Matched candidates, deduplicated by ``@id``.
+        """
+        matches_by_id: dict[str, SchemaOrgBase] = {}
+        for value in lookup_values:
+            key = _to_lookup_key(value)
+            if key is None:
+                continue
+            for candidate in candidates_by_value.get(key, []):
+                if candidate.id:
+                    matches_by_id.setdefault(candidate.id, candidate)
+        return list(matches_by_id.values())
+
+    # --- Phase 3 — write ----------------------------------------------------
+
+    def _write_entities(self) -> None:
+        """Export each loaded entity through the unified ``load_to_jsonld`` helper.
+
+        Entities whose ``@type`` appears in ``config.drop_types`` are skipped —
+        they were loaded only to be available as link candidates (e.g. sample
+        stubs that the biosamples uplift owns canonically).
+        """
+        self.output_path.mkdir(parents=True, exist_ok=True)
+        dropped_types = set(self.config.drop_types)
+        written = 0
+        skipped = 0
+        for entity_type, models in self.by_type.items():
+            if entity_type in dropped_types:
+                skipped += len(models)
+                continue
+            for model in models:
+                load_to_jsonld(model, self.output_path)
+                written += 1
+        logger.info(
+            "Wrote %d uplifted file(s) to %s (skipped %d via drop_types)",
+            written,
+            self.output_path,
+            skipped,
+        )
