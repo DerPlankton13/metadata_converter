@@ -49,6 +49,9 @@ Dependencies are managed with `uv`. The project uses `hatchling` as the build ba
 Docstrings use NumPy style. Simple functions get a single-line docstring; only use the full NumPy sections (Parameters,
 Returns, etc.) when the function is non-trivial.
 
+For Pydantic models, document fields with `Field(description=...)` instead of a class-level NumPy Parameters section —
+the fields already express type and default declaratively, so a class docstring should be at most one line.
+
 ## Architecture
 
 The tool converts metadata from various sources into JSON-LD files conforming to schema.org. It has three independent
