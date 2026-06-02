@@ -1,6 +1,6 @@
 import logging
 
-from metadata_converter.config import FlatDataConfig, SourceConfig
+from metadata_converter.config import FlatDataConfig, FlatDataUpliftConfig
 from metadata_converter.extract import extract_data
 from metadata_converter.flat_data.transform import (
     add_id,
@@ -10,6 +10,7 @@ from metadata_converter.flat_data.transform import (
     extract_schemas,
 )
 from metadata_converter.flat_data.transform_helpers import split_field
+from metadata_converter.flat_data.uplifting import LinkEngine, _to_lookup_key
 from metadata_converter.load import load_to_jsonld
 
 logger = logging.getLogger(__name__)
@@ -49,8 +50,6 @@ def ingest_flat_data(config: FlatDataConfig) -> None:
         load_to_jsonld(schema, output_path=config.output.ingested)
 
 
-def uplift_flat_data(config: SourceConfig) -> None:
+def uplift_flat_data(config: FlatDataUpliftConfig) -> None:
     """Resolve cross-references in ingested flat_data JSON-LD."""
-    from metadata_converter.flat_data.uplifting import DatahubLinker
-
-    DatahubLinker(config).run()
+    LinkEngine(config).run()
