@@ -76,6 +76,14 @@ workflows, selected by `workflow_type` in a TOML config:
 
 ### BioSamples uplifting (`src/metadata_converter/biosamples/`)
 
+**Project-specific code lives here.** `ProductBuilder` / `ActionBuilder` in
+`uplifting.py` carry hardcoded BIOcean5D assumptions (research-project @ids,
+funding grant references, MIxS property selection, OBI codes, ContinuousReporting
+property names). The fetch step and the lower-level helpers (`SampleRecord`,
+`Term`, `build_property`, `build_thing`, …) are project-agnostic. See
+`docs/implementation.md#hardcoded-project-specifics` for the full list and
+`TODO.md` for cleanup directions.
+
 The uplifting logic in `uplifting.py` is the most complex part:
 
 - **`SampleRecord`** — wraps a raw BioSamples JSON-LD dict, tracks which properties have been consumed (for
