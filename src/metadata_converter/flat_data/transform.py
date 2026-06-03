@@ -75,9 +75,17 @@ def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
 def add_combined_columns(
     df: pd.DataFrame, combines: dict[str, list[str]]
 ) -> pd.DataFrame:
-    """Append new columns by joining source columns with a space. ``{new_col: [sources]}``."""
+    """Append new columns by joining non-NA source columns with a space.
+
+    If all source values in a row are NA the combined column is also NA.
+    ``{new_col: [sources]}``
+    """
     for target_col, source_cols in combines.items():
-        df[target_col] = df[source_cols].agg(" ".join, axis=1)
+        combined = df[source_cols].apply(
+            lambda row: " ".join(str(v) for v in row if pd.notna(v)),
+            axis=1,
+        )
+        df[target_col] = combined.replace("", pd.NA)
     return df
 
 
