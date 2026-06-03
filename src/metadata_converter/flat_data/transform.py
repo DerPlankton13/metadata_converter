@@ -1,9 +1,11 @@
 """DataFrame cleaning and reshaping for the flat_data ingest pipeline."""
 
+import base64
+import hashlib
+import json
 import re
 
 import pandas as pd
-from nanoid import generate
 
 from metadata_converter.config import CleaningConfig
 from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin
@@ -73,7 +75,7 @@ def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
 
 
 def add_combined_columns(
-    df: pd.DataFrame, combines: dict[str, list[str]]
+        df: pd.DataFrame, combines: dict[str, list[str]]
 ) -> pd.DataFrame:
     """Append new columns by joining non-NA source columns with a space.
 
@@ -97,7 +99,29 @@ def convert_to_long(df: pd.DataFrame, sheet_name: str = None) -> pd.DataFrame:
     return df.melt(id_vars=["id"], var_name="header")
 
 
+def _row_hash(row: pd.Series) -> str:
+    """Return a 22-character URL-safe base64 hash of the row's content.
+
+    The hash is derived from the row's non-null values serialised as canonical
+    JSON (keys sorted, non-standard types coerced to str). The first 22
+    characters of the base64url-encoded SHA-256 digest are returned, encoding
+    132 bits of entropy — negligible collision probability at any realistic
+    dataset size.
+
+    Using a content hash instead of a random ID makes ``@id`` deterministic:
+    the same real-world entity always receives the same ``@id``, regardless of
+    how many input files it appears in or how many times the pipeline runs.
+    This is the mechanism that prevents duplicate entities (e.g. the same
+    author appearing across several datasets) from being written as separate
+    files and subsequently linked as spurious duplicates during uplifting.
+    """
+    row_dict = {k: v for k, v in row.items() if pd.notna(v)}
+    canonical = json.dumps(row_dict, sort_keys=True, default=str)
+    digest = hashlib.sha256(canonical.encode()).digest()
+    return base64.urlsafe_b64encode(digest)[:22].decode()
+
+
 def add_id(data: pd.DataFrame, schema_type: str) -> pd.DataFrame:
-    """Generate a nanoid-based ``@id`` column for each row: ``<schema_type>_<nanoid>.jsonld``."""
-    data["@id"] = [f"{schema_type}_{generate()}.jsonld" for _ in range(len(data))]
+    """Generate a content-hash-based ``@id`` for each row: ``<schema_type>_<hash>.jsonld``."""
+    data["@id"] = [f"{schema_type}_{_row_hash(row)}.jsonld" for _, row in data.iterrows()]
     return data

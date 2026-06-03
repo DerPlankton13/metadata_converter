@@ -99,8 +99,15 @@ The `LinkEngine` relies on this behaviour: it catches `ValidationError` from
    rewrites the mapping entry to the new column name so downstream code sees a
    plain column lookup. Recurses into nested dicts and lists.
 4. **Add @id** — `add_id` appends an `@id` column of the form
-   `<type>_<nanoid>.jsonld`. Nanoids are used because the source data often has no
-   stable unique identifier at this stage.
+   `<type>_<hash>.jsonld`. The hash is derived from the row's content (all
+   non-null values, keys sorted, serialised to canonical JSON, then SHA-256 →
+   first 22 base64url characters = 132 bits). Using a content hash rather than
+   a random ID makes `@id` deterministic: the same real-world entity always
+   receives the same `@id` regardless of which input file it came from or how
+   many times the pipeline runs. This prevents entities that appear in multiple
+   input files (e.g. an author shared across several datasets) from being
+   written as separate files that the uplifting step would then link as
+   spurious duplicates.
 5. **Convert to long** — `convert_to_long` melts the wide DataFrame into
    `(id, header, value)` triples so `build_schema` can group them by row.
 6. **Split fields** — `split_field` expands rows where one cell holds multiple
@@ -198,7 +205,7 @@ file. The template is rendered by `_render_ref_id`:
 Each `{prop}` placeholder is replaced by `select_values(candidate, prop)[0]`.
 If any placeholder cannot be resolved, that candidate is skipped (warning logged).
 
-This bridges the naming gap between stubs (random nanoid `@id` from ingest) and
+This bridges the naming gap between stubs (content-hash `@id` from ingest) and
 canonical files from another workflow (deterministic `@id` derived from a domain
 identifier).
 
