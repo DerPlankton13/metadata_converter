@@ -54,15 +54,18 @@ the fields already express type and default declaratively, so a class docstring 
 
 ## Architecture
 
-The tool converts metadata from various sources into JSON-LD files conforming to schema.org. It has three independent
-workflows, selected by `workflow_type` in a TOML config:
+The tool converts metadata from various sources into JSON-LD files conforming to schema.org. Each source has a
+`source_type` in its TOML config, and the CLI phase (`fetch`, `ingest`, `uplift`) selects the step to execute.
+There are three source types plus a separate uplift config:
 
 - **`flat_data`** — reads tabular data (Excel/CSV), cleans it, and maps columns to schema.org types via a `mapping` dict
   in the config. Optional cleaning plugins (Python files in a `plugin_dir`) hook into the cleaning step.
 - **`biosamples`** — fetches structured (`.ldjson`) and unstructured (`.json`) metadata from EBI BioSamples, fuses them
   to add units, then optionally "uplifts" the raw records into `Product` + `Action` JSON-LD pairs.
-- **`metadata_collector`** — queries external APIs (currently Zenodo) and fetches JSON-LD records via either an export
+- **`api`** — queries external APIs (currently Zenodo) and fetches JSON-LD records via either an export
   endpoint or HTML scraping.
+- **uplift config** — no `source_type`; used exclusively with `converter uplift` to resolve cross-references between
+  ingested JSON-LD files via declarative link rules.
 
 ### Schema.org models (`src/metadata_converter/schema_org_models/`)
 

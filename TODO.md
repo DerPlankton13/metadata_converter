@@ -114,14 +114,6 @@ plugin loading out of the validator into `ingest_flat_data` so config
 validation has no side effects. If removed: drop the `plugin_dir` /
 `plugin_name` / `plugins` fields, `CleaningPlugin` ABC, and `load_plugins()`.
 
-### Verify whether `combine_columns` mutation matters in practice
-`src/metadata_converter/flat_data/transform.py:combine_columns` mutates the
-config's mapping dict in place (`mapping_value[key] = key`). Question: is the
-config object reused after `ingest_flat_data` returns, or is it discarded?
-If discarded, the mutation is harmless. If reused (e.g. by future tests, or by
-something running multiple ingests with shared config objects), this is a
-latent bug. Check call sites, then either document the mutation or fix it.
-
 ### Document the implicit coupling in `extract.py`
 `src/metadata_converter/extract.py:extract_csv` and `extract_excel` use
 `config.model_dump(exclude={"type", "file_path"})` and pass the result as

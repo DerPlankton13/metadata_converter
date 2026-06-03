@@ -12,4 +12,4 @@ For starters I will choose 3.12 as start, as it provides most of the newest synt
 
 ## Configuration
 
-I expect the users to have very specific requirements for their conversion that cannot be guessed. Thus the tool needs to be easily configurable and possibly be able to be extended by plugins. I will be using pydantic-settings as it is part of the big pydantic library and will thus likely be supported for a long time.
+I expect the users to have very specific requirements for their conversion that cannot be guessed. Thus the tool needs to be easily configurable and possibly be able to be extended by plugins. Configuration is driven by TOML files validated with plain Pydantic models (not pydantic-settings, which is better suited to environment-variable-based config).

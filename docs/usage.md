@@ -22,14 +22,18 @@ pip install metadata_converter
 converter <phase> <config.toml>
 ```
 
-`phase` is one of `fetch`, `ingest`, or `uplift`. The `workflow_type` key in the
-config selects the workflow; the phase selects the step within it:
+`phase` is one of `fetch`, `ingest`, or `uplift`. The `source_type` key in the
+config identifies the data source; the phase selects the step to execute:
 
-| Phase | Applicable workflows | What it does |
+| Phase | Applicable source types | What it does |
 |---|---|---|
-| `fetch` | `biosamples`, `metadata_collector` | Download raw records from external APIs |
-| `ingest` | all | Transform raw/tabular data into schema.org JSON-LD |
-| `uplift` | `uplifting` | Resolve cross-references between ingested JSON-LD files |
+| `fetch` | `biosamples`, `api` | Download raw records from external APIs |
+| `ingest` | `flat_data`, `biosamples`, `api` | Transform raw/tabular data into schema.org JSON-LD |
+| `uplift` | *(uplift config, no source_type)* | Resolve cross-references between ingested JSON-LD files |
+
+Source configs (`flat_data`, `biosamples`, `api`) use `source_type` as their
+discriminator. The uplift config has no `source_type` — it is a separate config
+kind loaded only when the phase is `uplift`.
 
 Add `--log-level debug` for verbose output.
 
@@ -63,7 +67,7 @@ Consequences to keep in mind:
 
 ---
 
-## Workflow: `flat_data`
+## Source type: `flat_data`
 
 Reads tabular data (Excel or CSV), cleans it, maps columns to schema.org types,
 and writes one JSON-LD file per entity.
@@ -71,7 +75,7 @@ and writes one JSON-LD file per entity.
 ### Minimal config
 
 ```toml
-workflow_type = "flat_data"
+source_type = "flat_data"
 
 [extractor]
 type       = "excel"
@@ -109,7 +113,6 @@ names the schema.org class; every other key is a property name. Values can be:
 | Value form | Meaning |
 |---|---|
 | `"col-name"` | Look up this column in the current row |
-| `"col1 + col2"` | Concatenate two columns with a space separator |
 | `"Literal:some text"` | Use the literal string `some text` (prefix stripped) |
 | `{type = "Person", name = "col"}` | Build a nested schema.org object |
 | `[{type = "PropertyValue", …}]` | Build a list of nested objects |
@@ -140,6 +143,24 @@ plugin_dir  = "plugins"
 plugin_name = "my_plugin.py"
 ```
 
+### Combining columns
+
+Use `combined_columns` to concatenate several source columns into a new column
+before schema building. This is declared separately from the mapping so the
+mapping only ever contains plain column references:
+
+```toml
+[combined_columns.author]
+name = ["author:first-name", "author:last-name"]
+
+[mapping.author]
+type   = "Person"
+name   = "name"   # references the combined column
+```
+
+Source columns are joined with a single space. Multiple target columns per sheet
+are supported.
+
 ### Splitting multi-value cells
 
 Cells that contain multiple values separated by a delimiter can be exploded into
@@ -161,7 +182,6 @@ key — the implicit link is that the entities belong to the same source file.
 on_sheet      = "dataset"
 property      = "creator"
 from_sheet    = "author"
-ref_type      = "Person"
 filter_column = "author:is-dataset-author"
 filter_value  = 1
 
@@ -170,8 +190,10 @@ filter_value  = 1
 on_sheet   = "dataset"
 property   = "dataset"
 from_sheet = "file"
-ref_type   = "Dataset"
 ```
+
+The `@type` of the injected references is taken from
+`mapping[from_sheet].type` — no need to repeat it on each rule.
 
 `filter_column` / `filter_value` are optional. When omitted, all entities from
 `from_sheet` are injected. Comparison is normalised: `1` (int), `1.0` (float),
@@ -179,13 +201,13 @@ and `"1"` (string) all match each other; booleans compare as `"true"` / `"false"
 
 ---
 
-## Workflow: `biosamples`
+## Source type: `biosamples`
 
 Fetches `.ldjson` and `.json` metadata from EBI BioSamples, fuses them to add
 units, and uplifts each record into a `Product` + `Action` JSON-LD pair.
 
 ```toml
-workflow_type = "biosamples"
+source_type = "biosamples"
 
 [input]
 input_path  = "data/raw/biosamples/sample_list.xlsx"
@@ -199,12 +221,12 @@ ingested = "data/ingested/biosamples"
 
 ---
 
-## Workflow: `metadata_collector`
+## Source type: `api`
 
 Queries external repositories (currently Zenodo) and fetches JSON-LD records.
 
 ```toml
-workflow_type = "metadata_collector"
+source_type = "api"
 
 [extractor]
 api_url              = "https://zenodo.org/api/records"
@@ -222,15 +244,16 @@ ingested = "data/ingested/zenodo"
 
 ---
 
-## Workflow: `uplifting`
+## Uplift phase config
 
 Resolves cross-references in already-ingested JSON-LD. Reads files from each
 configured source's output, applies declarative link rules, and writes the
 result. This step runs *after* all ingest workflows have completed.
 
-```toml
-workflow_type = "uplifting"
+The uplift config has no `source_type` — it is a separate config kind used
+exclusively with `converter uplift`.
 
+```toml
 [flat_data]
 input_path  = "data/ingested/datahub"
 output_path = "data/uplifted/datahub"
