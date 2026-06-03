@@ -1,53 +1,97 @@
 import logging
+from pathlib import Path
+
+import pandas as pd
 
 from metadata_converter.config import FlatDataConfig, FlatDataUpliftConfig
 from metadata_converter.extract import extract_data
+from metadata_converter.flat_data.schema_builder import extract_schemas
 from metadata_converter.flat_data.transform import (
+    add_combined_columns,
     add_id,
     clean_dataframe,
-    combine_columns,
     convert_to_long,
-    extract_schemas,
 )
 from metadata_converter.flat_data.transform_helpers import split_field
 from metadata_converter.flat_data.uplifting import LinkEngine, _to_lookup_key
 from metadata_converter.load import load_to_jsonld
+from metadata_converter.schema_org_models.custom_models import get_schema
+from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 logger = logging.getLogger(__name__)
 
 
 def ingest_flat_data(config: FlatDataConfig) -> None:
     logger.info("Starting flat-data workflow")
-
-    # Extract Step
-    logger.info("Extracting data from %s", config.extractor.file_path)
     data_dict = extract_data(config)
+    data_dict = transform_data(data_dict, config)
+    results = build_schemas(data_dict, config)
+    results = apply_cross_sheet_refs(data_dict, results, config)
+    write_schemas(results, config.output.ingested)
 
-    # Transform Step
+
+def transform_data(
+    data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
+) -> dict[str, pd.DataFrame]:
+    """Apply all per-sheet transforms, returning long-format DataFrames."""
+    new_data: dict[str, pd.DataFrame] = {}
     for name, data in data_dict.items():
-        logger.info("Cleaning sheet '%s'", name)
-        sheet_mapping = config.mapping[name]
+        logger.info("Transforming sheet '%s'", name)
         data = clean_dataframe(data, config.cleaning)
-        combine_columns(data, sheet_mapping)
-        data = add_id(data, sheet_mapping["type"])
+        if combines := config.combined_columns.get(name):
+            data = add_combined_columns(data, combines)
+        data = add_id(data, config.mapping[name]["type"])
         data = convert_to_long(data)
         for field in config.split_fields.get(name, []):
             data = split_field(data, field)
-        data_dict[name] = data
+        new_data[name] = data
+    return new_data
 
-    # Build schemas
+
+def build_schemas(
+    data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
+) -> dict[str, list[SchemaOrgBase]]:
+    """Build schema.org objects from each sheet's long-format DataFrame."""
     results = {}
     for name, data in data_dict.items():
         logger.info("Building schemas for sheet '%s'", name)
         results[name] = extract_schemas(data, config.mapping[name])
+    return results
 
-    # Load Step
+
+def apply_cross_sheet_refs(
+    data_dict: dict[str, pd.DataFrame],
+    results: dict[str, list[SchemaOrgBase]],
+    config: FlatDataConfig,
+) -> dict[str, list[SchemaOrgBase]]:
+    """Inject typed cross-sheet references into already-built schemas."""
+    for ref in config.cross_sheet_refs:
+        src = data_dict[ref.from_sheet]
+        if ref.filter_column is not None:
+            norm = _to_lookup_key(ref.filter_value)
+            src = src[src[ref.filter_column].map(_to_lookup_key) == norm]
+        ids = src["@id"].dropna().tolist()
+        if not ids:
+            logger.warning(
+                "cross_sheet_refs: no sources for %s.%s", ref.on_sheet, ref.property
+            )
+            continue
+        ref_cls = get_schema(config.mapping[ref.from_sheet]["type"])
+        refs = [ref_cls.model_validate({"@id": i}) for i in ids]
+        value = refs if len(refs) > 1 else refs[0]
+        for schema in results.get(ref.on_sheet, []):
+            setattr(schema, ref.property, value)
+    return results
+
+
+def write_schemas(
+    results: dict[str, list[SchemaOrgBase]], output_path: Path
+) -> None:
+    """Flatten all built schemas and write each to its own JSON-LD file."""
     schemas = [s for schemas in results.values() for s in schemas]
-    logger.info(
-        "Writing %d JSON-LD file(s) to %s", len(schemas), config.output.ingested
-    )
+    logger.info("Writing %d JSON-LD file(s) to %s", len(schemas), output_path)
     for schema in schemas:
-        load_to_jsonld(schema, output_path=config.output.ingested)
+        load_to_jsonld(schema, output_path=output_path)
 
 
 def uplift_flat_data(config: FlatDataUpliftConfig) -> None:
