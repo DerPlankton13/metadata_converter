@@ -32,6 +32,13 @@ class FlatDataConfig(BaseModel):
     output: OutputConfig
     sheet_type_mapping: dict[str, str] | None = None
     mapping: dict[str, dict[str, Any]]
+    combined_columns: dict[str, dict[str, list[str]]] = Field(
+        default_factory=dict,
+        description=(
+            "Per-sheet column combinations applied before schema building. "
+            "Maps sheet name → {new_col: [source_cols]}. Source columns are joined with a space."
+        ),
+    )
     split_fields: dict[str, list[str]] = Field(default_factory=dict)
     cross_sheet_refs: list[CrossSheetRef] = Field(default_factory=list)
 
