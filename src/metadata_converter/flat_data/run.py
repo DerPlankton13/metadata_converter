@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from metadata_converter.config import FlatDataConfig, FlatDataUpliftConfig
+from metadata_converter.config import CrossSheetRef, FlatDataConfig, FlatDataUpliftConfig
 from metadata_converter.extract import extract_data
 from metadata_converter.flat_data.schema_builder import extract_schemas
 from metadata_converter.flat_data.transform import (
@@ -19,6 +19,9 @@ from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 logger = logging.getLogger(__name__)
+
+# (rule, ref_type, collected @id strings)
+_CollectedRef = tuple[CrossSheetRef, str, list[str]]
 
 
 def ingest_flat_data(config: FlatDataConfig) -> None:
@@ -40,16 +43,18 @@ def _ingest_one(config: FlatDataConfig, file_path: Path) -> None:
     """Run the full ingest pipeline for a single input file."""
     logger.info("Ingesting %s", file_path.name)
     data_dict = extract_data(config, file_path=file_path)
-    data_dict = transform_data(data_dict, config)
+    data_dict = _transform_wide(data_dict, config)
+    collected_refs = _collect_cross_ref_ids(data_dict, config)
+    data_dict = _transform_long(data_dict, config)
     results = build_schemas(data_dict, config)
-    results = apply_cross_sheet_refs(data_dict, results, config)
+    results = _inject_cross_refs(results, collected_refs)
     write_schemas(results, config.output.ingested)
 
 
-def transform_data(
+def _transform_wide(
     data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
 ) -> dict[str, pd.DataFrame]:
-    """Apply all per-sheet transforms, returning long-format DataFrames."""
+    """Clean, combine columns, and add @id — keeps wide format for cross-ref collection."""
     new_data: dict[str, pd.DataFrame] = {}
     for name, data in data_dict.items():
         logger.info("Transforming sheet '%s'", name)
@@ -57,6 +62,36 @@ def transform_data(
         if combines := config.combined_columns.get(name):
             data = add_combined_columns(data, combines)
         data = add_id(data, config.mapping[name]["type"])
+        new_data[name] = data
+    return new_data
+
+
+def _collect_cross_ref_ids(
+    data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
+) -> list[_CollectedRef]:
+    """Collect @id lists for each cross-sheet ref rule while data is still wide-format.
+
+    Wide format is required because filter_column and @id are still actual columns here.
+    The ref_type is captured now so the injection step needs no access to the config.
+    """
+    collected: list[_CollectedRef] = []
+    for ref in config.cross_sheet_refs:
+        src = data_dict[ref.from_sheet]
+        if ref.filter_column is not None:
+            filter_key = _to_lookup_key(ref.filter_value)
+            src = src[src[ref.filter_column].map(_to_lookup_key) == filter_key]
+        ids = src["@id"].dropna().tolist()
+        ref_type = config.mapping[ref.from_sheet]["type"]
+        collected.append((ref, ref_type, ids))
+    return collected
+
+
+def _transform_long(
+    data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
+) -> dict[str, pd.DataFrame]:
+    """Convert wide-format DataFrames to long format and split multi-value fields."""
+    new_data: dict[str, pd.DataFrame] = {}
+    for name, data in data_dict.items():
         data = convert_to_long(data)
         for field in config.split_fields.get(name, []):
             data = split_field(data, field)
@@ -75,24 +110,18 @@ def build_schemas(
     return results
 
 
-def apply_cross_sheet_refs(
-    data_dict: dict[str, pd.DataFrame],
+def _inject_cross_refs(
     results: dict[str, list[SchemaOrgBase]],
-    config: FlatDataConfig,
+    collected: list[_CollectedRef],
 ) -> dict[str, list[SchemaOrgBase]]:
-    """Inject typed cross-sheet references into already-built schemas."""
-    for ref in config.cross_sheet_refs:
-        src = data_dict[ref.from_sheet]
-        if ref.filter_column is not None:
-            filter_key = _to_lookup_key(ref.filter_value)
-            src = src[src[ref.filter_column].map(_to_lookup_key) == filter_key]
-        ids = src["@id"].dropna().tolist()
+    """Inject pre-collected cross-sheet references into already-built schemas."""
+    for ref, ref_type, ids in collected:
         if not ids:
             logger.warning(
                 "cross_sheet_refs: no sources for %s.%s", ref.on_sheet, ref.property
             )
             continue
-        ref_cls = get_schema(config.mapping[ref.from_sheet]["type"])
+        ref_cls = get_schema(ref_type)
         refs = [ref_cls(id=i) for i in ids]
         value = refs if len(refs) > 1 else refs[0]
         for schema in results.get(ref.on_sheet, []):
