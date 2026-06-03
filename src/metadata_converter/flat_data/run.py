@@ -84,8 +84,8 @@ def apply_cross_sheet_refs(
     for ref in config.cross_sheet_refs:
         src = data_dict[ref.from_sheet]
         if ref.filter_column is not None:
-            norm = _to_lookup_key(ref.filter_value)
-            src = src[src[ref.filter_column].map(_to_lookup_key) == norm]
+            filter_key = _to_lookup_key(ref.filter_value)
+            src = src[src[ref.filter_column].map(_to_lookup_key) == filter_key]
         ids = src["@id"].dropna().tolist()
         if not ids:
             logger.warning(
@@ -93,7 +93,7 @@ def apply_cross_sheet_refs(
             )
             continue
         ref_cls = get_schema(config.mapping[ref.from_sheet]["type"])
-        refs = [ref_cls.model_validate({"@id": i}) for i in ids]
+        refs = [ref_cls(id=i) for i in ids]
         value = refs if len(refs) > 1 else refs[0]
         for schema in results.get(ref.on_sheet, []):
             setattr(schema, ref.property, value)
