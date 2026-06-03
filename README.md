@@ -4,6 +4,27 @@ A CLI tool that converts source-specific metadata into schema.org JSON-LD files,
 driven by a TOML config. It supports three ingest workflows and a separate
 uplift/linking step.
 
+## Intent and scope
+
+This package was originally designed as a general-purpose schema.org metadata
+converter. In its current state it has grown specific to the
+[BIOcean5D](https://biocean5d.embl.de/) project, which is its only consumer
+([paper](https://github.com/DerPlankton13/paper)). The `flat_data` and
+`metadata_collector` workflows remain mostly project-agnostic; the
+**biosamples uplift logic** is the part that carries hardcoded BIOcean5D
+assumptions — research-project @ids, funding grant references, ContinuousReporting
+sheet/property names, OBI codes, and the shape of the produced
+`Product` / `Action` schemas.
+
+For other projects, **forking is currently the cleanest path**. The hardcoded
+points are listed in
+[docs/implementation.md](docs/implementation.md#hardcoded-project-specifics)
+with suggested directions for making them config-driven. The intent is to keep
+the door open: a future contributor with the resources could lift the
+project-specific logic into a template (similar to how `flat_data` uplift is
+already declarative via `LinkRule`), at which point the package would become
+genuinely reusable. See [TODO.md](TODO.md) for the planned cleanup notes.
+
 ## Installation
 
 ```bash
