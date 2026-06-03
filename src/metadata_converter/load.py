@@ -10,7 +10,7 @@ def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:
     output_path.mkdir(parents=True, exist_ok=True)
 
     jsonld_dict = schema.model_dump(by_alias=True, exclude_none=True)
-    jsonld_dict = {"@context": {"@vocab": "https://schema.org"}, **jsonld_dict}
+    jsonld_dict = {"@context": {"@vocab": "https://schema.org/"}, **jsonld_dict}
 
     file_name = jsonld_dict["@id"].split("/")[-1]
     if not file_name.endswith(".jsonld"):
