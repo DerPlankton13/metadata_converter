@@ -25,12 +25,17 @@ EXTRACTOR_REGISTRY: dict[str, ExtractorFn] = {
 }
 
 
-def extract_data(config: FlatDataConfig) -> dict[str, pd.DataFrame]:
+def extract_data(config: FlatDataConfig, file_path: Path | None = None) -> dict[str, pd.DataFrame]:
+    """Extract tabular data from a single file.
+
+    ``file_path`` overrides ``config.extractor.file_path`` so callers can loop
+    over files in a directory while reusing the same config.
+    """
     extractor_cfg = config.extractor
-    logger.info("Extracting data from %s", extractor_cfg.file_path)
+    path = file_path or extractor_cfg.file_path
+    logger.info("Extracting data from %s", path)
     extractor = EXTRACTOR_REGISTRY[extractor_cfg.type]
-    input_data = extractor(extractor_cfg.file_path, extractor_cfg)
+    input_data = extractor(path, extractor_cfg)
     if isinstance(input_data, pd.DataFrame):
         input_data = {extractor_cfg.sheet_name: input_data}
-
     return input_data

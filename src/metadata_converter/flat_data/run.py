@@ -23,7 +23,23 @@ logger = logging.getLogger(__name__)
 
 def ingest_flat_data(config: FlatDataConfig) -> None:
     logger.info("Starting flat-data workflow")
-    data_dict = extract_data(config)
+    file_path = config.extractor.file_path
+    if file_path.is_dir():
+        files = sorted(file_path.glob("*.xlsx")) + sorted(file_path.glob("*.xls"))
+        if not files:
+            logger.error("No Excel files found in %s", file_path)
+            raise SystemExit(1)
+        logger.info("Found %d file(s) in %s", len(files), file_path)
+        for excel_file in files:
+            _ingest_one(config, excel_file)
+    else:
+        _ingest_one(config, file_path)
+
+
+def _ingest_one(config: FlatDataConfig, file_path: Path) -> None:
+    """Run the full ingest pipeline for a single input file."""
+    logger.info("Ingesting %s", file_path.name)
+    data_dict = extract_data(config, file_path=file_path)
     data_dict = transform_data(data_dict, config)
     results = build_schemas(data_dict, config)
     results = apply_cross_sheet_refs(data_dict, results, config)
