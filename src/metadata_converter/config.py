@@ -104,8 +104,12 @@ class CrossSheetRef(BaseModel):
     model_config = ConfigDict(extra="forbid")
     on_sheet: str = Field(description="Target sheet whose entities receive the reference.")
     property: str = Field(description="Property to set on each target entity.")
-    from_sheet: str = Field(description="Source sheet supplying the referenced entities.")
-    ref_type: str = Field(description="schema.org @type of the injected references.")
+    from_sheet: str = Field(
+        description=(
+            "Source sheet supplying the referenced entities. The @type of the "
+            "injected references is taken from mapping[from_sheet].type."
+        ),
+    )
     filter_column: str | None = Field(
         None,
         description="Source column to filter on. Omit to include all entities from from_sheet.",
