@@ -40,10 +40,11 @@ def main():
             if config.flat_data:
                 uplift_flat_data(config.flat_data)
         case _:
+            source = getattr(config, "source_type", "uplift")
             logger.error(
-                "Phase '%s' is not supported for workflow_type '%s'",
+                "Phase '%s' is not supported for source_type '%s'",
                 phase,
-                config.workflow_type,
+                source,
             )
             raise SystemExit(1)
 

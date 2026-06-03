@@ -2,10 +2,17 @@ import argparse
 import logging
 from pathlib import Path
 
-from metadata_converter.config import Config, load_config
+from metadata_converter.config import (
+    BiosamplesConfig,
+    FlatDataConfig,
+    ApiFetchingConfig,
+    UpliftingConfig,
+    load_source_config,
+    load_uplift_config,
+)
 
 
-def parse_cli() -> tuple[str, Config, int]:
+def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingConfig | UpliftingConfig, int]:
     parser = argparse.ArgumentParser(description="Metadata Converter")
     parser.add_argument(
         "phase",
@@ -21,4 +28,10 @@ def parse_cli() -> tuple[str, Config, int]:
     )
     args = parser.parse_args()
     logging_level = getattr(logging, args.log_level.upper())
-    return args.phase, load_config(args.config), logging_level
+
+    if args.phase == "uplift":
+        config = load_uplift_config(args.config)
+    else:
+        config = load_source_config(args.config)
+
+    return args.phase, config, logging_level

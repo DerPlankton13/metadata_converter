@@ -1,9 +1,12 @@
+import logging
 from pathlib import Path
 from typing import Callable
 
 import pandas as pd
 
-from metadata_converter.config import Config, ExtractorConfigBase
+from metadata_converter.config import ExtractorConfigBase, FlatDataConfig
+
+logger = logging.getLogger(__name__)
 
 ExtractorFn = Callable[[Path, ExtractorConfigBase], pd.DataFrame]
 
@@ -22,8 +25,9 @@ EXTRACTOR_REGISTRY: dict[str, ExtractorFn] = {
 }
 
 
-def extract_data(config: Config) -> dict[str, pd.DataFrame]:
+def extract_data(config: FlatDataConfig) -> dict[str, pd.DataFrame]:
     extractor_cfg = config.extractor
+    logger.info("Extracting data from %s", extractor_cfg.file_path)
     extractor = EXTRACTOR_REGISTRY[extractor_cfg.type]
     input_data = extractor(extractor_cfg.file_path, extractor_cfg)
     if isinstance(input_data, pd.DataFrame):

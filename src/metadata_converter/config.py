@@ -26,7 +26,7 @@ from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin, load_pl
 
 class FlatDataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    workflow_type: Literal["flat_data"] = "flat_data"
+    source_type: Literal["flat_data"] = "flat_data"
     extractor: TabularExtractorConfig
     cleaning: CleaningConfig
     output: OutputConfig
@@ -152,7 +152,7 @@ class LinkRule(BaseModel):
 
 class BiosamplesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    workflow_type: Literal["biosamples"] = "biosamples"
+    source_type: Literal["biosamples"] = "biosamples"
     input: BiosamplesInput
     output: FetchedOutputConfig
     max_workers: int = 10
@@ -169,13 +169,13 @@ class BiosamplesInput(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# metadata_collector
+# api
 # ---------------------------------------------------------------------------
 
 
 class ApiFetchingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    workflow_type: Literal["metadata_collector"] = "metadata_collector"
+    source_type: Literal["api"] = "api"
     extractor: ApiExtractorConfig
     output: FetchedOutputConfig
 
@@ -247,14 +247,17 @@ class ApiExtractorConfig(BaseModel):
 
 
 class UpliftingConfig(BaseModel):
+    """Config for the uplift phase. Loaded separately from source configs — no source_type needed."""
+
     model_config = ConfigDict(extra="forbid")
-    workflow_type: Literal["uplifting"] = "uplifting"
-    biosamples: SourceConfig | None = None
-    api_fetching: SourceConfig | None = None
+    biosamples: SourcePaths | None = None
+    api_fetching: SourcePaths | None = None
     flat_data: FlatDataUpliftConfig | None = None
 
 
-class SourceConfig(BaseModel):
+class SourcePaths(BaseModel):
+    """Input/output paths for one source in the uplift config."""
+
     model_config = ConfigDict(extra="forbid")
     input_path: Path
     output_path: Path
@@ -281,34 +284,57 @@ class FetchedOutputConfig(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Entry point
+# Config loading
 # ---------------------------------------------------------------------------
 
-Config = Annotated[
-    Union[FlatDataConfig, ApiFetchingConfig, BiosamplesConfig, UpliftingConfig],
-    Field(discriminator="workflow_type"),
+# Discriminated union of the three data-source config types.
+# Used by load_source_config for the fetch and ingest phases.
+SourceConfig = Annotated[
+    Union[FlatDataConfig, ApiFetchingConfig, BiosamplesConfig],
+    Field(discriminator="source_type"),
 ]
 
+_source_config_adapter: TypeAdapter[SourceConfig] = TypeAdapter(SourceConfig)
 
-def load_config(path: str) -> Config:
-    logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+
+
+def _load_toml(path: str) -> dict:
     try:
         with open(path, "rb") as f:
-            config_file = tomllib.load(f)
-            config = TypeAdapter(Config).validate_python(config_file)
+            return tomllib.load(f)
     except FileNotFoundError:
         logger.error("Config file not found: %s", path)
         raise SystemExit(1)
+
+
+def _handle_validation_error(e: ValidationError) -> None:
+    first = e.errors()[0]
+    logger.error(
+        "Invalid config — %s at %s (input was: %s)",
+        first["msg"],
+        first["loc"],
+        first["input"],
+    )
+    raise SystemExit(1)
+
+
+def load_source_config(path: str) -> FlatDataConfig | ApiFetchingConfig | BiosamplesConfig:
+    """Load and validate a source config (flat_data, biosamples, or api) from a TOML file."""
+    raw = _load_toml(path)
+    try:
+        return _source_config_adapter.validate_python(raw)
     except ValidationError as e:
-        first = e.errors()[0]
-        logger.error(
-            "Invalid config — %s at %s (input was: %s)",
-            first["msg"],
-            first["loc"],
-            first["input"],
-        )
-        raise SystemExit(1)
-    return config
+        _handle_validation_error(e)
+
+
+def load_uplift_config(path: str) -> UpliftingConfig:
+    """Load and validate an uplift config from a TOML file."""
+    raw = _load_toml(path)
+    try:
+        return UpliftingConfig.model_validate(raw)
+    except ValidationError as e:
+        _handle_validation_error(e)
 
 
 # Resolve forward references introduced by the top-down ordering.

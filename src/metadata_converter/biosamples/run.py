@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 from metadata_converter.biosamples.fetch import fuse_metadata, get_metadata
 from metadata_converter.biosamples.uplifting import SampleUplifter
-from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourceConfig
+from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourcePaths
 from metadata_converter.http import make_session
 from metadata_converter.io import write_json
 from metadata_converter.load import load_to_jsonld
@@ -182,7 +182,7 @@ def ingest_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples ingest complete. Output: %s", config.output.ingested)
 
 
-def uplift_biosamples(config: SourceConfig):
+def uplift_biosamples(config: SourcePaths):
     logger.info("Starting biosamples uplift")
 
     files = list(config.input_path.glob("**/*.jsonld"))
