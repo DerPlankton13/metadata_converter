@@ -52,6 +52,57 @@ Returns, etc.) when the function is non-trivial.
 For Pydantic models, document fields with `Field(description=...)` instead of a class-level NumPy Parameters section —
 the fields already express type and default declaratively, so a class docstring should be at most one line.
 
+## Testing
+
+Rules of thumb when writing or refactoring tests:
+
+- **One scenario per test.** A scenario is one combination of inputs producing one outcome. That outcome may have
+  several observable parts — assert all of them in the same test. Do not split a single scenario across multiple tests
+  just to keep each test to one assertion. Conversely, distinct scenarios (different inputs, different expected
+  behavior) belong in separate tests.
+- **Tests are read more often than they are written.** Each test serves as documentation of one behavior — when it
+  fails months later, the person diagnosing it must understand the scenario from the test alone. This shifts the usual
+  DRY calculus: extract setup into fixtures or helpers only when it is noise (identical across tests, irrelevant to
+  the scenario). When the setup is the scenario — the specific inputs, configuration, or state that the test is
+  exercising — keep it inline, even at the cost of repetition.
+- **Each test should be self-contained at a glance.** A reader should see what is set up, what is called, and what is
+  checked without jumping to a fixture or helper to reconstruct the scenario. Some repetition between tests is
+  acceptable — the cost of duplication is lower than the cost of indirection when reading a failing test.
+- **Keep setup, call, and assertions clearly separated.** Within a test, the three phases (build inputs, invoke the
+  function under test, check the result) should be visually distinct — typically three small blocks of lines, in that
+  order. Avoid mutating shared fixtures mid-test or wrapping the call in a helper that also asserts, since both blur
+  which lines define the scenario and which lines check it.
+- **Test behavior, not implementation.** Assert on what a caller of the function would see — return values, raised
+  exceptions, side effects on inputs — not on how the function produces that result. Testing private helpers is
+  acceptable when their logic is intricate enough to warrant isolation, but prefer tests against the public interface
+  so internal refactors do not cascade into the test suite.
+- **Test names describe the scenario and the expected outcome.** Read as a sentence:
+  `test_<what is set up>_<what should happen>`. `test_collect_no_filter_returns_all_ids` says exactly what failed when
+  it goes red. `test_collect_works` says nothing.
+- **Parametrize over data, not over logic.** When two tests differ only in inputs and expected outputs, collapse them
+  with `@pytest.mark.parametrize`. When two tests differ in what they verify (different scenarios, different
+  assertions), keep them separate — parametrize is not a tool for merging distinct behaviors into one function.
+- **Every part of the return value should be asserted somewhere.** If a function returns three values and the test
+  suite only ever asserts on two, the third is either dead code (and should be removed) or untested (and needs a case
+  that checks it).
+- **No logic in tests.** No `if`, no loops, no arithmetic in the test body. Hardcode the expected value. If you find
+  yourself computing it, you are re-implementing the production code inside the test — which means the test cannot
+  catch a wrong implementation that makes the same mistake.
+- **Tests must be deterministic.** A test should produce the same result on every run. Replace real wall-clock time,
+  random number generators, and network calls with controlled substitutes (frozen clocks, seeded RNGs, recorded or
+  stubbed responses). Any uncontrolled dependency on the outside world will eventually cause intermittent failures
+  that are expensive to diagnose.
+- **Prefer real collaborators over mocks.** Use the actual implementation of internal modules in tests. Mock only at
+  true system boundaries — network, clock, filesystem outside `tmp_path`. Mocking internal code locks the test to the
+  current implementation, so a harmless refactor turns into a red test suite.
+- **Assert on values, not on booleans derived from values.** `assert result.id == "expected"` produces a diff that
+  pinpoints the failure. `assert is_valid(result)` only tells you something was wrong somewhere. Build the assertion
+  around the specific value you expect to see.
+- **A single behavior change should break a small, focused set of tests.** If editing one production function causes
+  failures across many unrelated test files, the suite is over-coupled — usually through shared fixtures or helpers
+  that try to serve too many scenarios at once. Move setup into each test until every failure points clearly at the
+  cause.
+
 ## Architecture
 
 The tool converts metadata from various sources into JSON-LD files conforming to schema.org. Each source has a
