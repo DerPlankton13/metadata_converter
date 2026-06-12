@@ -18,7 +18,6 @@ from pydantic import (
 from metadata_converter.api_fetching.query_models import Query
 from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin, load_plugins
 
-
 # ---------------------------------------------------------------------------
 # flat_data
 # ---------------------------------------------------------------------------
@@ -27,7 +26,7 @@ from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin, load_pl
 class FlatDataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["flat_data"] = "flat_data"
-    extractor: TabularExtractorConfig
+    extractor: ExcelExtractorConfig
     cleaning: CleaningConfig
     output: OutputConfig
     sheet_type_mapping: dict[str, str] | None = None
@@ -56,27 +55,12 @@ class FlatDataUpliftConfig(BaseModel):
     )
 
 
-class ExtractorConfigBase(BaseModel):
+class ExcelExtractorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    type: str
     file_path: Path
-
-
-class ExcelExtractorConfig(ExtractorConfigBase):
-    type: Literal["excel"]
     sheet_name: str | list[str]
     header: int | None = None
     skiprows: list[int] | None = None
-
-
-class CsvExtractorConfig(ExtractorConfigBase):
-    type: Literal["csv"]
-    skipinitialspace: bool | None = None
-
-
-TabularExtractorConfig = Annotated[
-    Union[ExcelExtractorConfig, CsvExtractorConfig], Field(discriminator="type")
-]
 
 
 class CleaningConfig(BaseModel):
