@@ -13,7 +13,10 @@ from metadata_converter.config import (
     FlatDataConfig,
     OutputConfig,
 )
-from metadata_converter.flat_data.run import collect_cross_ref_ids, inject_cross_refs
+from metadata_converter.flat_data.transform.cross_sheet_refs import (
+    collect_cross_ref_ids,
+    inject_cross_refs,
+)
 from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, Person
 
 # ---------------------------------------------------------------------------

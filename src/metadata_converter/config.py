@@ -16,7 +16,7 @@ from pydantic import (
 )
 
 from metadata_converter.api_fetching.query_models import Query
-from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin, load_plugins
+from metadata_converter.flat_data.transform.cleaning_plugin import CleaningPlugin, load_plugins
 
 # ---------------------------------------------------------------------------
 # flat_data

@@ -1,6 +1,6 @@
 import pandas as pd
 
-from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin
+from metadata_converter.flat_data.transform.cleaning_plugin import CleaningPlugin
 
 
 class AddFundingInfo(CleaningPlugin):
