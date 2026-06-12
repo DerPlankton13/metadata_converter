@@ -43,6 +43,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from metadata_converter.config import FlatDataUpliftConfig, LinkRule
+from metadata_converter.flat_data.transform.cross_sheet_refs import to_lookup_key
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (
@@ -135,31 +136,6 @@ def unwrap_value(value: Any) -> list:
             return unwrap_value(inner)
         return [value]
     return [value]
-
-
-def to_lookup_key(value: Any) -> str | None:
-    """Convert a raw data value to the canonical string used for candidate matching.
-
-    Both sides of a link rule — the value read from an entity via ``match_value`` /
-    ``match_literal``, and the value read from a candidate via ``in_property`` /
-    ``in_additional_property`` — pass through this function before comparison.
-    Using the same normalization on both sides makes matches type-independent.
-
-    - ``None`` → ``None`` (caller skips these).
-    - ``bool`` → ``"true"`` / ``"false"`` so that ``match_literal = "true"`` matches them.
-    - ``float`` with an integer value (e.g. ``1.0``) → equivalent int string.
-      Pydantic's smart-mode union resolution coerces ``int 1`` to ``float 1.0``
-      when the target field's union prefers ``float``; this collapse lets
-      ``match_literal = "1"`` still match such a value.
-    - everything else → ``str(value).strip().lower()``.
-    """
-    if value is None:
-        return None
-    if isinstance(value, bool):
-        return "true" if value else "false"
-    if isinstance(value, float) and value.is_integer():
-        return str(int(value))
-    return str(value).strip().lower()
 
 
 def render_ref_id(template: str, candidate: SchemaOrgBase) -> str | None:
