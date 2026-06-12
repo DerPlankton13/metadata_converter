@@ -6,10 +6,9 @@ import pandas as pd
 from metadata_converter.config import (
     CrossSheetRef,
     FlatDataConfig,
-    FlatDataUpliftConfig,
 )
 from metadata_converter.flat_data.extract import extract_data
-from metadata_converter.flat_data.schema_builder import extract_schemas
+from metadata_converter.flat_data.schema_builder import build_schemas
 from metadata_converter.flat_data.transform import (
     add_combined_columns,
     add_id,
@@ -17,7 +16,7 @@ from metadata_converter.flat_data.transform import (
     convert_to_long,
 )
 from metadata_converter.flat_data.transform_helpers import split_field
-from metadata_converter.flat_data.uplifting import LinkEngine, to_lookup_key
+from metadata_converter.flat_data.uplifting import to_lookup_key
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
@@ -104,17 +103,6 @@ def transform_long(
     return new_data
 
 
-def build_schemas(
-    data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
-) -> dict[str, list[SchemaOrgBase]]:
-    """Build schema.org objects from each sheet's long-format DataFrame."""
-    results = {}
-    for name, data in data_dict.items():
-        logger.info("Building schemas for sheet '%s'", name)
-        results[name] = extract_schemas(data, config.mapping[name])
-    return results
-
-
 def inject_cross_refs(
     results: dict[str, list[SchemaOrgBase]],
     collected: list[CollectedRef],
@@ -140,8 +128,3 @@ def write_schemas(results: dict[str, list[SchemaOrgBase]], output_path: Path) ->
     logger.info("Writing %d JSON-LD file(s) to %s", len(schemas), output_path)
     for schema in schemas:
         load_to_jsonld(schema, output_path=output_path)
-
-
-def uplift_flat_data(config: FlatDataUpliftConfig) -> None:
-    """Resolve cross-references in ingested flat_data JSON-LD."""
-    LinkEngine(config).run()

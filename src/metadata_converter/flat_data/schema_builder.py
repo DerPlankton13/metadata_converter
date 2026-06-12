@@ -6,10 +6,23 @@ from typing import Any
 import pandas as pd
 from pydantic import ValidationError
 
+from metadata_converter.config import FlatDataConfig
+from metadata_converter.flat_data.run import logger
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 logger = logging.getLogger(__name__)
+
+
+def build_schemas(
+    data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
+) -> dict[str, list[SchemaOrgBase]]:
+    """Build schema.org objects from each sheet's long-format DataFrame."""
+    results = {}
+    for name, data in data_dict.items():
+        logger.info("Building schemas for sheet '%s'", name)
+        results[name] = extract_schemas(data, config.mapping[name])
+    return results
 
 
 def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrgBase]:

@@ -498,3 +498,8 @@ class LinkEngine:
             self.output_path,
             skipped,
         )
+
+
+def uplift_flat_data(config: FlatDataUpliftConfig) -> None:
+    """Resolve cross-references in ingested flat_data JSON-LD."""
+    LinkEngine(config).run()
