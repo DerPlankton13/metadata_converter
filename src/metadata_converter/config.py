@@ -289,12 +289,12 @@ SourceConfig = Annotated[
     Field(discriminator="source_type"),
 ]
 
-_source_config_adapter: TypeAdapter[SourceConfig] = TypeAdapter(SourceConfig)
+source_config_adapter: TypeAdapter[SourceConfig] = TypeAdapter(SourceConfig)
 
 logger = logging.getLogger(__name__)
 
 
-def _load_toml(path: str) -> dict:
+def load_toml(path: str) -> dict:
     try:
         with open(path, "rb") as f:
             return tomllib.load(f)
@@ -303,7 +303,7 @@ def _load_toml(path: str) -> dict:
         raise SystemExit(1)
 
 
-def _handle_validation_error(e: ValidationError) -> None:
+def handle_validation_error(e: ValidationError) -> None:
     first = e.errors()[0]
     logger.error(
         "Invalid config — %s at %s (input was: %s)",
@@ -316,20 +316,20 @@ def _handle_validation_error(e: ValidationError) -> None:
 
 def load_source_config(path: str) -> FlatDataConfig | ApiFetchingConfig | BiosamplesConfig:
     """Load and validate a source config (flat_data, biosamples, or api) from a TOML file."""
-    raw = _load_toml(path)
+    raw = load_toml(path)
     try:
-        return _source_config_adapter.validate_python(raw)
+        return source_config_adapter.validate_python(raw)
     except ValidationError as e:
-        _handle_validation_error(e)
+        handle_validation_error(e)
 
 
 def load_uplift_config(path: str) -> UpliftingConfig:
     """Load and validate an uplift config from a TOML file."""
-    raw = _load_toml(path)
+    raw = load_toml(path)
     try:
         return UpliftingConfig.model_validate(raw)
     except ValidationError as e:
-        _handle_validation_error(e)
+        handle_validation_error(e)
 
 
 # Resolve forward references introduced by the top-down ordering.

@@ -23,7 +23,7 @@ Extending to new sources
 Pagination is necessarily source-specific, as each API has its own request
 format, response structure, and record schema. To add a new source, implement
 a ``_query_*`` function following the existing pattern and register it in
-``_QUERY_HANDLERS``. No changes to the public API are required unless a new
+``QUERY_HANDLERS``. No changes to the public API are required unless a new
 fetch strategy type is needed.
 
 Public API
@@ -122,7 +122,7 @@ class Record(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def _checked(fn):
+def checked(fn):
     """
     Decorator that adds raise_for_status, response size check, redirect
     control, and timeout to any function returning a `requests.Response`.
@@ -144,29 +144,29 @@ def _checked(fn):
             **kwargs,
         )
         response.raise_for_status()
-        _check_response_size(response, config)
+        check_response_size(response, config)
         return response
 
     return wrapper
 
 
-@_checked
-def _get(
+@checked
+def get(
     session: requests.Session, url: str, config: ApiExtractorConfig, **kwargs
 ) -> requests.Response:
     """Perform a GET request."""
     return session.get(url, **kwargs)
 
 
-@_checked
-def _post(
+@checked
+def post(
     session: requests.Session, url: str, config: ApiExtractorConfig, **kwargs
 ) -> requests.Response:
     """Perform a POST request."""
     return session.post(url, **kwargs)
 
 
-def _check_response_size(
+def check_response_size(
     response: requests.Response, config: ApiExtractorConfig
 ) -> None:
     """Raise `ValueError` if the response body exceeds ``max_response_mb``."""
@@ -191,7 +191,7 @@ def _check_response_size(
 # ---------------------------------------------------------------------------
 
 
-def _to_es_query(query: Query) -> str:
+def to_es_query(query: Query) -> str:
     """
     Serialise a `QueryTerm` or `QueryGroup` to an Elasticsearch query string.
 
@@ -210,7 +210,7 @@ def _to_es_query(query: Query) -> str:
         case QueryTerm(field=f, value=v):
             return f"{f}:{v}"
         case QueryGroup(operator=op, terms=terms):
-            parts = [_to_es_query(t) for t in terms]
+            parts = [to_es_query(t) for t in terms]
             return "(" + f" {op} ".join(parts) + ")"
 
 
@@ -219,22 +219,22 @@ def _to_es_query(query: Query) -> str:
 # ---------------------------------------------------------------------------
 
 
-def _query_zenodo(
+def query_zenodo(
     config: ApiExtractorConfig, session: requests.Session
 ) -> list[Record]:
     """Query handler for the Zenodo REST API."""
     params: dict = {
-        "q": _to_es_query(config.query),
+        "q": to_es_query(config.query),
         "size": config.page_size,
         "page": 1,
         "sort": "newest",
     }
-    data = _get(session, config.api_url, config, params=params).json()
+    data = get(session, config.api_url, config, params=params).json()
     total = data["hits"]["total"]
     records: list[Record] = []
     logger.info("Zenodo: %d record(s) found", total)
 
-    def _parse(hits: list[dict]) -> None:
+    def parse(hits: list[dict]) -> None:
         for hit in hits:
             rec_id = str(hit["id"])
             records.append(
@@ -247,35 +247,35 @@ def _query_zenodo(
                 )
             )
 
-    _parse(data["hits"]["hits"])
+    parse(data["hits"]["hits"])
     while len(records) < total:
         params["page"] += 1
         logger.debug(
             "Fetching page %d (%d/%d) ...", params["page"], len(records), total
         )
         time.sleep(config.request_delay)
-        _parse(
-            _get(session, config.api_url, config, params=params).json()["hits"]["hits"]
+        parse(
+            get(session, config.api_url, config, params=params).json()["hits"]["hits"]
         )
 
     return records
 
 
-def _query_datacite(
+def query_datacite(
     config: ApiExtractorConfig, session: requests.Session
 ) -> list[Record]:
     """Query handler for the DataCite REST API."""
     params: dict = {
-        "query": _to_es_query(config.query),
+        "query": to_es_query(config.query),
         "page[size]": config.page_size,
         "page[number]": 1,
     }
-    data = _get(session, config.api_url, config, params=params).json()
+    data = get(session, config.api_url, config, params=params).json()
     total = data["meta"]["total"]
     records: list[Record] = []
     logger.info("DataCite: %d record(s) found", total)
 
-    def _parse(items: list[dict]) -> None:
+    def parse(items: list[dict]) -> None:
         for item in items:
             attr = item["attributes"]
             doi = attr.get("doi", "").lower() or None
@@ -290,19 +290,19 @@ def _query_datacite(
                 )
             )
 
-    _parse(data["data"])
+    parse(data["data"])
     while len(records) < total:
         params["page[number]"] += 1
         logger.debug(
             "Fetching page %d (%d/%d) ...", params["page[number]"], len(records), total
         )
         time.sleep(config.request_delay)
-        _parse(_get(session, config.api_url, config, params=params).json()["data"])
+        parse(get(session, config.api_url, config, params=params).json()["data"])
 
     return records
 
 
-def _query_seanoe(
+def query_seanoe(
     config: ApiExtractorConfig, session: requests.Session
 ) -> list[Record]:
     """
@@ -323,7 +323,7 @@ def _query_seanoe(
             "Known working fields: 'descriptionFulltext', 'affiliations'."
         )
 
-    def _payload(page: int) -> dict:
+    def payload(page: int) -> dict:
         return {
             "groupedSearch": True,
             "criteriaList": [
@@ -352,12 +352,12 @@ def _query_seanoe(
             "defaultCriteriaValues": {},
         }
 
-    data = _post(session, config.api_url, config, json=_payload(1)).json()
+    data = post(session, config.api_url, config, json=payload(1)).json()
     total = data.get("entriesCount", 0)
     records: list[Record] = []
     logger.info("SEANOE: %d record(s) found", total)
 
-    def _parse(entries: list[dict]) -> None:
+    def parse(entries: list[dict]) -> None:
         for entry in entries:
             doc_id = str(entry.get("docId", ""))
             records.append(
@@ -370,13 +370,13 @@ def _query_seanoe(
                 )
             )
 
-    _parse(data.get("responseEntries", []))
+    parse(data.get("responseEntries", []))
     while len(records) < total:
         time.sleep(config.request_delay)
         page = len(records) // config.page_size + 1
         logger.debug("Fetching page %d (%d/%d) ...", page, len(records), total)
-        _parse(
-            _post(session, config.api_url, config, json=_payload(page))
+        parse(
+            post(session, config.api_url, config, json=payload(page))
             .json()
             .get("responseEntries", [])
         )
@@ -384,7 +384,7 @@ def _query_seanoe(
     return records
 
 
-def _query_figshare(
+def query_figshare(
     config: ApiExtractorConfig, session: requests.Session
 ) -> list[Record]:
     """
@@ -408,14 +408,14 @@ def _query_figshare(
     page = 1
     records: list[Record] = []
 
-    def _payload(p: int) -> dict:
+    def payload(p: int) -> dict:
         return {
             config.query.field: config.query.value,
             "page_size": config.page_size,
             "page": p,
         }
 
-    def _parse(items: list[dict]) -> None:
+    def parse(items: list[dict]) -> None:
         for item in items:
             records.append(
                 Record(
@@ -427,16 +427,16 @@ def _query_figshare(
                 )
             )
 
-    items = _post(session, config.api_url, config, json=_payload(page)).json()
-    _parse(items)
+    items = post(session, config.api_url, config, json=payload(page)).json()
+    parse(items)
     logger.info("Figshare: fetching records ...")
     # Figshare signals end-of-results with a page shorter than page_size
     while len(items) == config.page_size:
         page += 1
         logger.debug("Fetching page %d (%d records so far) ...", page, len(records))
         time.sleep(config.request_delay)
-        items = _post(session, config.api_url, config, json=_payload(page)).json()
-        _parse(items)
+        items = post(session, config.api_url, config, json=payload(page)).json()
+        parse(items)
 
     logger.info("Figshare: %d record(s) found", len(records))
     return records
@@ -450,22 +450,22 @@ type QueryHandler = Callable[[ApiExtractorConfig, requests.Session], list[Record
 
 #: Maps a substring of ``api_url`` to the appropriate query handler.
 #: To add support for a new repository, append a ``(pattern, handler)`` tuple.
-_QUERY_HANDLERS: list[tuple[str, QueryHandler]] = [
-    ("zenodo.org/api", _query_zenodo),
-    ("api.datacite.org", _query_datacite),
-    ("seanoe.org/api", _query_seanoe),
-    ("api.figshare.com", _query_figshare),
+QUERY_HANDLERS: list[tuple[str, QueryHandler]] = [
+    ("zenodo.org/api", query_zenodo),
+    ("api.datacite.org", query_datacite),
+    ("seanoe.org/api", query_seanoe),
+    ("api.figshare.com", query_figshare),
 ]
 
 
-def _find_query_handler(api_url: str) -> QueryHandler:
+def find_query_handler(api_url: str) -> QueryHandler:
     """Return the query handler whose pattern matches ``api_url``."""
-    for pattern, handler in _QUERY_HANDLERS:
+    for pattern, handler in QUERY_HANDLERS:
         if pattern in api_url:
             return handler
     raise ValueError(
         f"No query handler registered for API URL: {api_url!r}. "
-        f"Registered patterns: {[p for p, _ in _QUERY_HANDLERS]}"
+        f"Registered patterns: {[p for p, _ in QUERY_HANDLERS]}"
     )
 
 
@@ -474,7 +474,7 @@ def _find_query_handler(api_url: str) -> QueryHandler:
 # ---------------------------------------------------------------------------
 
 
-def _fetch_export_endpoint(
+def fetch_export_endpoint(
     record: Record,
     config: ApiExtractorConfig,
     session: requests.Session,
@@ -482,10 +482,10 @@ def _fetch_export_endpoint(
     """Fetch JSON-LD from the URL produced by substituting ``record.source_id``
     into ``config.export_url_template``."""
     url = config.export_url_template.format(record_id=record.source_id)
-    return _get(session, url, config).json()
+    return get(session, url, config).json()
 
 
-def _fetch_html_jsonld(
+def fetch_html_jsonld(
     record: Record,
     config: ApiExtractorConfig,
     session: requests.Session,
@@ -496,7 +496,7 @@ def _fetch_html_jsonld(
         raise ValueError(
             f"Record has no landing page URL: {record.doi or record.source_id}"
         )
-    response = _get(session, record.url, config)
+    response = get(session, record.url, config)
     soup = BeautifulSoup(response.text, "html.parser")
     tag = soup.find("script", {"type": "application/ld+json"})
     if not tag or not tag.string:
@@ -506,9 +506,9 @@ def _fetch_html_jsonld(
 
 type FetchHandler = Callable[[Record, ApiExtractorConfig, requests.Session], dict]
 
-_FETCH_HANDLERS: dict[str, FetchHandler] = {
-    "export_endpoint": _fetch_export_endpoint,
-    "html_jsonld": _fetch_html_jsonld,
+FETCH_HANDLERS: dict[str, FetchHandler] = {
+    "export_endpoint": fetch_export_endpoint,
+    "html_jsonld": fetch_html_jsonld,
 }
 
 
@@ -548,7 +548,7 @@ def query_source(config: ApiExtractorConfig) -> list[Record]:
         If the number of redirects exceeds ``config.max_redirects``.
     """
     session = make_session(config.user_agent, config.max_redirects)
-    return _find_query_handler(config.api_url)(config, session)
+    return find_query_handler(config.api_url)(config, session)
 
 
 def fetch_jsonld(record: Record, config: ApiExtractorConfig) -> dict:
@@ -585,4 +585,4 @@ def fetch_jsonld(record: Record, config: ApiExtractorConfig) -> dict:
         If the number of redirects exceeds ``config.max_redirects``.
     """
     session = make_session(config.user_agent, config.max_redirects)
-    return _FETCH_HANDLERS[config.fetch_strategy](record, config, session)
+    return FETCH_HANDLERS[config.fetch_strategy](record, config, session)

@@ -52,6 +52,13 @@ Returns, etc.) when the function is non-trivial.
 For Pydantic models, document fields with `Field(description=...)` instead of a class-level NumPy Parameters section —
 the fields already express type and default declaratively, so a class docstring should be at most one line.
 
+A leading underscore on a function, method, or variable name is a strong cultural signal in Python: "do not import or
+reference this from outside the module/class." Plain names are the default — even for module-internal helpers. Reserve
+`_name` for symbols where there is an affirmative reason they must not be referenced externally (e.g. framework-wired
+callbacks like Pydantic validators, symbols that rely on internal invariants and would mislead callers, or APIs you are
+deliberately leaving unstable). "I don't currently import this from elsewhere" is **not** such a reason; ordinary
+single-purpose helpers should have plain names regardless of whether they have external callers today.
+
 ## Testing
 
 Rules of thumb when writing or refactoring tests:

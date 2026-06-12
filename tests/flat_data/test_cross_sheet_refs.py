@@ -1,6 +1,6 @@
 """Tests for the flat_data cross-sheet reference pipeline.
 
-Covers _collect_cross_ref_ids (wide-format DataFrame access) and _inject_cross_refs
+Covers collect_cross_ref_ids (wide-format DataFrame access) and inject_cross_refs
 (schema object manipulation) in isolation so the full Excel-file pipeline is not needed.
 """
 
@@ -13,7 +13,7 @@ from metadata_converter.config import (
     FlatDataConfig,
     OutputConfig,
 )
-from metadata_converter.flat_data.run import _collect_cross_ref_ids, _inject_cross_refs
+from metadata_converter.flat_data.run import collect_cross_ref_ids, inject_cross_refs
 from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, Person
 
 # ---------------------------------------------------------------------------
@@ -21,11 +21,10 @@ from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, P
 # ---------------------------------------------------------------------------
 
 
-def _make_config(tmp_path, cross_sheet_refs: list[CrossSheetRef]) -> FlatDataConfig:
+def make_config(tmp_path, cross_sheet_refs: list[CrossSheetRef]) -> FlatDataConfig:
     """Build a FlatDataConfig where everything except cross_sheet_refs is boilerplate."""
     return FlatDataConfig(
         extractor=ExcelExtractorConfig(
-            type="excel",
             file_path=tmp_path / "dummy.xlsx",
             sheet_name=["author", "dataset"],
         ),
@@ -39,7 +38,7 @@ def _make_config(tmp_path, cross_sheet_refs: list[CrossSheetRef]) -> FlatDataCon
     )
 
 
-def _author_df(is_dataset_author: tuple[int, int] = (1, 0)) -> pd.DataFrame:
+def author_df(is_dataset_author: tuple[int, int] = (1, 0)) -> pd.DataFrame:
     """Wide-format author DataFrame; the flag tuple sets the is-dataset-author column per row."""
     return pd.DataFrame(
         {
@@ -51,7 +50,7 @@ def _author_df(is_dataset_author: tuple[int, int] = (1, 0)) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# _collect_cross_ref_ids
+# collect_cross_ref_ids
 # ---------------------------------------------------------------------------
 
 
@@ -63,10 +62,10 @@ def test_collect_filter_returns_ref_type_and_matching_ids(tmp_path):
         filter_column="author:is-dataset-author",
         filter_value=1,
     )
-    config = _make_config(tmp_path, [ref])
-    data_dict = {"author": _author_df(), "dataset": pd.DataFrame()}
+    config = make_config(tmp_path, [ref])
+    data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
 
-    [(returned_ref, ref_type, ids)] = _collect_cross_ref_ids(data_dict, config)
+    [(returned_ref, ref_type, ids)] = collect_cross_ref_ids(data_dict, config)
 
     assert returned_ref is ref
     assert ref_type == "Person"
@@ -75,10 +74,10 @@ def test_collect_filter_returns_ref_type_and_matching_ids(tmp_path):
 
 def test_collect_no_filter_returns_all_ids(tmp_path):
     ref = CrossSheetRef(on_sheet="dataset", property="creator", from_sheet="author")
-    config = _make_config(tmp_path, [ref])
-    data_dict = {"author": _author_df(), "dataset": pd.DataFrame()}
+    config = make_config(tmp_path, [ref])
+    data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
 
-    _, _, ids = _collect_cross_ref_ids(data_dict, config)[0]
+    _, _, ids = collect_cross_ref_ids(data_dict, config)[0]
 
     assert set(ids) == {"Person_alice.jsonld", "Person_bob.jsonld"}
 
@@ -91,19 +90,19 @@ def test_collect_returns_empty_ids_when_filter_matches_nothing(tmp_path):
         filter_column="author:is-dataset-author",
         filter_value=1,
     )
-    config = _make_config(tmp_path, [ref])
+    config = make_config(tmp_path, [ref])
     data_dict = {
-        "author": _author_df(is_dataset_author=(0, 0)),
+        "author": author_df(is_dataset_author=(0, 0)),
         "dataset": pd.DataFrame(),
     }
 
-    _, _, ids = _collect_cross_ref_ids(data_dict, config)[0]
+    _, _, ids = collect_cross_ref_ids(data_dict, config)[0]
 
     assert ids == []
 
 
 # ---------------------------------------------------------------------------
-# _inject_cross_refs
+# inject_cross_refs
 # ---------------------------------------------------------------------------
 
 
@@ -111,7 +110,7 @@ def test_inject_single_ref_sets_scalar_property():
     catalog = DataCatalog(id="DataCatalog_main.jsonld")
     ref = CrossSheetRef(on_sheet="dataset", property="creator", from_sheet="author")
 
-    results = _inject_cross_refs(
+    results = inject_cross_refs(
         {"dataset": [catalog]}, [(ref, "Person", ["Person_alice.jsonld"])]
     )
 
@@ -125,7 +124,7 @@ def test_inject_multiple_refs_sets_list():
     ref = CrossSheetRef(on_sheet="dataset", property="creator", from_sheet="author")
     ids = ["Person_alice.jsonld", "Person_bob.jsonld"]
 
-    results = _inject_cross_refs({"dataset": [catalog]}, [(ref, "Person", ids)])
+    results = inject_cross_refs({"dataset": [catalog]}, [(ref, "Person", ids)])
 
     creator = results["dataset"][0].creator
     assert isinstance(creator, list)
@@ -137,7 +136,7 @@ def test_inject_empty_ids_leaves_property_unchanged_and_warns(caplog):
     ref = CrossSheetRef(on_sheet="dataset", property="creator", from_sheet="author")
 
     with caplog.at_level("WARNING"):
-        results = _inject_cross_refs({"dataset": [catalog]}, [(ref, "Person", [])])
+        results = inject_cross_refs({"dataset": [catalog]}, [(ref, "Person", [])])
 
     assert results["dataset"][0].creator is None
     assert "no sources for dataset.creator" in caplog.text
@@ -156,12 +155,12 @@ def test_integration_collect_then_inject_applies_filter(tmp_path):
         filter_column="author:is-dataset-author",
         filter_value=1,
     )
-    config = _make_config(tmp_path, [ref])
-    data_dict = {"author": _author_df(), "dataset": pd.DataFrame()}
+    config = make_config(tmp_path, [ref])
+    data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
     catalog = DataCatalog(id="DataCatalog_main.jsonld")
 
-    collected = _collect_cross_ref_ids(data_dict, config)
-    results = _inject_cross_refs({"dataset": [catalog]}, collected)
+    collected = collect_cross_ref_ids(data_dict, config)
+    results = inject_cross_refs({"dataset": [catalog]}, collected)
 
     creator = results["dataset"][0].creator
     assert isinstance(creator, Person)

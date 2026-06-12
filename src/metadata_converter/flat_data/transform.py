@@ -11,31 +11,31 @@ from metadata_converter.config import CleaningConfig
 from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin
 
 
-def _run_plugins(df: pd.DataFrame, plugins: list[CleaningPlugin]) -> pd.DataFrame:
+def run_plugins(df: pd.DataFrame, plugins: list[CleaningPlugin]) -> pd.DataFrame:
     for plugin in plugins:
         df = plugin.run(df)
     return df
 
 
-def _clean_string(value):
+def clean_string(value):
     """Collapse runs of whitespace to a single space; return non-strings unchanged."""
     if not isinstance(value, str):
         return value
     return re.sub(r"\s+", " ", value).strip()
 
 
-def _strip_header_whitespace(df: pd.DataFrame) -> pd.DataFrame:
-    df.columns = pd.Index([_clean_string(col) for col in df.columns])
+def strip_header_whitespace(df: pd.DataFrame) -> pd.DataFrame:
+    df.columns = pd.Index([clean_string(col) for col in df.columns])
     return df
 
 
-def _strip_cell_whitespace(df: pd.DataFrame) -> pd.DataFrame:
+def strip_cell_whitespace(df: pd.DataFrame) -> pd.DataFrame:
     str_cols = df.select_dtypes(include="object").columns
-    df[str_cols] = df[str_cols].apply(lambda col: col.map(_clean_string))
+    df[str_cols] = df[str_cols].apply(lambda col: col.map(clean_string))
     return df
 
 
-def _sentinels_to_na(df: pd.DataFrame, sentinels: list[str]) -> pd.DataFrame:
+def sentinels_to_na(df: pd.DataFrame, sentinels: list[str]) -> pd.DataFrame:
     """
     Replace all occurrences of sentinel values with ``pd.NA``.
     Sentinel values are user-defined strings that represent missing or
@@ -44,7 +44,7 @@ def _sentinels_to_na(df: pd.DataFrame, sentinels: list[str]) -> pd.DataFrame:
     return df.replace({s: pd.NA for s in sentinels})
 
 
-def _placeholders_to_na(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
+def placeholders_to_na(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
     """
     Replace cell values matching ``pattern`` with ``pd.NA`` in all string
     (object dtype) columns. Intended for bracketed placeholder values
@@ -60,15 +60,15 @@ def _placeholders_to_na(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
 def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
     """Apply configured cleaning steps in order: plugins → strip header/cell whitespace →
     replace sentinels/placeholders → infer dtypes → drop fully empty rows."""
-    df = _run_plugins(df, config.plugins)
+    df = run_plugins(df, config.plugins)
     if config.strip_header_whitespace:
-        df = _strip_header_whitespace(df)
+        df = strip_header_whitespace(df)
     if config.strip_cell_whitespace:
-        df = _strip_cell_whitespace(df)
+        df = strip_cell_whitespace(df)
     if config.sentinels_to_na:
-        df = _sentinels_to_na(df, config.empty_sentinels)
+        df = sentinels_to_na(df, config.empty_sentinels)
     if config.placeholders_to_na:
-        df = _placeholders_to_na(df, config.placeholder_pattern)
+        df = placeholders_to_na(df, config.placeholder_pattern)
     df = df.convert_dtypes()
     df.dropna(how="all", inplace=True)
     return df.reset_index(drop=True)
@@ -99,7 +99,7 @@ def convert_to_long(df: pd.DataFrame, sheet_name: str = None) -> pd.DataFrame:
     return df.melt(id_vars=["id"], var_name="header")
 
 
-def _row_hash(row: pd.Series) -> str:
+def row_hash(row: pd.Series) -> str:
     """Return a 22-character URL-safe base64 hash of the row's content.
 
     The hash is derived from the row's non-null values serialised as canonical
@@ -123,5 +123,5 @@ def _row_hash(row: pd.Series) -> str:
 
 def add_id(data: pd.DataFrame, schema_type: str) -> pd.DataFrame:
     """Generate a content-hash-based ``@id`` for each row: ``<schema_type>_<hash>.jsonld``."""
-    data["@id"] = [f"{schema_type}_{_row_hash(row)}.jsonld" for _, row in data.iterrows()]
+    data["@id"] = [f"{schema_type}_{row_hash(row)}.jsonld" for _, row in data.iterrows()]
     return data

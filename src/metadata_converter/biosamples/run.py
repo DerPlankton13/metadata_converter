@@ -57,7 +57,7 @@ def modify_context(metadata: dict, sample_id: str) -> dict:
     return metadata
 
 
-def _fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) -> bool:
+def fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) -> bool:
     session = make_session(config.user_agent)
     try:
         get_metadata(sample_id, session, fetched_path)
@@ -114,7 +114,7 @@ def fetch_biosamples(config: BiosamplesConfig):
 
     with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
         submitted = [
-            executor.submit(_fetch_sample, sid, fetched_path, config) for sid in pending
+            executor.submit(fetch_sample, sid, fetched_path, config) for sid in pending
         ]
         failures = 0
         try:

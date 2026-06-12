@@ -17,7 +17,7 @@ from metadata_converter.flat_data.transform import (
     convert_to_long,
 )
 from metadata_converter.flat_data.transform_helpers import split_field
-from metadata_converter.flat_data.uplifting import LinkEngine, _to_lookup_key
+from metadata_converter.flat_data.uplifting import LinkEngine, to_lookup_key
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
@@ -25,7 +25,7 @@ from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 logger = logging.getLogger(__name__)
 
 # (rule, ref_type, collected @id strings)
-_CollectedRef = tuple[CrossSheetRef, str, list[str]]
+CollectedRef = tuple[CrossSheetRef, str, list[str]]
 
 
 def ingest_flat_data(config: FlatDataConfig) -> None:
@@ -39,24 +39,24 @@ def ingest_flat_data(config: FlatDataConfig) -> None:
             raise SystemExit(1)
         logger.info("Found %d file(s) in %s", len(files), file_path)
         for excel_file in files:
-            _ingest_one(config, excel_file)
+            ingest_one(config, excel_file)
     else:
-        _ingest_one(config, file_path)
+        ingest_one(config, file_path)
 
 
-def _ingest_one(config: FlatDataConfig, file_path: Path) -> None:
+def ingest_one(config: FlatDataConfig, file_path: Path) -> None:
     """Run the full ingest pipeline for a single input file."""
     logger.info("Ingesting %s", file_path.name)
     data_dict = extract_data(config, file_path=file_path)
-    data_dict = _transform_wide(data_dict, config)
-    collected_refs = _collect_cross_ref_ids(data_dict, config)
-    data_dict = _transform_long(data_dict, config)
+    data_dict = transform_wide(data_dict, config)
+    collected_refs = collect_cross_ref_ids(data_dict, config)
+    data_dict = transform_long(data_dict, config)
     results = build_schemas(data_dict, config)
-    results = _inject_cross_refs(results, collected_refs)
+    results = inject_cross_refs(results, collected_refs)
     write_schemas(results, config.output.ingested)
 
 
-def _transform_wide(
+def transform_wide(
     data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
 ) -> dict[str, pd.DataFrame]:
     """Clean, combine columns, and add @id — keeps wide format for cross-ref collection."""
@@ -71,27 +71,27 @@ def _transform_wide(
     return new_data
 
 
-def _collect_cross_ref_ids(
+def collect_cross_ref_ids(
     data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
-) -> list[_CollectedRef]:
+) -> list[CollectedRef]:
     """Collect @id lists for each cross-sheet ref rule while data is still wide-format.
 
     Wide format is required because filter_column and @id are still actual columns here.
     The ref_type is captured now so the injection step needs no access to the config.
     """
-    collected: list[_CollectedRef] = []
+    collected: list[CollectedRef] = []
     for ref in config.cross_sheet_refs:
         src = data_dict[ref.from_sheet]
         if ref.filter_column is not None:
-            filter_key = _to_lookup_key(ref.filter_value)
-            src = src[src[ref.filter_column].map(_to_lookup_key) == filter_key]
+            filter_key = to_lookup_key(ref.filter_value)
+            src = src[src[ref.filter_column].map(to_lookup_key) == filter_key]
         ids = src["@id"].dropna().tolist()
         ref_type = config.mapping[ref.from_sheet]["type"]
         collected.append((ref, ref_type, ids))
     return collected
 
 
-def _transform_long(
+def transform_long(
     data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
 ) -> dict[str, pd.DataFrame]:
     """Convert wide-format DataFrames to long format and split multi-value fields."""
@@ -115,9 +115,9 @@ def build_schemas(
     return results
 
 
-def _inject_cross_refs(
+def inject_cross_refs(
     results: dict[str, list[SchemaOrgBase]],
-    collected: list[_CollectedRef],
+    collected: list[CollectedRef],
 ) -> dict[str, list[SchemaOrgBase]]:
     """Inject pre-collected cross-sheet references into already-built schemas."""
     for ref, ref_type, ids in collected:

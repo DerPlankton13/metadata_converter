@@ -295,7 +295,7 @@ def test_build_location_both_region_and_country():
             },
         ],
     }
-    result = ActionBuilder(SampleRecord(record))._build_location()
+    result = ActionBuilder(SampleRecord(record)).build_location()
     assert_no_diff(expected, result)
 
 
@@ -309,7 +309,7 @@ def test_build_location_country_only():
         "geo": None,
         "additionalProperty": None,
     }
-    result = ActionBuilder(SampleRecord(record))._build_location()
+    result = ActionBuilder(SampleRecord(record)).build_location()
     assert_no_diff(expected, result)
 
 
@@ -319,7 +319,7 @@ def test_build_location_with_coordinates():
         make_coord_property("geographic location (longitude)", "7.8", "DD"),
         make_coord_property("elevation", "10", "m"),
     )
-    result = ActionBuilder(SampleRecord(record))._build_location()
+    result = ActionBuilder(SampleRecord(record)).build_location()
 
     assert result["name"] is None
     assert result["geo"] == {
@@ -332,7 +332,7 @@ def test_build_location_with_coordinates():
 
 def test_build_location_empty():
     record = make_record()
-    result = ActionBuilder(SampleRecord(record))._build_location()
+    result = ActionBuilder(SampleRecord(record)).build_location()
 
     assert result["name"] is None
     assert result["geo"] is None
@@ -350,7 +350,7 @@ def test_build_instrument_single_value():
             },
         )
     )
-    result = ActionBuilder(SampleRecord(record))._build_instrument()
+    result = ActionBuilder(SampleRecord(record)).build_instrument()
     assert result == [
         {
             "@type": "Product",
@@ -378,7 +378,7 @@ def test_build_instrument_multi_value():
             ],
         )
     )
-    result = ActionBuilder(SampleRecord(record))._build_instrument()
+    result = ActionBuilder(SampleRecord(record)).build_instrument()
     assert result == [
         {
             "@type": "Product",

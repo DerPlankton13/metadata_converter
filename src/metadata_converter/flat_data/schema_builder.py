@@ -19,14 +19,14 @@ def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrg
     logger.info("Building schemas for %d record(s) ...", len(groups))
     for _, entity in groups:
         entity = entity.groupby("header")["value"].apply(list).to_dict()
-        result = _build_schema(entity, mapping)
+        result = build_schema(entity, mapping)
         if result:
             schemas.extend(result)
     logger.info("Built %d schema(s) successfully", len(schemas))
     return schemas
 
 
-def _build_schema(
+def build_schema(
     entity: dict[str, Any], mapping: dict, nested: bool = False
 ) -> list[SchemaOrgBase]:
     """Build schema.org objects for one entity row, recursing into nested mapping values."""
@@ -42,9 +42,9 @@ def _build_schema(
     if not props:
         return []
 
-    rows = _split_properties(props) if nested and _is_multi_instance(props) else [props]
+    rows = split_properties(props) if nested and is_multi_instance(props) else [props]
     return [
-        s for s in (_instantiate_schema(schema_type, r) for r in rows) if s is not None
+        s for s in (instantiate_schema(schema_type, r) for r in rows) if s is not None
     ]
 
 
@@ -60,11 +60,11 @@ def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
             if value.startswith("Literal:"):
                 schema_properties[prop] = value[len("Literal:") :]
                 continue
-            var = _get_field_value(entity, value)
+            var = get_field_value(entity, value)
             if var is not None:
                 schema_properties[prop] = var
         elif isinstance(value, dict):
-            nested = _build_schema(entity, value, nested=True)
+            nested = build_schema(entity, value, nested=True)
             if nested:
                 schema_properties[prop] = nested[0] if len(nested) == 1 else nested
         elif isinstance(value, list):
@@ -73,13 +73,13 @@ def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
                     raise TypeError(
                         f"Mapping list elements must be dicts; got {schema_mapping!r}."
                     )
-                nested = _build_schema(entity, schema_mapping, nested=True)
+                nested = build_schema(entity, schema_mapping, nested=True)
                 if nested:
                     schema_properties.setdefault(prop, []).extend(nested)
     return schema_properties
 
 
-def _instantiate_schema(
+def instantiate_schema(
     schema_type: str, schema_properties: dict
 ) -> SchemaOrgBase | None:
     """Instantiate a schema.org Pydantic model; log and return None on ValidationError."""
@@ -98,7 +98,7 @@ def _instantiate_schema(
         return None
 
 
-def _get_field_value(entity: dict[str, Any], column: str):
+def get_field_value(entity: dict[str, Any], column: str):
     """Return field value(s) from entity, stripping NAs; None if all values are missing."""
     if column not in entity:
         raise KeyError(f"Header '{column}' not found in the data.")
@@ -111,13 +111,13 @@ def _get_field_value(entity: dict[str, Any], column: str):
     return values[0] if len(values) == 1 else values
 
 
-def _is_multi_instance(props: dict[str, Any]) -> bool:
+def is_multi_instance(props: dict[str, Any]) -> bool:
     """True when all list-valued properties share the same length > 1."""
     lengths = {len(v) for v in props.values() if isinstance(v, list)}
     return len(lengths) == 1 and lengths.pop() > 1
 
 
-def _split_properties(props: dict[str, Any]) -> list[dict[str, Any]]:
+def split_properties(props: dict[str, Any]) -> list[dict[str, Any]]:
     """Transpose parallel-list properties into one dict per row."""
     keys = list(props.keys())
     columns = [props[k] if isinstance(props[k], list) else [props[k]] for k in keys]

@@ -150,12 +150,12 @@ class SchemaOrgBase(BaseModel):
 #     return cls
 
 
-def _local(iri: str) -> str:
+def local(iri: str) -> str:
     """Extract local name from a schema.org IRI."""
     return iri.removeprefix(SCHEMA_PREFIX).removeprefix("schema:")
 
 
-def _safe_name(name: str) -> str:
+def safe_name(name: str) -> str:
     """
     Return a valid Python identifier for a schema.org local name.
 
@@ -189,7 +189,7 @@ def _safe_name(name: str) -> str:
     return name
 
 
-def _clean_comment(comment: str) -> str:
+def clean_comment(comment: str) -> str:
     """
     Sanitise a raw schema.org rdfs:comment for use as a Python docstring.
 
@@ -222,7 +222,7 @@ def _clean_comment(comment: str) -> str:
     return "\n".join(wrapped)
 
 
-def _schema_ids(node: dict, key: str) -> list[str]:
+def schema_ids(node: dict, key: str) -> list[str]:
     """
     Extract safe Python names from a JSON-LD node's @id references.
 
@@ -246,7 +246,7 @@ def _schema_ids(node: dict, key: str) -> list[str]:
     if isinstance(val, dict):
         val = [val]
     return [
-        _safe_name(_local(item["@id"]))
+        safe_name(local(item["@id"]))
         for item in val
         if isinstance(item, dict) and item.get("@id", "").startswith("schema:")
     ]
@@ -280,8 +280,8 @@ def parse_schema(data: dict) -> tuple[dict[str, ClassDef], dict[str, list[FieldD
         if not node_id.startswith("schema:"):
             continue
 
-        schema_name = _local(node_id)
-        py_name = _safe_name(schema_name)
+        schema_name = local(node_id)
+        py_name = safe_name(schema_name)
 
         rdf_types = node.get("@type", [])
         if isinstance(rdf_types, str):
@@ -292,10 +292,10 @@ def parse_schema(data: dict) -> tuple[dict[str, ClassDef], dict[str, list[FieldD
             comment_text = comment_raw.get("@value", "")
         else:
             comment_text = str(comment_raw)
-        comment = _clean_comment(comment_text)
+        comment = clean_comment(comment_text)
 
         if "rdfs:Class" in rdf_types:
-            parents = _schema_ids(node, "rdfs:subClassOf")
+            parents = schema_ids(node, "rdfs:subClassOf")
             classes[py_name] = {
                 "parents": parents,
                 "schema_name": schema_name,
@@ -303,8 +303,8 @@ def parse_schema(data: dict) -> tuple[dict[str, ClassDef], dict[str, list[FieldD
             }
 
         elif "rdf:Property" in rdf_types:
-            owner_classes = _schema_ids(node, "schema:domainIncludes")
-            allowed_types = _schema_ids(node, "schema:rangeIncludes")
+            owner_classes = schema_ids(node, "schema:domainIncludes")
+            allowed_types = schema_ids(node, "schema:rangeIncludes")
 
             for owner_class in owner_classes:
                 class_fields[owner_class].append(
@@ -325,7 +325,7 @@ def parse_schema(data: dict) -> tuple[dict[str, ClassDef], dict[str, list[FieldD
     return classes, class_fields
 
 
-def _resolve_type(allowed_types: list[str], strict: bool) -> str:
+def resolve_type(allowed_types: list[str], strict: bool) -> str:
     """
     Translate a list of schema.org allowed type names into a type annotation string.
 
@@ -389,7 +389,7 @@ def build_models(
             "comment": class_def["comment"],
             "fields": {
                 field["name"]: (
-                    _resolve_type(field["allowed_types"], strict),
+                    resolve_type(field["allowed_types"], strict),
                     Field(
                         default=None,
                         alias=field["schema_name"]
@@ -404,7 +404,7 @@ def build_models(
     }
 
 
-def _render_field(name: str, type_str: str, field_info: FieldInfo) -> str:
+def render_field(name: str, type_str: str, field_info: FieldInfo) -> str:
     """Render a single schema.org property field as a source code line."""
     args = ["default=None"]
     if field_info.alias:
@@ -412,7 +412,7 @@ def _render_field(name: str, type_str: str, field_info: FieldInfo) -> str:
     return f"{name}: {type_str} = Field({', '.join(args)})"
 
 
-def _topological_sort(models: dict[str, dict]) -> list[str]:
+def topological_sort(models: dict[str, dict]) -> list[str]:
     """Return model names sorted so every parent appears before its children."""
     visited: set[str] = set()
     order: list[str] = []
@@ -446,7 +446,7 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
     str
         The full source of the generated Python module.
     """
-    order = _topological_sort(models)
+    order = topological_sort(models)
 
     lines = [
         '"""',
@@ -491,7 +491,7 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         lines.append(f'    type: str = Field(default="{schema_name}", alias="@type")')
 
         for field_name, (type_str, field_info) in cls["fields"].items():
-            lines.append(f"    {_render_field(field_name, type_str, field_info)}")
+            lines.append(f"    {render_field(field_name, type_str, field_info)}")
 
         lines.append("")
 

@@ -282,7 +282,7 @@ class SampleRecord:
         self._used: set[str] = set()
 
     @staticmethod
-    def _normalize_prop(prop: dict) -> dict:
+    def normalize_prop(prop: dict) -> dict:
         if prop.get("unitText") == "":
             prop.pop("unitText")
         return prop
@@ -304,12 +304,12 @@ class SampleRecord:
     def as_property(self, prop_name: str, prop_id: str | None = None) -> dict | None:
         self._used.add(prop_name)
         prop = build_property(self._raw, prop_name, prop_id)
-        return self._normalize_prop(prop) if prop else None
+        return self.normalize_prop(prop) if prop else None
 
     def raw_property(self, prop_name: str) -> dict | None:
         self._used.add(prop_name)
         prop = get_property(self._raw, prop_name)
-        return self._normalize_prop(prop) if prop else None
+        return self.normalize_prop(prop) if prop else None
 
     def remaining(self) -> list[dict]:
         excluded_values = ["not applicable"]
@@ -328,7 +328,7 @@ class BaseBuilder:
     def __init__(self, record: SampleRecord):
         self.record = record
 
-    def _build_checklist(self) -> dict | None:
+    def build_checklist(self) -> dict | None:
         checklist_prop = self.record.raw_property("checklist")
         ena_checklist_prop = self.record.raw_property("ENA-CHECKLIST")
         checklist = checklist_prop or ena_checklist_prop
@@ -342,20 +342,20 @@ class BaseBuilder:
             return checklist
         return None
 
-    def _build_additional_property(
+    def build_additional_property(
         self, extra_prop_names: list[str]
     ) -> list[dict] | dict | None:
         additional_property = []
-        if checklist := self._build_checklist():
+        if checklist := self.build_checklist():
             additional_property.append(checklist)
         for prop_name in extra_prop_names:
             if prop := self.record.as_property(prop_name):
                 additional_property.append(prop)
         if not additional_property:
             return None
-        return self._unwrap_single(additional_property)
+        return self.unwrap_single(additional_property)
 
-    def _build_research_project(self) -> list[dict] | dict:
+    def build_research_project(self) -> list[dict] | dict:
         projects = [
             {
                 "@type": "ResearchProject",
@@ -366,15 +366,15 @@ class BaseBuilder:
             # do not add the B5D project a second time
             if project_name.lower() not in ["biocean5d", "b5d"]:
                 projects.append({"@type": "ResearchProject", "name": project_name})
-        return self._unwrap_single(projects)
+        return self.unwrap_single(projects)
 
     @staticmethod
-    def _unwrap_single(items: list) -> list | dict:
+    def unwrap_single(items: list) -> list | dict:
         return items if len(items) > 1 else items[0]
 
 
 class ProductBuilder(BaseBuilder):
-    def _build_identifiers(self) -> list[dict] | dict:
+    def build_identifiers(self) -> list[dict] | dict:
         identifier_list = [
             BioSample(value=self.record.sample_id).model_dump(
                 by_alias=True, exclude_none=True
@@ -384,9 +384,9 @@ class ProductBuilder(BaseBuilder):
             identifier_list.append(
                 SRA(value=sra_accession).model_dump(by_alias=True, exclude_none=True)
             )
-        return self._unwrap_single(identifier_list)
+        return self.unwrap_single(identifier_list)
 
-    def _build_manufacturer(self) -> list[dict] | dict:
+    def build_manufacturer(self) -> list[dict] | dict:
         manufacturer = [
             {
                 "@type": "ResearchProject",
@@ -397,9 +397,9 @@ class ProductBuilder(BaseBuilder):
             # do not add the B5D project a second time
             if project_name.lower() not in ["BIOcean5D".lower(), "b5d"]:
                 manufacturer.append({"@type": "ResearchProject", "name": project_name})
-        return self._unwrap_single(manufacturer)
+        return self.unwrap_single(manufacturer)
 
-    def _build_keywords(self) -> list[dict] | None:
+    def build_keywords(self) -> list[dict] | None:
         keywords = []
         desired_properties = [
             "organism",
@@ -423,7 +423,7 @@ class ProductBuilder(BaseBuilder):
                 "https://purl.obolibrary.org/obo/OBI_0000747",
             ],
             "@id": f"Product_{self.record.sample_id}.jsonld",
-            "identifier": self._build_identifiers(),
+            "identifier": self.build_identifiers(),
             "name": self.record.base_value("name"),
             "description": self.record["sample description"],
             "url": convert_to_https(self.record.base_value("sameAs")),
@@ -434,16 +434,16 @@ class ProductBuilder(BaseBuilder):
                 "@type": "MonetaryGrant",
                 "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/grant_b5d.jsonld",
             },
-            "manufacturer": self._build_research_project(),
-            "keywords": self._build_keywords(),
-            "additionalProperty": self._build_additional_property(
+            "manufacturer": self.build_research_project(),
+            "keywords": self.build_keywords(),
+            "additionalProperty": self.build_additional_property(
                 ["target analysis type"]
             ),
         }
 
 
 class ActionBuilder(BaseBuilder):
-    def _build_location(self) -> dict:
+    def build_location(self) -> dict:
         """Build the schema.org location Property as type Place"""
         # create name Property if possible
         region = self.record["geographic location (region and locality)"]
@@ -505,7 +505,7 @@ class ActionBuilder(BaseBuilder):
             "additionalProperty": additional_property if additional_property else None,
         }
 
-    def _build_instrument(self) -> list[dict] | None:
+    def build_instrument(self) -> list[dict] | None:
         instrument = []
         for prop_name in ["sample collection device", "sampling platform"]:
             if prop := self.record.raw_property(prop_name):
@@ -537,7 +537,7 @@ class ActionBuilder(BaseBuilder):
                 )
         return instrument if instrument else None
 
-    def _build_object(self) -> list[dict] | None:
+    def build_object(self) -> list[dict] | None:
         objects = []
         for prop_name in ["environmental medium", "organism"]:
             prop = self.record.raw_property(prop_name)
@@ -551,7 +551,7 @@ class ActionBuilder(BaseBuilder):
             objects.append(build_thing(value, reference_url))
         return objects if objects else None
 
-    def _build_action_process(self) -> dict | None:
+    def build_action_process(self) -> dict | None:
         step = []
 
         # Filtration step - extract actual values and units from data
@@ -616,12 +616,12 @@ class ActionBuilder(BaseBuilder):
                 "@id": f"Product_{self.record.sample_id}.jsonld",
             },
             "startTime": self.record["collection date"],
-            "location": self._build_location(),
-            "instrument": self._build_instrument(),
-            "object": self._build_object(),
-            "actionProcess": self._build_action_process(),
-            "participant": self._build_research_project(),
-            "additionalProperty": self._build_additional_property(["protocol label"]),
+            "location": self.build_location(),
+            "instrument": self.build_instrument(),
+            "object": self.build_object(),
+            "actionProcess": self.build_action_process(),
+            "participant": self.build_research_project(),
+            "additionalProperty": self.build_additional_property(["protocol label"]),
         }
 
 
@@ -630,7 +630,7 @@ class SampleUplifter:
         self.record = SampleRecord(raw)
 
     @staticmethod
-    def _append_remaining_props(
+    def append_remaining_props(
         schema_dict: dict[str, Any], remaining_props: list[dict[str, Any]]
     ) -> dict[str, Any]:
         additional_property = schema_dict.get("additionalProperty")
@@ -649,6 +649,6 @@ class SampleUplifter:
         action_dict = ActionBuilder(self.record).build()
         remaining_props = self.record.remaining()
         if remaining_props:
-            product_dict = self._append_remaining_props(product_dict, remaining_props)
-            action_dict = self._append_remaining_props(action_dict, remaining_props)
+            product_dict = self.append_remaining_props(product_dict, remaining_props)
+            action_dict = self.append_remaining_props(action_dict, remaining_props)
         return product_dict, action_dict

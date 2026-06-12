@@ -91,7 +91,7 @@ def select_values(obj: Any, selector: str) -> list:
     if obj is None:
         return []
     if selector == "":
-        return _unwrap_value(obj)
+        return unwrap_value(obj)
 
     first_segment, _, remaining = selector.partition(".")
 
@@ -108,10 +108,10 @@ def select_values(obj: Any, selector: str) -> list:
     if remaining:
         return select_values(field_value, remaining)  # more segments to walk — recurse
     else:
-        return _unwrap_value(field_value)  # last segment reached — extract value
+        return unwrap_value(field_value)  # last segment reached — extract value
 
 
-def _unwrap_value(value: Any) -> list:
+def unwrap_value(value: Any) -> list:
     """Flatten lists and extract ``.value`` from PropertyValue-like wrappers.
 
     Returns a list to keep callers branch-free. Specifically:
@@ -127,17 +127,17 @@ def _unwrap_value(value: Any) -> list:
     if isinstance(value, list):
         results: list = []
         for item in value:
-            results.extend(_unwrap_value(item))
+            results.extend(unwrap_value(item))
         return results
     if isinstance(value, BaseModel):
         inner = getattr(value, "value", None)
         if inner is not None:
-            return _unwrap_value(inner)
+            return unwrap_value(inner)
         return [value]
     return [value]
 
 
-def _to_lookup_key(value: Any) -> str | None:
+def to_lookup_key(value: Any) -> str | None:
     """Convert a raw data value to the canonical string used for candidate matching.
 
     Both sides of a link rule — the value read from an entity via ``match_value`` /
@@ -162,7 +162,7 @@ def _to_lookup_key(value: Any) -> str | None:
     return str(value).strip().lower()
 
 
-def _render_ref_id(template: str, candidate: SchemaOrgBase) -> str | None:
+def render_ref_id(template: str, candidate: SchemaOrgBase) -> str | None:
     """Render a ref ``@id`` by substituting ``{prop}`` placeholders with candidate values.
 
     Returns ``None`` when any placeholder cannot be resolved on ``candidate``.
@@ -176,7 +176,7 @@ def _render_ref_id(template: str, candidate: SchemaOrgBase) -> str | None:
     return result
 
 
-def _find_additional_property(entity: SchemaOrgBase, name: str) -> list:
+def find_additional_property(entity: SchemaOrgBase, name: str) -> list:
     """Return unwrapped values from ``additionalProperty`` items matching ``name``."""
     ap = entity.additionalProperty
     if ap is None:
@@ -185,7 +185,7 @@ def _find_additional_property(entity: SchemaOrgBase, name: str) -> list:
     results: list = []
     for item in items:
         if isinstance(item, PropertyValue) and item.name == name:
-            results.extend(_unwrap_value(item.value))
+            results.extend(unwrap_value(item.value))
     return results
 
 
@@ -194,7 +194,7 @@ def _find_additional_property(entity: SchemaOrgBase, name: str) -> list:
 # ---------------------------------------------------------------------------
 
 
-def _load_as_model(data: dict, source: str) -> SchemaOrgBase | None:
+def load_as_model(data: dict, source: str) -> SchemaOrgBase | None:
     """Instantiate the schema.org Pydantic model for one JSON-LD entity.
 
     Returns ``None`` (with a warning log) when the entity has no scalar ``@type``,
@@ -246,12 +246,12 @@ class LinkEngine:
 
     Lifecycle
     ---------
-    1. ``_load_entities`` — read each ``*.jsonld`` file in ``input_path``,
+    1. ``load_entities`` — read each ``*.jsonld`` file in ``input_path``,
        validate as its schema.org Pydantic model, and group into ``by_type``.
-    2. ``_apply_rule`` (once per rule) — build a value→candidate lookup, then
+    2. ``apply_rule`` (once per rule) — build a value→candidate lookup, then
        find matches for each entity of ``on_type`` and set ``target_property``
        in place. All rules operate on the same model instances in ``by_type``.
-    3. ``_write_entities`` — flatten ``by_type`` and export each model via
+    3. ``write_entities`` — flatten ``by_type`` and export each model via
        ``load_to_jsonld``. Entities whose ``@type`` is listed in
        ``config.drop_types`` are skipped.
     """
@@ -266,15 +266,15 @@ class LinkEngine:
     def run(self) -> None:
         """Run all three phases in order: load → apply rules → write."""
         logger.info("Starting flat-data uplift from %s", self.input_path)
-        self._load_entities()
+        self.load_entities()
         for rule in self.config.links:
-            self._apply_rule(rule)
-        self._write_entities()
+            self.apply_rule(rule)
+        self.write_entities()
         logger.info("Flat-data uplift complete. Output: %s", self.output_path)
 
     # --- Phase 1 — load -----------------------------------------------------
 
-    def _load_entities(self) -> None:
+    def load_entities(self) -> None:
         """Read every ``*.jsonld`` file in ``input_path`` and group models into ``by_type``.
 
         Files that fail to load or validate are logged and skipped — the rest of
@@ -286,7 +286,7 @@ class LinkEngine:
         for path in files:
             with path.open() as f:
                 data = json.load(f)
-            model = _load_as_model(data, path.name)
+            model = load_as_model(data, path.name)
             if model is not None:
                 self.by_type.setdefault(model.type, []).append(model)
         total = sum(len(models) for models in self.by_type.values())
@@ -294,12 +294,12 @@ class LinkEngine:
 
     # --- Phase 2 — apply rules ----------------------------------------------
 
-    def _build_candidates_by_value(
+    def build_candidates_by_value(
         self, rule: LinkRule
     ) -> dict[str, list[SchemaOrgBase]]:
         """Index all candidates of ``rule.in_type`` by their normalized lookup value.
 
-        Returns a dict mapping each canonical string (produced by ``_to_lookup_key``)
+        Returns a dict mapping each canonical string (produced by ``to_lookup_key``)
         to the list of candidate models whose property carries that value::
 
             {
@@ -330,13 +330,13 @@ class LinkEngine:
         candidates_by_value: dict[str, list[SchemaOrgBase]] = {}
         for candidate in self.by_type.get(rule.in_type, []):
             if rule.in_additional_property:
-                values = _find_additional_property(
+                values = find_additional_property(
                     candidate, rule.in_additional_property
                 )
             else:
                 values = select_values(candidate, rule.in_property)
             for value in values:
-                key = _to_lookup_key(value)
+                key = to_lookup_key(value)
                 if key is None:
                     continue
                 candidates_by_value.setdefault(key, []).append(candidate)
@@ -350,18 +350,18 @@ class LinkEngine:
             )
         return candidates_by_value
 
-    def _apply_rule(self, rule: LinkRule) -> None:
+    def apply_rule(self, rule: LinkRule) -> None:
         """Apply a single link rule to every entity of type ``rule.on_type``.
 
         1. Build ``candidates_by_value`` — a dict mapping each normalized property
-           value to the candidate models that carry it (via ``_build_candidates_by_value``).
+           value to the candidate models that carry it (via ``build_candidates_by_value``).
         2. For each entity of ``on_type``, resolve the lookup value via ``match_literal``
            or ``match_value``, find matching candidates, and assign ``target_property``.
            Because ``SchemaOrgBase`` sets ``validate_assignment=True``, Pydantic
            validates the assignment immediately; a ``ValidationError`` is caught and
            logged so a bad rule skips the entity rather than crashing the run.
         """
-        candidates_by_value = self._build_candidates_by_value(rule)
+        candidates_by_value = self.build_candidates_by_value(rule)
 
         try:
             target_cls = get_schema(rule.in_type)
@@ -371,18 +371,18 @@ class LinkEngine:
 
         applied = 0
         for entity in self.by_type.get(rule.on_type, []):
-            lookup_values = self._lookup_values_for(rule, entity)
+            lookup_values = self.lookup_values_for(rule, entity)
             if not lookup_values:
                 continue
 
-            matches = self._find_unique_matches(candidates_by_value, lookup_values)
+            matches = self.find_unique_matches(candidates_by_value, lookup_values)
             if not matches:
                 continue
 
             if rule.ref_id_template:
                 refs = []
                 for m in matches:
-                    ref_id = _render_ref_id(rule.ref_id_template, m)
+                    ref_id = render_ref_id(rule.ref_id_template, m)
                     if ref_id is None:
                         logger.warning(
                             "Rule %s.%s: ref_id_template %r could not be rendered for candidate %r; skipping",
@@ -428,7 +428,7 @@ class LinkEngine:
         )
 
     @staticmethod
-    def _lookup_values_for(rule: LinkRule, entity: SchemaOrgBase) -> list:
+    def lookup_values_for(rule: LinkRule, entity: SchemaOrgBase) -> list:
         """Compute the lookup value(s) for ``rule`` against ``entity``.
 
         Returns ``[match_literal]`` when the rule carries a constant, otherwise
@@ -440,7 +440,7 @@ class LinkEngine:
         return select_values(entity, rule.match_value)
 
     @staticmethod
-    def _find_unique_matches(
+    def find_unique_matches(
         candidates_by_value: dict[str, list[SchemaOrgBase]],
         lookup_values: list,
     ) -> list[SchemaOrgBase]:
@@ -453,9 +453,9 @@ class LinkEngine:
         Parameters
         ----------
         candidates_by_value : dict[str, list[SchemaOrgBase]]
-            Index built by ``_build_candidates_by_value``.
+            Index built by ``build_candidates_by_value``.
         lookup_values : list
-            Values to look up, as returned by ``_lookup_values_for``.
+            Values to look up, as returned by ``lookup_values_for``.
 
         Returns
         -------
@@ -464,7 +464,7 @@ class LinkEngine:
         """
         matches_by_id: dict[str, SchemaOrgBase] = {}
         for value in lookup_values:
-            key = _to_lookup_key(value)
+            key = to_lookup_key(value)
             if key is None:
                 continue
             for candidate in candidates_by_value.get(key, []):
@@ -474,7 +474,7 @@ class LinkEngine:
 
     # --- Phase 3 — write ----------------------------------------------------
 
-    def _write_entities(self) -> None:
+    def write_entities(self) -> None:
         """Export each loaded entity through the unified ``load_to_jsonld`` helper.
 
         Entities whose ``@type`` appears in ``config.drop_types`` are skipped —
