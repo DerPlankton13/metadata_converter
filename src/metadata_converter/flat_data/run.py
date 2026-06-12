@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 CollectedRef = tuple[CrossSheetRef, str, list[str]]
 
 
-def ingest_flat_data(config: FlatDataConfig) -> None:
+def flat_data_etl(config: FlatDataConfig) -> None:
     """A wrapper to handle dict and single file input paths"""
     logger.info("Starting flat-data workflow")
     file_path = config.extractor.file_path

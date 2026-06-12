@@ -12,7 +12,8 @@ from metadata_converter.config import (
     FlatDataConfig,
     UpliftingConfig,
 )
-from metadata_converter.flat_data.run import ingest_flat_data, uplift_flat_data
+from metadata_converter.flat_data.run import flat_data_etl
+from metadata_converter.flat_data.uplifting import uplift_flat_data
 from metadata_converter.parse import parse_cli
 from metadata_converter.utils.log_setup import setup_logging
 
@@ -29,7 +30,7 @@ def main():
         case ("fetch", ApiFetchingConfig()):
             fetch_api_data(config)
         case ("ingest", FlatDataConfig()):
-            ingest_flat_data(config)
+            flat_data_etl(config)
         case ("ingest", BiosamplesConfig()):
             ingest_biosamples(config)
         case ("ingest", ApiFetchingConfig()):
