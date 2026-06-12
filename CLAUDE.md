@@ -109,7 +109,7 @@ The tool converts metadata from various sources into JSON-LD files conforming to
 `source_type` in its TOML config, and the CLI phase (`fetch`, `ingest`, `uplift`) selects the step to execute.
 There are three source types plus a separate uplift config:
 
-- **`flat_data`** — reads tabular data (Excel/CSV), cleans it, and maps columns to schema.org types via a `mapping` dict
+- **`flat_data`** — reads tabular data from Excel, cleans it, and maps columns to schema.org types via a `mapping` dict
   in the config. Optional cleaning plugins (Python files in a `plugin_dir`) hook into the cleaning step.
 - **`biosamples`** — fetches structured (`.ldjson`) and unstructured (`.json`) metadata from EBI BioSamples, fuses them
   to add units, then optionally "uplifts" the raw records into `Product` + `Action` JSON-LD pairs.

@@ -13,7 +13,7 @@ src/metadata_converter/
 ├── main.py                      # CLI entry point — dispatches on (phase, source_type)
 ├── parse.py                     # CLI argument parsing (phase + config path)
 ├── load.py                      # load_to_jsonld: serialise SchemaOrgBase → file
-├── extract.py                   # Tabular file extraction (Excel, CSV)
+├── extract.py                   # Tabular file extraction (Excel)
 ├── http.py                      # make_session: shared HTTP session factory
 ├── io.py                        # write_json: atomic JSON file writer
 ├── log_setup.py                 # setup_logging + _log_validation_error helper

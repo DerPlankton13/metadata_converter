@@ -115,12 +115,12 @@ validation has no side effects. If removed: drop the `plugin_dir` /
 `plugin_name` / `plugins` fields, `CleaningPlugin` ABC, and `load_plugins()`.
 
 ### Document the implicit coupling in `extract.py`
-`src/metadata_converter/extract.py:extract_csv` and `extract_excel` use
-`config.model_dump(exclude={"type", "file_path"})` and pass the result as
-kwargs to pandas. Any field added to `ExcelExtractorConfig` /
-`CsvExtractorConfig` that pandas does not accept will break extraction at
-runtime. Either document this constraint clearly (in the docstring on
-`ExtractorConfigBase`) or spell out the supported pandas kwargs explicitly.
+`src/metadata_converter/extract.py:extract_data` uses
+`config.model_dump(exclude={"file_path"})` and passes the result as kwargs to
+`pd.read_excel`. Any field added to `ExcelExtractorConfig` that pandas does
+not accept will break extraction at runtime. Either document this constraint
+clearly (in the docstring on `ExcelExtractorConfig`) or spell out the
+supported pandas kwargs explicitly.
 
 ### Audit `flat_data/transform_helpers.py` for dead code
 `combine_columns` (the helper version, not the `transform.py` one) and

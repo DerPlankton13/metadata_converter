@@ -50,7 +50,7 @@ config selects the workflow. Add `--log-level debug` for verbose output.
 
 | `workflow_type` | Phases | Description |
 |---|---|---|
-| `flat_data` | `ingest` | Reads Excel/CSV, maps columns to schema.org types |
+| `flat_data` | `ingest` | Reads Excel, maps columns to schema.org types |
 | `biosamples` | `fetch`, `ingest` | Fetches and uplifts EBI BioSamples records |
 | `metadata_collector` | `fetch`, `ingest` | Queries external APIs (Zenodo, etc.) |
 | `uplifting` | `uplift` | Resolves cross-references between ingested JSON-LD files |

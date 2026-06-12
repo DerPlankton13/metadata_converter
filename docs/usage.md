@@ -69,7 +69,7 @@ Consequences to keep in mind:
 
 ## Source type: `flat_data`
 
-Reads tabular data (Excel or CSV), cleans it, maps columns to schema.org types,
+Reads tabular data from Excel, cleans it, maps columns to schema.org types,
 and writes one JSON-LD file per entity.
 
 ### Minimal config
@@ -78,7 +78,6 @@ and writes one JSON-LD file per entity.
 source_type = "flat_data"
 
 [extractor]
-type       = "excel"
 file_path  = "data/raw/input.xlsx"
 sheet_name = ["author", "dataset"]
 header     = 0
