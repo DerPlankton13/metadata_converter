@@ -7,9 +7,9 @@ from tqdm import tqdm
 from metadata_converter import get_schema
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.config import ApiFetchingConfig
-from metadata_converter.io import write_json
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.log_setup import _log_validation_error
+from metadata_converter.utils.io import write_json
+from metadata_converter.utils.log_setup import _log_validation_error
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +21,9 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
     fetched_path.mkdir(parents=True, exist_ok=True)
 
     records = query_source(config.extractor)
-    logger.info("Found %d record(s), fetching JSON-LD to %s", len(records), fetched_path)
+    logger.info(
+        "Found %d record(s), fetching JSON-LD to %s", len(records), fetched_path
+    )
 
     for record in tqdm(records, desc="Fetching records", unit="rec", file=sys.stdout):
         logger.debug("Fetching %s", record.doi)
@@ -43,7 +45,9 @@ def ingest_api_data(config: ApiFetchingConfig) -> None:
     config.output.ingested.mkdir(parents=True, exist_ok=True)
 
     failures = 0
-    for fetched_file in tqdm(fetched_files, desc="Ingesting records", unit="rec", file=sys.stdout):
+    for fetched_file in tqdm(
+        fetched_files, desc="Ingesting records", unit="rec", file=sys.stdout
+    ):
         try:
             with fetched_file.open() as f:
                 jsonld = json.load(f)

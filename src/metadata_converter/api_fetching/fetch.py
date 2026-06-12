@@ -82,7 +82,7 @@ from pydantic import BaseModel
 
 from metadata_converter.api_fetching.query_models import Query, QueryGroup, QueryTerm
 from metadata_converter.config import ApiExtractorConfig
-from metadata_converter.http import make_session
+from metadata_converter.utils.http import make_session
 
 logger = logging.getLogger(__name__)
 
@@ -120,7 +120,6 @@ class Record(BaseModel):
 # ---------------------------------------------------------------------------
 # HTTP helpers
 # ---------------------------------------------------------------------------
-
 
 
 def _checked(fn):
@@ -251,7 +250,9 @@ def _query_zenodo(
     _parse(data["hits"]["hits"])
     while len(records) < total:
         params["page"] += 1
-        logger.debug("Fetching page %d (%d/%d) ...", params["page"], len(records), total)
+        logger.debug(
+            "Fetching page %d (%d/%d) ...", params["page"], len(records), total
+        )
         time.sleep(config.request_delay)
         _parse(
             _get(session, config.api_url, config, params=params).json()["hits"]["hits"]
@@ -292,7 +293,9 @@ def _query_datacite(
     _parse(data["data"])
     while len(records) < total:
         params["page[number]"] += 1
-        logger.debug("Fetching page %d (%d/%d) ...", params["page[number]"], len(records), total)
+        logger.debug(
+            "Fetching page %d (%d/%d) ...", params["page[number]"], len(records), total
+        )
         time.sleep(config.request_delay)
         _parse(_get(session, config.api_url, config, params=params).json()["data"])
 

@@ -44,12 +44,12 @@ from pydantic import BaseModel, ValidationError
 
 from metadata_converter.config import FlatDataUpliftConfig, LinkRule
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.log_setup import _log_validation_error
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (
     PropertyValue,
     SchemaOrgBase,
 )
+from metadata_converter.utils.log_setup import _log_validation_error
 
 logger = logging.getLogger(__name__)
 

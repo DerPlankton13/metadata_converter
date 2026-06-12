@@ -11,15 +11,15 @@ from tqdm import tqdm
 from metadata_converter.biosamples.fetch import fuse_metadata, get_metadata
 from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourcePaths
-from metadata_converter.http import make_session
-from metadata_converter.io import write_json
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.log_setup import _log_validation_error
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
     Product,
     make_strict,
 )
+from metadata_converter.utils.http import make_session
+from metadata_converter.utils.io import write_json
+from metadata_converter.utils.log_setup import _log_validation_error
 
 logger = logging.getLogger(__name__)
 

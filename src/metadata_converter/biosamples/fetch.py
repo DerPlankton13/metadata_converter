@@ -3,7 +3,7 @@ from pathlib import Path
 
 import requests
 
-from metadata_converter.io import write_json
+from metadata_converter.utils.io import write_json
 
 
 def fetch_metadata(url: str, session: requests.Session) -> dict:

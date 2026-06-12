@@ -1,7 +1,7 @@
 from pathlib import Path
 
-from metadata_converter.io import write_json
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
+from metadata_converter.utils.io import write_json
 
 
 def load_to_jsonld(schema: SchemaOrgBase, output_path: Path) -> None:

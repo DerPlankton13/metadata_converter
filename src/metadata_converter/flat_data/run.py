@@ -3,8 +3,12 @@ from pathlib import Path
 
 import pandas as pd
 
-from metadata_converter.config import CrossSheetRef, FlatDataConfig, FlatDataUpliftConfig
-from metadata_converter.extract import extract_data
+from metadata_converter.config import (
+    CrossSheetRef,
+    FlatDataConfig,
+    FlatDataUpliftConfig,
+)
+from metadata_converter.flat_data.extract import extract_data
 from metadata_converter.flat_data.schema_builder import extract_schemas
 from metadata_converter.flat_data.transform import (
     add_combined_columns,
@@ -129,9 +133,7 @@ def _inject_cross_refs(
     return results
 
 
-def write_schemas(
-    results: dict[str, list[SchemaOrgBase]], output_path: Path
-) -> None:
+def write_schemas(results: dict[str, list[SchemaOrgBase]], output_path: Path) -> None:
     """Flatten all built schemas and write each to its own JSON-LD file."""
     schemas = [s for schemas in results.values() for s in schemas]
     logger.info("Writing %d JSON-LD file(s) to %s", len(schemas), output_path)

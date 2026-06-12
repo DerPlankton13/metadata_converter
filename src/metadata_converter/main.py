@@ -13,8 +13,8 @@ from metadata_converter.config import (
     UpliftingConfig,
 )
 from metadata_converter.flat_data.run import ingest_flat_data, uplift_flat_data
-from metadata_converter.log_setup import setup_logging
 from metadata_converter.parse import parse_cli
+from metadata_converter.utils.log_setup import setup_logging
 
 logger = logging.getLogger(__name__)
 
