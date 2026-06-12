@@ -1,4 +1,5 @@
 """Build schema.org Pydantic models from long-format entity dicts."""
+
 import logging
 from typing import Any
 
@@ -25,6 +26,28 @@ def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrg
     return schemas
 
 
+def _build_schema(
+    entity: dict[str, Any], mapping: dict, nested: bool = False
+) -> list[SchemaOrgBase]:
+    """Build schema.org objects for one entity row, recursing into nested mapping values."""
+    schema_type = mapping.get("type")
+    if not schema_type:
+        raise ValueError(
+            f"Missing 'type' in {'nested ' if nested else ''}mapping: {mapping!r}"
+        )
+
+    props = extract_properties(
+        entity, {k: v for k, v in mapping.items() if k != "type"}
+    )
+    if not props:
+        return []
+
+    rows = _split_properties(props) if nested and _is_multi_instance(props) else [props]
+    return [
+        s for s in (_instantiate_schema(schema_type, r) for r in rows) if s is not None
+    ]
+
+
 def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
     """Resolve a mapping against one entity dict to produce schema property values.
 
@@ -35,7 +58,7 @@ def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
     for prop, value in mapping.items():
         if isinstance(value, str):
             if value.startswith("Literal:"):
-                schema_properties[prop] = value[len("Literal:"):]
+                schema_properties[prop] = value[len("Literal:") :]
                 continue
             var = _get_field_value(entity, value)
             if var is not None:
@@ -56,23 +79,9 @@ def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
     return schema_properties
 
 
-def _build_schema(
-    entity: dict[str, Any], mapping: dict, nested: bool = False
-) -> list[SchemaOrgBase]:
-    """Build schema.org objects for one entity row, recursing into nested mapping values."""
-    schema_type = mapping.get("type")
-    if not schema_type:
-        raise ValueError(f"Missing 'type' in {'nested ' if nested else ''}mapping: {mapping!r}")
-
-    props = extract_properties(entity, {k: v for k, v in mapping.items() if k != "type"})
-    if not props:
-        return []
-
-    rows = _split_properties(props) if nested and _is_multi_instance(props) else [props]
-    return [s for s in (_instantiate_schema(schema_type, r) for r in rows) if s is not None]
-
-
-def _instantiate_schema(schema_type: str, schema_properties: dict) -> SchemaOrgBase | None:
+def _instantiate_schema(
+    schema_type: str, schema_properties: dict
+) -> SchemaOrgBase | None:
     """Instantiate a schema.org Pydantic model; log and return None on ValidationError."""
     try:
         return get_schema(schema_type)(**schema_properties)
@@ -80,7 +89,10 @@ def _instantiate_schema(schema_type: str, schema_properties: dict) -> SchemaOrgB
         for err in e.errors():
             logger.warning(
                 "Could not create %s: %s at %s (input: %s)",
-                schema_type, err["msg"], err["loc"], err.get("input"),
+                schema_type,
+                err["msg"],
+                err["loc"],
+                err.get("input"),
             )
         logger.debug("Properties provided: %s", schema_properties)
         return None

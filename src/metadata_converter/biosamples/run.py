@@ -19,7 +19,7 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 )
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.io import write_json
-from metadata_converter.utils.log_setup import _log_validation_error
+from metadata_converter.utils.log_setup import log_validation_error
 
 logger = logging.getLogger(__name__)
 
@@ -190,7 +190,9 @@ def uplift_biosamples(config: SourcePaths):
     config.output_path.mkdir(parents=True, exist_ok=True)
 
     failures = 0
-    for path in tqdm(files, desc="Uplifting biosamples", unit="sample", file=sys.stdout):
+    for path in tqdm(
+        files, desc="Uplifting biosamples", unit="sample", file=sys.stdout
+    ):
         with path.open() as f:
             data = json.load(f)
         try:
@@ -209,10 +211,10 @@ def uplift_biosamples(config: SourcePaths):
                 logger.warning(
                     "Strict validation failed for Product from %s", path.name
                 )
-                _log_validation_error(e, logger, level="warning")
+                log_validation_error(e, logger, level="warning")
         except ValidationError as e:
             logger.error("Failed to build Product for %s.", path.name)
-            _log_validation_error(e, logger)
+            log_validation_error(e, logger)
             failures += 1
         try:
             action = Action(**action_dict)
@@ -221,17 +223,18 @@ def uplift_biosamples(config: SourcePaths):
                 make_strict(Action).model_validate(action_dict)
             except ValidationError as e:
                 logger.warning("Strict validation failed for Action from %s", path.name)
-                _log_validation_error(e, logger, level="warning")
+                log_validation_error(e, logger, level="warning")
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)
-            _log_validation_error(e, logger)
+            log_validation_error(e, logger)
             failures += 1
 
     if failures:
         logger.warning(
             "Biosamples uplift completed with %d failure(s) out of %d sample(s) — "
             "check the log for details",
-            failures, len(files),
+            failures,
+            len(files),
         )
     else:
         logger.info("Biosamples uplift complete. Output: %s", config.output_path)

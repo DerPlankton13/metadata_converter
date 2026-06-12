@@ -49,7 +49,7 @@ from metadata_converter.schema_org_models.schemaorg_models import (
     PropertyValue,
     SchemaOrgBase,
 )
-from metadata_converter.utils.log_setup import _log_validation_error
+from metadata_converter.utils.log_setup import log_validation_error
 
 logger = logging.getLogger(__name__)
 
@@ -168,11 +168,11 @@ def _render_ref_id(template: str, candidate: SchemaOrgBase) -> str | None:
     Returns ``None`` when any placeholder cannot be resolved on ``candidate``.
     """
     result = template
-    for prop in re.findall(r'\{(\w+)\}', template):
+    for prop in re.findall(r"\{(\w+)\}", template):
         values = select_values(candidate, prop)
         if not values:
             return None
-        result = result.replace(f'{{{prop}}}', str(values[0]))
+        result = result.replace(f"{{{prop}}}", str(values[0]))
     return result
 
 
@@ -228,7 +228,7 @@ def _load_as_model(data: dict, source: str) -> SchemaOrgBase | None:
         logger.warning(
             "%s: Pydantic validation failed for @type %r", source, entity_type
         )
-        _log_validation_error(e, logger, level="warning")
+        log_validation_error(e, logger, level="warning")
         return None
 
 
@@ -386,7 +386,10 @@ class LinkEngine:
                     if ref_id is None:
                         logger.warning(
                             "Rule %s.%s: ref_id_template %r could not be rendered for candidate %r; skipping",
-                            rule.on_type, rule.target_property, rule.ref_id_template, m.id,
+                            rule.on_type,
+                            rule.target_property,
+                            rule.ref_id_template,
+                            m.id,
                         )
                         continue
                     refs.append(target_cls(id=ref_id))
@@ -404,7 +407,10 @@ class LinkEngine:
             except ValidationError as e:
                 logger.warning(
                     "Rule %s.%s: assignment failed for entity %r — %s",
-                    rule.on_type, rule.target_property, entity.id, e,
+                    rule.on_type,
+                    rule.target_property,
+                    entity.id,
+                    e,
                 )
                 continue
             applied += 1

@@ -9,7 +9,7 @@ from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.config import ApiFetchingConfig
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.io import write_json
-from metadata_converter.utils.log_setup import _log_validation_error
+from metadata_converter.utils.log_setup import log_validation_error
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +56,7 @@ def ingest_api_data(config: ApiFetchingConfig) -> None:
             load_to_jsonld(schema, output_path=config.output.ingested)
         except Exception as e:
             logger.error("Failed to ingest %s", fetched_file.name)
-            _log_validation_error(e, logger)
+            log_validation_error(e, logger)
             failures += 1
 
     if failures:

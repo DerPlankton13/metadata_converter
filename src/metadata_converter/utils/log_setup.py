@@ -24,7 +24,7 @@ def setup_logging(level: int = logging.INFO) -> None:
     root.addHandler(stderr_handler)
 
 
-def _log_validation_error(
+def log_validation_error(
     error: ValidationError,
     logger: logging.Logger,
     level: str = "error",
