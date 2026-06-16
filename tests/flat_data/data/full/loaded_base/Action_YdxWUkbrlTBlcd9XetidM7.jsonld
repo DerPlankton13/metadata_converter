@@ -4,6 +4,7 @@
   },
   "@type": "Action",
   "@id": "Action_YdxWUkbrlTBlcd9XetidM7.jsonld",
+  "description": "description method 1",
   "name": "Metabarcodes from Helgoland Samples",
   "identifier": "Metabarcoding",
   "agent": [

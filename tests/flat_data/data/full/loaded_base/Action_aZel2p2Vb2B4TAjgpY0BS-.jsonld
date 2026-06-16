@@ -4,6 +4,7 @@
   },
   "@type": "Action",
   "@id": "Action_aZel2p2Vb2B4TAjgpY0BS-.jsonld",
+  "description": "description method 2",
   "name": "Images from Helgoland Samples",
   "identifier": "Imaging",
   "agent": {

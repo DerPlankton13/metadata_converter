@@ -3,7 +3,7 @@
     "@vocab": "https://schema.org/"
   },
   "@type": "Dataset",
-  "@id": "Dataset_Si6o5hZTY2z6aUgSSc131M.jsonld",
+  "@id": "Dataset_rB6_5DDUl6KF5nh2vetiM9.jsonld",
   "additionalProperty": [
     {
       "@type": "PropertyValue",
@@ -14,9 +14,5 @@
   "description": "file description 3",
   "name": "file3.fastq.gz",
   "encodingFormat": "fastq",
-  "comment": "file comment 3",
-  "about": {
-    "@type": "Product",
-    "identifier": "SAMEA118673815"
-  }
+  "comment": "file comment 3"
 }
