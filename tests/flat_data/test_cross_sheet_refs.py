@@ -1,10 +1,12 @@
 """Tests for the flat_data cross-sheet reference pipeline.
 
-Covers collect_cross_ref_ids (wide-format DataFrame access) and inject_cross_refs
-(schema object manipulation) in isolation so the full Excel-file pipeline is not needed.
+Covers to_lookup_key (canonical-string normalisation), collect_cross_ref_ids
+(wide-format DataFrame access), and inject_cross_refs (schema object manipulation)
+in isolation so the full Excel-file pipeline is not needed.
 """
 
 import pandas as pd
+import pytest
 
 from metadata_converter.config import (
     CleaningConfig,
@@ -16,8 +18,30 @@ from metadata_converter.config import (
 from metadata_converter.flat_data.transform.cross_sheet_refs import (
     collect_cross_ref_ids,
     inject_cross_refs,
+    to_lookup_key,
 )
 from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, Person
+
+
+# ---------------------------------------------------------------------------
+# to_lookup_key
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        pytest.param(1, "1", id="int"),
+        pytest.param(" Hello ", "hello", id="strip-and-lowercase"),
+        pytest.param(True, "true", id="bool-true"),
+        pytest.param(False, "false", id="bool-false"),
+        pytest.param(None, None, id="none"),
+        pytest.param(1.0, "1", id="integer-valued-float-collapses"),
+        pytest.param(2.5, "2.5", id="non-integer-float"),
+    ],
+)
+def test_to_lookup_key_normalises_to_canonical_string(value, expected):
+    assert to_lookup_key(value) == expected
 
 # ---------------------------------------------------------------------------
 # Helpers
