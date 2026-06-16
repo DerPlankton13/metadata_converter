@@ -16,7 +16,10 @@ from pydantic import (
 )
 
 from metadata_converter.api_fetching.query_models import Query
-from metadata_converter.flat_data.transform.cleaning_plugin import CleaningPlugin, load_plugins
+from metadata_converter.flat_data.transform.cleaning_plugin import (
+    CleaningPlugin,
+    load_plugins,
+)
 
 # ---------------------------------------------------------------------------
 # flat_data
@@ -267,15 +270,15 @@ class OutputConfig(BaseModel):
     """Output config for sources with no fetch phase (flat_data)."""
 
     model_config = ConfigDict(extra="forbid")
-    ingested: Path
+    loaded_base: Path
 
 
 class FetchedOutputConfig(BaseModel):
     """Output config for sources with a fetch phase (biosamples, api)."""
 
     model_config = ConfigDict(extra="forbid")
-    fetched: Path
-    ingested: Path
+    input: Path
+    loaded_base: Path
 
 
 # ---------------------------------------------------------------------------

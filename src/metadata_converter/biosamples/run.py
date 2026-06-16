@@ -92,7 +92,7 @@ def fetch_biosamples(config: BiosamplesConfig):
         logger.warning("No sample IDs found across all files")
         return
 
-    fetched_path = config.output.fetched
+    fetched_path = config.output.input
     fetched_path.mkdir(parents=True, exist_ok=True)
 
     already_fetched = {
@@ -144,10 +144,10 @@ def fetch_biosamples(config: BiosamplesConfig):
 def ingest_biosamples(config: BiosamplesConfig):
     logger.info("Starting biosamples ingest")
 
-    fetched_path = config.output.fetched
+    fetched_path = config.output.input
     ldjson_files = list(fetched_path.glob("*.ldjson"))
     logger.info("Found %d fetched sample(s) in %s", len(ldjson_files), fetched_path)
-    config.output.ingested.mkdir(parents=True, exist_ok=True)
+    config.output.loaded_base.mkdir(parents=True, exist_ok=True)
 
     failures = 0
     for ldjson_path in tqdm(
@@ -172,14 +172,14 @@ def ingest_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
-        write_json(fused, config.output.ingested / f"{sample_id}.jsonld")
+        write_json(fused, config.output.loaded_base / f"{sample_id}.jsonld")
 
     if failures:
         raise RuntimeError(
             f"{failures} of {len(ldjson_files)} sample(s) failed to ingest — "
             "check the log for details"
         )
-    logger.info("Biosamples ingest complete. Output: %s", config.output.ingested)
+    logger.info("Biosamples ingest complete. Output: %s", config.output.loaded_base)
 
 
 def uplift_biosamples(config: SourcePaths):

@@ -22,7 +22,6 @@ from metadata_converter.flat_data.transform.cross_sheet_refs import (
 )
 from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, Person
 
-
 # ---------------------------------------------------------------------------
 # to_lookup_key
 # ---------------------------------------------------------------------------
@@ -43,6 +42,7 @@ from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, P
 def test_to_lookup_key_normalises_to_canonical_string(value, expected):
     assert to_lookup_key(value) == expected
 
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -56,7 +56,7 @@ def make_config(tmp_path, cross_sheet_refs: list[CrossSheetRef]) -> FlatDataConf
             sheet_name=["author", "dataset"],
         ),
         cleaning=CleaningConfig(),
-        output=OutputConfig(ingested=tmp_path / "out"),
+        output=OutputConfig(loaded_base=tmp_path / "out"),
         mapping={
             "author": {"type": "Person"},
             "dataset": {"type": "DataCatalog"},

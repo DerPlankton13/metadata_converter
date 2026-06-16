@@ -39,12 +39,12 @@ def single_etl(config: FlatDataConfig, file_path: Path) -> None:
     logger.info("Ingesting %s", file_path.name)
     data = extract_data(config, file_path=file_path)
     data = clean(data, config)
-    data = add_columns(data, config)
+    data = add_columns(data, config, file_path)
     refs = collect_cross_ref_ids(data, config)
     data = reshape(data, config)
     schemas = build_schemas(data, config)
     schemas = inject_cross_refs(schemas, refs)
-    write_schemas(schemas, config.output.ingested)
+    write_schemas(schemas, config.output.loaded_base)
 
 
 def write_schemas(
