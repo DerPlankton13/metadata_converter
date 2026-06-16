@@ -1,0 +1,31 @@
+# Ingest config for the minimal flat_data integration-test scenario.
+# Paths below are placeholders — the test overrides them with tmp_path locations.
+source_type = "flat_data"
+
+[extractor]
+file_path = "input.xlsx"
+sheet_name = ["author", "dataset"]
+header = 0
+
+[cleaning]
+
+[output]
+loaded_base = "loaded_base"
+
+[mapping.author]
+type = "Person"
+id = "@id"
+name = "author:name"
+
+[mapping.dataset]
+type = "DataCatalog"
+id = "@id"
+name = "dataset:title"
+description = "dataset:description"
+
+[[cross_sheet_refs]]
+on_sheet = "dataset"
+property = "creator"
+from_sheet = "author"
+filter_column = "author:is-dataset-author"
+filter_value = 1
