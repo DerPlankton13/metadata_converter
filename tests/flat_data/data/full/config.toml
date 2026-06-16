@@ -1,0 +1,116 @@
+source_type = "flat_data"
+
+# Update file_path to the actual Excel filename placed in data/raw/datahub/
+[extractor]
+file_path = "input.xlsx"
+sheet_name = ["dataset", "author", "analysis", "sample", "file"]
+header = 0
+
+[cleaning]
+strip_header_whitespace = true
+strip_cell_whitespace = true
+sentinels_to_na = false
+placeholders_to_na = false
+
+[output]
+loaded_base = "loaded_base"
+
+# Columns to create by concatenating existing columns with a space.
+[combined_columns.author]
+name = ["author:first-name", "author:last-name"]
+
+# Multi-value cells are split into separate rows before schema building.
+[split_fields]
+analysis = ["analysis:author-pid"]
+dataset = ["dataset:keywords"]
+file = ["file:analysis", "file:sample"]
+
+# Cross-sheet references resolved at ingest time, scoped to this source file.
+# These handle relationships where there is no join key — the implicit link is
+# that all entities come from the same Excel file.
+
+# Persons flagged as dataset authors → DataCatalog.creator
+[[cross_sheet_refs]]
+on_sheet = "dataset"
+property = "creator"
+from_sheet = "author"
+filter_column = "author:is-dataset-author"
+filter_value = 1
+
+# All file Datasets → DataCatalog.dataset
+[[cross_sheet_refs]]
+on_sheet = "dataset"
+property = "dataset"
+from_sheet = "file"
+
+[mapping]
+[mapping.author]
+type = "Person"
+id = "@id"
+name = "name"
+givenName = "author:first-name"
+familyName = "author:last-name"
+email = "author:email"
+identifier.type = "Orcid"
+identifier.value = "author:pid"
+affiliation.type = "Organization"
+affiliation.name = "author:affiliation"
+
+# Flag used at ingest (cross_sheet_refs) to populate DataCatalog.creator with this Person.
+[[mapping.author.additionalProperty]]
+type = "PropertyValue"
+name = "Literal:author:is-dataset-author"
+value = "author:is-dataset-author"
+
+[mapping.dataset]
+type = "DataCatalog"
+id = "@id"
+name = "dataset:title"
+abstract = "dataset:description"
+identifier = "dataset:pid"
+dateCreated = "dataset:date-first-created"
+dateModified = "dataset:date-last-updated"
+datePublished = "dataset:date-public"
+inLanguage = "dataset:language"
+license = "dataset:license"
+keywords = "dataset:keywords"
+
+[mapping.analysis]
+type = "Action"
+id = "@id"
+name = "analysis:title"
+identifier = "analysis:pid"
+description = "analysis:description"
+agent.type = "Person"
+agent.identifier = "analysis:author-pid"   # forward: uplift resolves to Person @id
+# object: filled at uplift from Product stubs (reverse via sample:analysis-pid)
+# result: filled at uplift from file Datasets (reverse via file:analysis)
+
+[mapping.sample]
+type = "Product"
+id = "@id"
+identifier = "sample:pid"
+
+# Reverse-lookup key — uplift uses this to populate Action.object.
+[[mapping.sample.additionalProperty]]
+type = "PropertyValue"
+name = "Literal:sample:analysis-pid"
+value = "sample:analysis-pid"
+
+[mapping.file]
+type = "Dataset"
+id = "@id"
+name = "file:name"
+url = "file:url"
+encodingFormat = "file:format"
+description = "file:description"
+comment = "file:comment"
+about.type = "Product"
+about.identifier = "file:sample"            # forward: uplift resolves to Product_<pid>.jsonld
+
+# Reverse-lookup key — uplift uses this to populate Action.result AND to discriminate
+# file Datasets from the main Dataset.
+[[mapping.file.additionalProperty]]
+type = "PropertyValue"
+name = "Literal:file:analysis"
+value = "file:analysis"

@@ -1,0 +1,6 @@
+file:name,file:url,file:format,file:type,file:analysis,file:sample,file:description,file:comment
+file1.fastq.gz,https://example.com/file1,fastq,raw,Metabarcoding,SAMEA118673891,file description 1,file comment 1
+file2.png,,png,processed,Imaging,SAMEA118673891,file description 2,file comment 2
+file3.fastq.gz,,fastq,raw,Metabarcoding,"",file description 3,file comment 3
+file4.png,https://example.com/file4,png,processed,"",SAMEA118673815,file description 4,file comment 4
+file5.xyz,,xyz,processed,"Metabarcoding, Imaging","SAMEA118673891, SAMEA118673815",file description 5,file comment 5
