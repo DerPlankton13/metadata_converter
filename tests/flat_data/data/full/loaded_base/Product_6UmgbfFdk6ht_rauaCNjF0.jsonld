@@ -1,0 +1,15 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Product",
+  "@id": "Product_6UmgbfFdk6ht_rauaCNjF0.jsonld",
+  "additionalProperty": [
+    {
+      "@type": "PropertyValue",
+      "name": "sample:analysis-pid",
+      "value": "Imaging"
+    }
+  ],
+  "identifier": "SAMEA118673815"
+}

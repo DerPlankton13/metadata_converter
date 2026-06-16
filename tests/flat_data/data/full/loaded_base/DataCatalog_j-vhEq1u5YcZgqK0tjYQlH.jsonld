@@ -1,0 +1,45 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "DataCatalog",
+  "@id": "DataCatalog_j-vhEq1u5YcZgqK0tjYQlH.jsonld",
+  "name": "Helgoland Sediment Collection",
+  "dateCreated": "2026-06-16",
+  "license": "MIT",
+  "creator": [
+    {
+      "@type": "Person",
+      "@id": "Person_eO5j5Fw4jJgY77YD5B2Bp3.jsonld"
+    },
+    {
+      "@type": "Person",
+      "@id": "Person_K5wlCRfqw97XI27QWkbJlM.jsonld"
+    }
+  ],
+  "keywords": [
+    "sediment",
+    "DNA",
+    "plankton"
+  ],
+  "inLanguage": "en",
+  "abstract": "This dataset was collected from sediment samples taken before Helgoland.",
+  "dataset": [
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_886LGaLyMRe4bTUUpiVrVn.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_zhfzWo9Gs7S9Z_oMh9Tn6-.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_Si6o5hZTY2z6aUgSSc131M.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_KPIOeoBPfjV-6sFkm2pxLa.jsonld"
+    }
+  ]
+}

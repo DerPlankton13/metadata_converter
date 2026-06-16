@@ -1,0 +1,23 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Dataset",
+  "@id": "Dataset_KPIOeoBPfjV-6sFkm2pxLa.jsonld",
+  "additionalProperty": [
+    {
+      "@type": "PropertyValue",
+      "name": "file:analysis",
+      "value": "Imaging"
+    }
+  ],
+  "description": "file description 4",
+  "url": "https://example.com/file4",
+  "name": "file4.png",
+  "encodingFormat": "png",
+  "comment": "file comment 4",
+  "about": {
+    "@type": "Product",
+    "identifier": "SAMEA118673815"
+  }
+}

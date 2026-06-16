@@ -1,0 +1,19 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Action",
+  "@id": "Action_YdxWUkbrlTBlcd9XetidM7.jsonld",
+  "name": "Metabarcodes from Helgoland Samples",
+  "identifier": "Metabarcoding",
+  "agent": [
+    {
+      "@type": "Person",
+      "identifier": "0000-0001-0002-1234"
+    },
+    {
+      "@type": "Person",
+      "identifier": "0000-0001-0004-1234"
+    }
+  ]
+}

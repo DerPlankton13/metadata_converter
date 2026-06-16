@@ -1,0 +1,13 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Action",
+  "@id": "Action_aZel2p2Vb2B4TAjgpY0BS-.jsonld",
+  "name": "Images from Helgoland Samples",
+  "identifier": "Imaging",
+  "agent": {
+    "@type": "Person",
+    "identifier": "0000-0001-0002-1234"
+  }
+}
