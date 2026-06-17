@@ -29,6 +29,7 @@ from metadata_converter.flat_data.transform.cleaning_plugin import (
 class FlatDataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["flat_data"] = "flat_data"
+    provenance_path: Path | None = None
     extractor: ExcelExtractorConfig
     cleaning: CleaningConfig
     output: OutputConfig
@@ -51,6 +52,7 @@ class FlatDataUpliftConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     input_path: Path
     output_path: Path
+    provenance_path: Path | None = None
     links: list[LinkRule] = Field(default_factory=list)
     drop_types: list[str] = Field(
         default_factory=list,
@@ -89,7 +91,9 @@ class CrossSheetRef(BaseModel):
     """Ingest-time cross-sheet reference: inject typed entity refs from one sheet into another."""
 
     model_config = ConfigDict(extra="forbid")
-    on_sheet: str = Field(description="Target sheet whose entities receive the reference.")
+    on_sheet: str = Field(
+        description="Target sheet whose entities receive the reference."
+    )
     property: str = Field(description="Property to set on each target entity.")
     from_sheet: str = Field(
         description=(
@@ -101,7 +105,9 @@ class CrossSheetRef(BaseModel):
         None,
         description="Source column to filter on. Omit to include all entities from from_sheet.",
     )
-    filter_value: Any = Field(None, description="Value to match (normalized string comparison).")
+    filter_value: Any = Field(
+        None, description="Value to match (normalized string comparison)."
+    )
 
 
 class LinkRule(BaseModel):
@@ -139,7 +145,9 @@ class LinkRule(BaseModel):
         if (self.match_value is None) == (self.match_literal is None):
             raise ValueError("exactly one of match_value or match_literal must be set")
         if (self.in_property is None) == (self.in_additional_property is None):
-            raise ValueError("exactly one of in_property or in_additional_property must be set")
+            raise ValueError(
+                "exactly one of in_property or in_additional_property must be set"
+            )
         return self
 
 
@@ -153,6 +161,7 @@ class BiosamplesConfig(BaseModel):
     source_type: Literal["biosamples"] = "biosamples"
     input: BiosamplesInput
     output: FetchedOutputConfig
+    provenance_path: Path | None = None
     max_workers: int = 10
     user_agent: str = "metadata-collector/1.0"
 
@@ -176,6 +185,7 @@ class ApiFetchingConfig(BaseModel):
     source_type: Literal["api"] = "api"
     extractor: ApiExtractorConfig
     output: FetchedOutputConfig
+    provenance_path: Path | None = None
 
 
 class ApiExtractorConfig(BaseModel):
@@ -200,7 +210,9 @@ class ApiExtractorConfig(BaseModel):
         25,
         description="Records per API page. 25 is safe for unauthenticated Zenodo requests.",
     )
-    request_delay: float = Field(0.5, description="Seconds to sleep between paginated requests.")
+    request_delay: float = Field(
+        0.5, description="Seconds to sleep between paginated requests."
+    )
     user_agent: str = Field(
         "metadata-collector/1.0",
         description="Value of the User-Agent header sent with every request.",
@@ -317,7 +329,9 @@ def handle_validation_error(e: ValidationError) -> None:
     raise SystemExit(1)
 
 
-def load_source_config(path: str) -> FlatDataConfig | ApiFetchingConfig | BiosamplesConfig:
+def load_source_config(
+    path: str,
+) -> FlatDataConfig | ApiFetchingConfig | BiosamplesConfig:
     """Load and validate a source config (flat_data, biosamples, or api) from a TOML file."""
     raw = load_toml(path)
     try:

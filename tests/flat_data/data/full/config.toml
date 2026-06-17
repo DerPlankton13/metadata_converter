@@ -1,4 +1,5 @@
 source_type = "flat_data"
+provenance_path = "provenance_test"
 
 # Update file_path to the actual Excel filename placed in data/raw/datahub/
 [extractor]
