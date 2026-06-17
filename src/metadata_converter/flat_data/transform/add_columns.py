@@ -26,7 +26,7 @@ def add_columns(
 
 
 def add_combined_columns(
-    df: pd.DataFrame, combines: dict[str, list[str]]
+    data: pd.DataFrame, combines: dict[str, list[str]]
 ) -> pd.DataFrame:
     """Append new columns by joining non-NA source columns with a space.
 
@@ -34,17 +34,19 @@ def add_combined_columns(
     ``{new_col: [sources]}``
     """
     for target_col, source_cols in combines.items():
-        combined = df[source_cols].apply(
+        combined = data[source_cols].apply(
             lambda row: " ".join(str(v) for v in row if pd.notna(v)),
             axis=1,
         )
-        df[target_col] = combined.replace("", pd.NA)
-    return df
+        data[target_col] = combined.replace("", pd.NA)
+    return data
 
 
 def add_id(data: pd.DataFrame, schema_type: str) -> pd.DataFrame:
     """Generate a content-hash-based ``@id`` for each row: ``<schema_type>_<hash>.jsonld``."""
-    data["@id"] = [f"{schema_type}_{row_hash(row)}.jsonld" for _, row in data.iterrows()]
+    data["@id"] = [
+        f"{schema_type}_{row_hash(row)}.jsonld" for _, row in data.iterrows()
+    ]
     return data
 
 
