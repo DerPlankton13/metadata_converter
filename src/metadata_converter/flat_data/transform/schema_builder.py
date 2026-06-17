@@ -1,6 +1,42 @@
-"""Build schema.org Pydantic models from long-format entity dicts."""
+"""Build schema.org Pydantic models from long-format entity data.
+
+The TOML mapping is polymorphic: an entry can be a constant, a column name,
+a nested object, or a list of nested objects. To keep "what the mapping
+declares" separate from "how we resolve a row against it", the mapping is
+parsed once into a typed **AST** ("Abstract Syntax Tree" — the compiler-style
+trick of representing structured input as a tree of typed objects where each
+node names exactly what kind of thing it is). Four dataclasses below —
+``Literal``, ``ColumnRef``, ``Nested``, ``Repeated`` — are the AST node types,
+one per kind of mapping entry. Per-entity evaluation then just dispatches on
+the typed node.
+
+Mapping AST
+-----------
+- ``Literal(value)``       — constant; emits ``value`` verbatim.
+- ``ColumnRef(name)``         — column lookup; emits the entity's value(s) for ``name``.
+- ``Nested(type, fields)`` — nested schema; emits a sub-object of class ``type``,
+                              with each field resolved by its own AST node.
+- ``Repeated(items)``      — repeated entries (TOML ``[[block]]``); each item is
+                              a ``Nested``; results are concatenated and the
+                              field always carries a list.
+
+Evaluation
+----------
+- ``build_root`` evaluates a top-level schema for one entity. Single instance,
+  no fan-out; multi-value leaves become list-valued properties. Literal-only
+  entities still emit (nothing to "fan out into" at the entry point).
+- ``build_nested`` evaluates a nested schema. Multi-value leaves drive fan-out
+  into N sub-objects; a schema with no row-derived data is dropped.
+
+Internal invariants
+-------------------
+- Every column value lives in a ``list`` inside the walker. Empty = missing.
+- Singleton lists collapse to scalars at field assignment for ``Nested``
+  sub-fields. ``Repeated`` sub-fields never collapse — list is their declared shape.
+"""
 
 import logging
+from dataclasses import dataclass
 from typing import Any
 
 import pandas as pd
@@ -12,177 +48,233 @@ from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 logger = logging.getLogger(__name__)
 
+LITERAL_PREFIX = "Literal:"
+
+
+# ---------------------------------------------------------------------------
+# Mapping AST: typed representation of the TOML mapping config
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Literal:
+    """Constant value to emit regardless of the row."""
+
+    value: str
+
+
+@dataclass(frozen=True)
+class ColumnRef:
+    """Reference to a column in the entity; emits the row's value(s)."""
+
+    name: str
+
+
+@dataclass
+class Nested:
+    """Nested schema: emit a sub-object of class ``type`` from these field mappings."""
+
+    type: str
+    fields: dict[str, "Node"]
+
+
+@dataclass
+class Repeated:
+    """Repeated schema entries (TOML ``[[block]]`` syntax); concatenated into a list."""
+
+    items: list[Nested]
+
+
+Node = Literal | ColumnRef | Nested | Repeated
+
+
+def parse_mapping(raw: Any) -> Node:
+    """Parse a raw TOML mapping fragment into a typed AST.
+
+    Malformed mappings raise here — once, at startup — instead of failing per
+    entity row when the data evaluation hits them.
+    """
+    if isinstance(raw, str):
+        if raw.startswith(LITERAL_PREFIX):
+            return Literal(value=raw[len(LITERAL_PREFIX) :])
+        return ColumnRef(name=raw)
+    if isinstance(raw, dict):
+        if "type" not in raw:
+            raise ValueError(f"Missing 'type' in mapping: {raw!r}")
+        return Nested(
+            type=raw["type"],
+            fields={k: parse_mapping(v) for k, v in raw.items() if k != "type"},
+        )
+    if isinstance(raw, list):
+        items: list[Nested] = []
+        for item in raw:
+            node = parse_mapping(item)
+            if not isinstance(node, Nested):
+                raise TypeError(f"Mapping list elements must be schemas; got {node!r}.")
+            items.append(node)
+        return Repeated(items=items)
+    raise TypeError(f"Unsupported mapping node: {raw!r}")
+
+
+# ---------------------------------------------------------------------------
+# Evaluation: walk the AST against per-entity data
+# ---------------------------------------------------------------------------
+
 
 def build_schemas(
     data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
 ) -> dict[str, list[SchemaOrgBase]]:
-    """Build schema.org objects from each sheet's long-format DataFrame."""
-    results = {}
-    for name, data in data_dict.items():
-        logger.info("Building schemas for sheet '%s'", name)
-        results[name] = extract_schemas(data, config.mapping[name])
+    """Build schema.org Pydantic models for every entity in every sheet."""
+    mappings = {sheet: parse_mapping(config.mapping[sheet]) for sheet in data_dict}
+    results: dict[str, list[SchemaOrgBase]] = {}
+    for sheet, df in data_dict.items():
+        logger.info("Building schemas for sheet '%s'", sheet)
+        results[sheet] = build_sheet(df, mappings[sheet])
     return results
 
 
-def extract_schemas(df: pd.DataFrame, mapping: dict[str, Any]) -> list[SchemaOrgBase]:
-    """Convert a long-format DataFrame into schema.org Pydantic model instances."""
-    schemas = []
-    groups = list(df.groupby("id"))
-    logger.info("Building schemas for %d record(s) ...", len(groups))
-    for _, entity in groups:
-        entity = entity.groupby("header")["value"].apply(list).to_dict()
-        result = build_schema(entity, mapping)
-        if result:
-            schemas.extend(result)
-    logger.info("Built %d schema(s) successfully", len(schemas))
+def build_sheet(df: pd.DataFrame, mapping: Nested) -> list[SchemaOrgBase]:
+    """Build one schema.org instance per entity in this sheet."""
+    schemas: list[SchemaOrgBase] = []
+    for _, group in df.groupby("id"):
+        row = pivot_row(group)
+        schemas.extend(build_root(mapping, row))
     return schemas
 
 
-def build_schema(
-    entity: dict[str, Any], mapping: dict, nested: bool = False
-) -> list[SchemaOrgBase]:
-    """Build schema.org instance(s) from one entity row according to ``mapping``.
+def pivot_row(group: pd.DataFrame) -> dict[str, list[Any]]:
+    """Pivot one entity's long-format slice into ``{column_name: [values...]}``."""
+    return group.groupby("header")["value"].apply(list).to_dict()
 
-    A mapping carries two kinds of property entries:
 
-    - **Literals** (``"Literal:<value>"`` strings) are constants — the substring
-      after the prefix is emitted verbatim regardless of the row.
-    - **Data entries** (column names, nested dicts, lists of dicts) pull values
-      from ``entity``.
+def build_root(mapping: Nested, row: dict[str, list[Any]]) -> list[SchemaOrgBase]:
+    """Evaluate a top-level mapping: single instance, no fan-out, literals-only OK."""
+    column, nested, literal = resolve_fields(mapping, row)
+    cls = get_schema(mapping.type)
+    column = {k: unwrap_single(v) for k, v in column.items()}
+    return instantiate(cls, kwargs={**literal, **nested, **column})
 
-    Literals decorate data and never gate emission on their own: a nested
-    schema is dropped when no data entry resolves, even if its literals would
-    have produced a stub. Top-level entities pass through with literals only.
 
-    Multi-valued data in a nested mapping fans out into N instances
-    (one per value); scalar data and literals are broadcast across them.
+def resolve_fields(
+    mapping: Nested, row: dict[str, list[Any]]
+) -> tuple[dict[str, list[Any]], dict[str, Any], dict[str, str]]:
+    """Evaluate a mapping's fields against one row, sorted by output role.
+
+    Returns ``(column, nested, literal)``:
+
+    - ``column``: column-derived value lists (drive fan-out cardinality).
+    - ``nested``: sub-object results, already shaped (``Nested`` branches collapsed
+      to scalar when length 1; ``Repeated`` branches kept as lists).
+    - ``literal``: constants from ``Literal`` nodes (broadcast across instances).
     """
-    schema_type = mapping.get("type")
-    if not schema_type:
-        raise ValueError(
-            f"Missing 'type' in {'nested ' if nested else ''}mapping: {mapping!r}"
+    column: dict[str, list[Any]] = {}
+    nested: dict[str, Any] = {}
+    literal: dict[str, str] = {}
+    for prop, sub in mapping.fields.items():
+        match sub:
+            case Literal(value=v):
+                literal[prop] = v
+            case ColumnRef(name=name):
+                values = resolve_column(name, row)
+                if values:
+                    column[prop] = values
+            case Nested():
+                items = build_nested(sub, row)
+                if items:
+                    nested[prop] = unwrap_single(items)
+            case Repeated(items=blocks):
+                items = []
+                for block in blocks:
+                    items.extend(build_nested(block, row))
+                if items:
+                    nested[prop] = items
+    return column, nested, literal
+
+
+def resolve_column(column: str, row: dict[str, list[Any]]) -> list[Any]:
+    """Read a column's values from the row, dropping NaN entries."""
+    if column not in row:
+        raise KeyError(f"Header '{column}' not found in the data.")
+    return [v for v in row[column] if pd.notna(v)]
+
+
+def build_nested(mapping: Nested, row: dict[str, list[Any]]) -> list[SchemaOrgBase]:
+    """Evaluate a nested mapping into zero or more Pydantic instances.
+
+    A single mapping can produce multiple instances when one of its column
+    fields holds multiple values — each value becomes its own sub-object,
+    with the other fields (literals, single-value columns, nested sub-objects)
+    broadcast across every instance. This is what makes a multi-value cell
+    like ``"a, b"`` end up as two ``PropertyValue`` siblings rather than one
+    PropertyValue with a list inside.
+
+    Rules
+    -----
+    - **No row-derived data** (no columns, no nested sub-results): return
+      ``[]``. Literal labels alone don't justify a sub-object.
+    - **One value per column** (or only literals/nested): return one instance.
+    - **N values in one or more columns**: return N instances. Columns with
+      length N contribute their i-th value to the i-th instance; columns with
+      one value broadcast that value to all instances.
+    - **Inconsistent column lengths** (some > 1 but not equal to the max):
+      lengths can't be aligned; log a warning and return ``[]``.
+
+    Example
+    -------
+    Mapping ``{type: "PropertyValue", name: "Literal:label", value: "col"}``
+    against a row where ``col = ["a", "b"]`` produces two PropertyValues:
+    one with ``value="a"`` and one with ``value="b"`` — both with the same
+    broadcast ``name="label"``.
+    """
+    column, nested, literal = resolve_fields(mapping, row)
+    if not column and not nested:
+        return []
+
+    n = max((len(v) for v in column.values()), default=1)
+    mismatched = {k: len(v) for k, v in column.items() if len(v) not in (1, n)}
+    if mismatched:
+        logger.warning(
+            "Cannot align %s: column fields %s have lengths inconsistent with "
+            "max length %d; skipping",
+            mapping.type,
+            mismatched,
+            n,
         )
-
-    literal_props, data_mapping = partition_mapping(mapping)
-    data_props = extract_properties(entity, data_mapping)
-    if nested and not data_props:
         return []
 
-    props = {**literal_props, **data_props}
-    if not props:
-        return []
+    cls = get_schema(mapping.type)
+    instances: list[SchemaOrgBase] = []
+    for i in range(n):
+        per_instance_columns = {
+            k: v[i] if len(v) == n else v[0] for k, v in column.items()
+        }
+        kwargs = {**literal, **nested, **per_instance_columns}
+        instances.extend(instantiate(cls, kwargs))
+    return instances
 
-    rows = split_properties(props) if nested and is_multi_instance(props) else [props]
-    return [
-        s for s in (instantiate_schema(schema_type, r) for r in rows) if s is not None
-    ]
 
+def unwrap_single(items: list) -> Any:
+    """Return ``items[0]`` for a single-value list; the list as-is otherwise.
 
-def partition_mapping(
-    mapping: dict[str, Any],
-) -> tuple[dict[str, str], dict[str, Any]]:
-    """Split a mapping into resolved literal values and remaining data entries.
-
-    The ``"type"`` key is schema-class metadata and excluded from both outputs.
-    ``"Literal:<value>"`` entries are returned with the prefix stripped — the
-    constant value to emit. Every other entry (column names, nested dicts,
-    lists) passes through unchanged for ``extract_properties`` to resolve.
+    Internal field values are kept as lists for uniform handling; this collapses
+    them at the boundary so the output matches JSON-LD convention (``"name": "x"``
+    instead of ``"name": ["x"]``).
     """
-    literals: dict[str, str] = {}
-    data: dict[str, Any] = {}
-    for key, value in mapping.items():
-        if key == "type":
-            continue
-        if isinstance(value, str) and value.startswith("Literal:"):
-            literals[key] = value[len("Literal:") :]
-        else:
-            data[key] = value
-    return literals, data
+    return items[0] if len(items) == 1 else items
 
 
-def extract_properties(entity: dict[str, Any], mapping: dict) -> dict[Any, Any]:
-    """Read row values from ``entity`` according to ``mapping``.
-
-    String mapping values are column names looked up in ``entity``; dict and
-    list values trigger recursive ``build_schema`` calls. Entries whose lookup
-    yields no value are omitted from the result.
-    """
-    schema_properties = {}
-    for prop, value in mapping.items():
-        if isinstance(value, str):
-            var = get_field_value(entity, value)
-            if var is not None:
-                schema_properties[prop] = var
-        elif isinstance(value, dict):
-            nested = build_schema(entity, value, nested=True)
-            if nested:
-                schema_properties[prop] = nested[0] if len(nested) == 1 else nested
-        elif isinstance(value, list):
-            for schema_mapping in value:
-                if not isinstance(schema_mapping, dict):
-                    raise TypeError(
-                        f"Mapping list elements must be dicts; got {schema_mapping!r}."
-                    )
-                nested = build_schema(entity, schema_mapping, nested=True)
-                if nested:
-                    schema_properties.setdefault(prop, []).extend(nested)
-    return schema_properties
-
-
-def instantiate_schema(
-    schema_type: str, schema_properties: dict
-) -> SchemaOrgBase | None:
-    """Instantiate a schema.org Pydantic model; log and return None on ValidationError."""
+def instantiate(cls: type[SchemaOrgBase], kwargs: dict) -> list[SchemaOrgBase]:
+    """Instantiate ``cls`` with ``kwargs``; on validation error log per-error and skip."""
     try:
-        return get_schema(schema_type)(**schema_properties)
+        return [cls(**kwargs)]
     except ValidationError as e:
         for err in e.errors():
             logger.warning(
                 "Could not create %s: %s at %s (input: %s)",
-                schema_type,
+                cls.__name__,
                 err["msg"],
                 err["loc"],
                 err.get("input"),
             )
-        logger.debug("Properties provided: %s", schema_properties)
-        return None
-
-
-def get_field_value(entity: dict[str, Any], column: str):
-    """Return field value(s) from entity, stripping NAs; None if all values are missing."""
-    if column not in entity:
-        raise KeyError(f"Header '{column}' not found in the data.")
-    values = entity[column]
-    if not isinstance(values, list):
-        values = [values]
-    values = [v for v in values if pd.notna(v)]
-    if not values:
-        return None
-    return values[0] if len(values) == 1 else values
-
-
-def is_multi_instance(props: dict[str, Any]) -> bool:
-    """True when ``props`` should fan out into multiple instances via ``split_properties``.
-
-    Triggers when every list-valued property has the same length > 1, signalling
-    parallel data that pairs element-wise.
-    """
-    lengths = {len(v) for v in props.values() if isinstance(v, list)}
-    return len(lengths) == 1 and lengths.pop() > 1
-
-
-def split_properties(props: dict[str, Any]) -> list[dict[str, Any]]:
-    """Transpose parallel-list properties into one dict per row.
-
-    List-valued properties are zipped element-wise; scalar properties (literals
-    or single-value column lookups) are broadcast — repeated across every row
-    so they appear on each emitted instance.
-    """
-    n = max(
-        (len(v) for v in props.values() if isinstance(v, list)),
-        default=1,
-    )
-    columns = [
-        props[k] if isinstance(props[k], list) else [props[k]] * n for k in props
-    ]
-    return [dict(zip(props.keys(), row)) for row in zip(*columns)]
+        logger.debug("Kwargs provided: %s", kwargs)
+        return []
