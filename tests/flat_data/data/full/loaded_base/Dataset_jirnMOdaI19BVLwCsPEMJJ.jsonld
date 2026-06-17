@@ -8,10 +8,12 @@
     {
       "@type": "PropertyValue",
       "name": "file:analysis",
-      "value": [
-        "Metabarcoding",
-        "Imaging"
-      ]
+      "value": "Metabarcoding"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "file:analysis",
+      "value": "Imaging"
     }
   ],
   "description": "file description 5",
