@@ -18,9 +18,9 @@ def add_columns(
     """Add configured combined columns and an ``@id`` column to every sheet."""
     new_data: dict[str, pd.DataFrame] = {}
     for name, data in data_dict.items():
+        data = add_id(data, config.mapping[name]["type"])
         if combines := config.combined_columns.get(name):
             data = add_combined_columns(data, combines)
-        data = add_id(data, config.mapping[name]["type"])
         new_data[name] = data
     return new_data
 
