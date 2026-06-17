@@ -45,9 +45,12 @@ def single_etl(config: FlatDataConfig, file_path: Path) -> None:
     data = reshape(data, config)
     schemas = build_schemas(data, config)
     schemas = inject_cross_refs(schemas, refs)
-    for schema_list in schemas.values():
-        for schema in schema_list:
-            write_provenance_file(schema.id, config.provenance_path, str(file_path))
+    if config.provenance_path:
+        for schema_list in schemas.values():
+            for schema in schema_list:
+                write_provenance_file(
+                    schema.id, config.provenance_path, str(file_path)
+                )
     write_schemas(schemas, config.output.loaded_base)
 
 
