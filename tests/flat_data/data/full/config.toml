@@ -102,9 +102,8 @@ comment = "file:comment"
 about.type = "Product"
 about.identifier = "file:sample"            # forward: uplift resolves to Product_<pid>.jsonld
 
-# Reverse-lookup key — uplift uses this to populate Action.result AND to discriminate
-# file Datasets from the main Dataset.
 [[mapping.file.additionalProperty]]
 type = "PropertyValue"
 name = "Literal:file:analysis"
 value = "file:analysis"
+description = "Literal:Helper Property for linking this Dataset to Action.result."

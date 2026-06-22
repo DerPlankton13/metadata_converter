@@ -8,7 +8,8 @@
     {
       "@type": "PropertyValue",
       "name": "file:analysis",
-      "value": "Imaging"
+      "value": "Imaging",
+      "description": "Helper Property for linking this Dataset to Action.result."
     }
   ],
   "description": "file description 2",
