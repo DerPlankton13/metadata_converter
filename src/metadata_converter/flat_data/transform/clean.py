@@ -13,7 +13,19 @@ logger = logging.getLogger(__name__)
 def clean(
     data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
 ) -> dict[str, pd.DataFrame]:
-    """Run plugins on the whole dataset, then per-sheet built-in cleaning."""
+    """Clean every sheet, then drop sheets that have no mapping.
+
+    Three passes, in order:
+
+    1. **Plugins** run once over the full dataset. They may read from any sheet
+       and write to any sheet — including sheets that exist only to support
+       other sheets and will not themselves be emitted as JSON-LD.
+    2. **Per-sheet hygiene** (whitespace, sentinels, dtype inference, drop empty
+       rows) runs on every loaded sheet.
+    3. **Mapping filter** drops any sheet not declared in ``config.mapping``.
+       Such sheets exist only as data sources for plugins; they produce no
+       entities and the rest of the pipeline never sees them.
+    """
     for plugin in config.cleaning.plugins:
         logger.info("Applying plugin: %s", type(plugin).__name__)
         data_dict = plugin.run(data_dict)
@@ -21,7 +33,7 @@ def clean(
     for name, data in data_dict.items():
         logger.info("Cleaning sheet '%s'", name)
         new_data[name] = clean_dataframe(data, config.cleaning)
-    return new_data
+    return {name: df for name, df in new_data.items() if name in config.mapping}
 
 
 def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
