@@ -12,14 +12,7 @@
     }
   ],
   "name": "Peter Lustig",
-  "identifier": {
-    "@type": "PropertyValue",
-    "url": "https://orcid.org/0000-0001-0004-1234",
-    "alternateName": "ORCID",
-    "name": "Open Researcher and Contributor ID",
-    "value": "0000-0001-0004-1234",
-    "propertyID": "https://registry.identifiers.org/registry/orcid"
-  },
+  "identifier": "0000-0001-0004-1234",
   "givenName": "Peter",
   "email": "p.lustig@institude.com",
   "familyName": "Lustig",
