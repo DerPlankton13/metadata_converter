@@ -4,18 +4,6 @@
   },
   "@type": "Dataset",
   "@id": "Dataset_jirnMOdaI19BVLwCsPEMJJ.jsonld",
-  "additionalProperty": [
-    {
-      "@type": "PropertyValue",
-      "name": "file:analysis",
-      "value": "Metabarcoding"
-    },
-    {
-      "@type": "PropertyValue",
-      "name": "file:analysis",
-      "value": "Imaging"
-    }
-  ],
   "description": "file description 5",
   "name": "file5.xyz",
   "encodingFormat": "xyz",

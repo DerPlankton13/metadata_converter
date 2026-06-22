@@ -4,13 +4,6 @@
   },
   "@type": "Dataset",
   "@id": "Dataset_zhfzWo9Gs7S9Z_oMh9Tn6-.jsonld",
-  "additionalProperty": [
-    {
-      "@type": "PropertyValue",
-      "name": "file:analysis",
-      "value": "Imaging"
-    }
-  ],
   "description": "file description 2",
   "name": "file2.png",
   "encodingFormat": "png",

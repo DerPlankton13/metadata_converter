@@ -4,13 +4,6 @@
   },
   "@type": "Person",
   "@id": "Person_eEGQnHcb3QsvEgnwdPESMn.jsonld",
-  "additionalProperty": [
-    {
-      "@type": "PropertyValue",
-      "name": "author:is-dataset-author",
-      "value": 0.0
-    }
-  ],
   "name": "Bob Builder",
   "identifier": {
     "@type": "PropertyValue",

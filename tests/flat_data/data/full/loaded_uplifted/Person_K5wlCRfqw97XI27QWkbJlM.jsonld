@@ -4,13 +4,6 @@
   },
   "@type": "Person",
   "@id": "Person_K5wlCRfqw97XI27QWkbJlM.jsonld",
-  "additionalProperty": [
-    {
-      "@type": "PropertyValue",
-      "name": "author:is-dataset-author",
-      "value": 1.0
-    }
-  ],
   "name": "Peter Lustig",
   "identifier": {
     "@type": "PropertyValue",
