@@ -71,13 +71,13 @@ def fetch_biosamples(config: BiosamplesConfig):
     logger.info("Starting biosamples fetch")
 
     input_cfg = config.input
-    excel_files = sorted(input_cfg.input_path.glob("*.xlsx")) + sorted(
-        input_cfg.input_path.glob("*.xls")
+    excel_files = sorted(input_cfg.input_dir.glob("*.xlsx")) + sorted(
+        input_cfg.input_dir.glob("*.xls")
     )
     if not excel_files:
-        logger.error("No Excel files found in %s", input_cfg.input_path)
+        logger.error("No Excel files found in %s", input_cfg.input_dir)
         return
-    logger.info("Found %d Excel file(s) in %s", len(excel_files), input_cfg.input_path)
+    logger.info("Found %d Excel file(s) in %s", len(excel_files), input_cfg.input_dir)
 
     all_sample_ids: set[str] = set()
     for excel_file in excel_files:
@@ -185,9 +185,9 @@ def ingest_biosamples(config: BiosamplesConfig):
 def uplift_biosamples(config: SourcePaths):
     logger.info("Starting biosamples uplift")
 
-    files = list(config.input_path.glob("**/*.jsonld"))
-    logger.info("Found %d ingested file(s) in %s", len(files), config.input_path)
-    config.output_path.mkdir(parents=True, exist_ok=True)
+    files = list(config.input_dir.glob("**/*.jsonld"))
+    logger.info("Found %d ingested file(s) in %s", len(files), config.input_dir)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
 
     failures = 0
     for path in tqdm(
@@ -204,7 +204,7 @@ def uplift_biosamples(config: SourcePaths):
             continue
         try:
             product = Product(**product_dict)
-            load_to_jsonld(product, output_path=config.output_path)
+            load_to_jsonld(product, output_dir=config.output_dir)
             try:
                 make_strict(Product).model_validate(product_dict)
             except ValidationError as e:
@@ -218,7 +218,7 @@ def uplift_biosamples(config: SourcePaths):
             failures += 1
         try:
             action = Action(**action_dict)
-            load_to_jsonld(action, output_path=config.output_path)
+            load_to_jsonld(action, output_dir=config.output_dir)
             try:
                 make_strict(Action).model_validate(action_dict)
             except ValidationError as e:
@@ -237,4 +237,4 @@ def uplift_biosamples(config: SourcePaths):
             len(files),
         )
     else:
-        logger.info("Biosamples uplift complete. Output: %s", config.output_path)
+        logger.info("Biosamples uplift complete. Output: %s", config.output_dir)

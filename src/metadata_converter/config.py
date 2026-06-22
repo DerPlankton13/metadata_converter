@@ -29,7 +29,7 @@ from metadata_converter.flat_data.transform.cleaning_plugin import (
 class FlatDataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["flat_data"] = "flat_data"
-    provenance_path: Path | None = None
+    provenance_dir: Path | None = None
     extractor: ExcelExtractorConfig
     cleaning: CleaningConfig
     output: OutputConfig
@@ -50,9 +50,9 @@ class FlatDataUpliftConfig(BaseModel):
     """Uplift config for flat-data sources, driven by declarative link rules."""
 
     model_config = ConfigDict(extra="forbid")
-    input_path: Path
-    output_path: Path
-    provenance_path: Path | None = None
+    input_dir: Path
+    output_dir: Path
+    provenance_dir: Path | None = None
     links: list[LinkRule] = Field(default_factory=list)
     drop_types: list[str] = Field(
         default_factory=list,
@@ -62,7 +62,7 @@ class FlatDataUpliftConfig(BaseModel):
 
 class ExcelExtractorConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    file_path: Path
+    input: Path
     sheet_name: str | list[str]
     header: int | None = None
     skiprows: list[int] | None = None
@@ -161,14 +161,14 @@ class BiosamplesConfig(BaseModel):
     source_type: Literal["biosamples"] = "biosamples"
     input: BiosamplesInput
     output: FetchedOutputConfig
-    provenance_path: Path | None = None
+    provenance_dir: Path | None = None
     max_workers: int = 10
     user_agent: str = "metadata-collector/1.0"
 
 
 class BiosamplesInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    input_path: Path
+    input_dir: Path
     sheet_name: str = "sample"
     header: int | None = None
     skiprows: list[int] | None = None
@@ -185,7 +185,7 @@ class ApiFetchingConfig(BaseModel):
     source_type: Literal["api"] = "api"
     extractor: ApiExtractorConfig
     output: FetchedOutputConfig
-    provenance_path: Path | None = None
+    provenance_dir: Path | None = None
 
 
 class ApiExtractorConfig(BaseModel):
@@ -269,8 +269,8 @@ class SourcePaths(BaseModel):
     """Input/output paths for one source in the uplift config."""
 
     model_config = ConfigDict(extra="forbid")
-    input_path: Path
-    output_path: Path
+    input_dir: Path
+    output_dir: Path
 
 
 # ---------------------------------------------------------------------------

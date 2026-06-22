@@ -52,7 +52,7 @@ def make_config(tmp_path, cross_sheet_refs: list[CrossSheetRef]) -> FlatDataConf
     """Build a FlatDataConfig where everything except cross_sheet_refs is boilerplate."""
     return FlatDataConfig(
         extractor=ExcelExtractorConfig(
-            file_path=tmp_path / "dummy.xlsx",
+            input=tmp_path / "dummy.xlsx",
             sheet_name=["author", "dataset"],
         ),
         cleaning=CleaningConfig(),

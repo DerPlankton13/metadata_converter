@@ -222,7 +222,7 @@ class LinkEngine:
 
     Lifecycle
     ---------
-    1. ``load_entities`` — read each ``*.jsonld`` file in ``input_path``,
+    1. ``load_entities`` — read each ``*.jsonld`` file in ``input_dir``,
        validate as its schema.org Pydantic model, and group into ``by_type``.
     2. ``apply_rule`` (once per rule) — build a value→candidate lookup, then
        find matches for each entity of ``on_type`` and set ``target_property``
@@ -234,31 +234,31 @@ class LinkEngine:
 
     def __init__(self, config: FlatDataUpliftConfig) -> None:
         self.config = config
-        self.input_path = Path(config.input_path)
-        self.output_path = Path(config.output_path)
+        self.input_dir = Path(config.input_dir)
+        self.output_dir = Path(config.output_dir)
         # @type name → list of models of that @type
         self.by_type: dict[str, list[SchemaOrgBase]] = {}
 
     def run(self) -> None:
         """Run all three phases in order: load → apply rules → write."""
-        logger.info("Starting flat-data uplift from %s", self.input_path)
+        logger.info("Starting flat-data uplift from %s", self.input_dir)
         self.load_entities()
         for rule in self.config.links:
             self.apply_rule(rule)
         self.write_entities()
-        logger.info("Flat-data uplift complete. Output: %s", self.output_path)
+        logger.info("Flat-data uplift complete. Output: %s", self.output_dir)
 
     # --- Phase 1 — load -----------------------------------------------------
 
     def load_entities(self) -> None:
-        """Read every ``*.jsonld`` file in ``input_path`` and group models into ``by_type``.
+        """Read every ``*.jsonld`` file in ``input_dir`` and group models into ``by_type``.
 
         Files that fail to load or validate are logged and skipped — the rest of
         the run continues. A warning is logged when the input directory is empty.
         """
-        files = sorted(self.input_path.glob("*.jsonld"))
+        files = sorted(self.input_dir.glob("*.jsonld"))
         if not files:
-            logger.warning("No JSON-LD files found in %s", self.input_path)
+            logger.warning("No JSON-LD files found in %s", self.input_dir)
         for path in files:
             with path.open() as f:
                 data = json.load(f)
@@ -457,7 +457,7 @@ class LinkEngine:
         they were loaded only to be available as link candidates (e.g. sample
         stubs that the biosamples uplift owns canonically).
         """
-        self.output_path.mkdir(parents=True, exist_ok=True)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
         dropped_types = set(self.config.drop_types)
         written = 0
         skipped = 0
@@ -466,12 +466,12 @@ class LinkEngine:
                 skipped += len(models)
                 continue
             for model in models:
-                load_to_jsonld(model, self.output_path)
+                load_to_jsonld(model, self.output_dir)
                 written += 1
         logger.info(
             "Wrote %d uplifted file(s) to %s (skipped %d via drop_types)",
             written,
-            self.output_path,
+            self.output_dir,
             skipped,
         )
 

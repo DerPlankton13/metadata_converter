@@ -1,4 +1,3 @@
-import itertools
 import logging
 from pathlib import Path
 
@@ -22,43 +21,43 @@ logger = logging.getLogger(__name__)
 def flat_data_etl(config: FlatDataConfig) -> None:
     """Entry point: dispatch single file vs directory of Excel files."""
     logger.info("Starting flat-data workflow")
-    file_path = config.extractor.file_path
-    if file_path.is_dir():
-        files = sorted(file_path.glob("*.xlsx")) + sorted(file_path.glob("*.xls"))
+    input = config.extractor.input
+    if input.is_dir():
+        files = sorted(input.glob("*.xlsx")) + sorted(input.glob("*.xls"))
         if not files:
-            logger.error("No Excel files found in %s", file_path)
+            logger.error("No Excel files found in %s", input)
             raise SystemExit(1)
-        logger.info("Found %d file(s) in %s", len(files), file_path)
+        logger.info("Found %d file(s) in %s", len(files), input)
         for excel_file in files:
             single_etl(config, excel_file)
     else:
-        single_etl(config, file_path)
+        single_etl(config, input)
 
 
-def single_etl(config: FlatDataConfig, file_path: Path) -> None:
+def single_etl(config: FlatDataConfig, input: Path) -> None:
     """Run the ingest pipeline for a single input file."""
-    logger.info("Ingesting %s", file_path.name)
-    data = extract_data(config, file_path=file_path)
+    logger.info("Ingesting %s", input.name)
+    data = extract_data(config, input=input)
     data = clean(data, config)
     data = add_columns(data, config)
     refs = collect_cross_ref_ids(data, config)
     data = reshape(data, config)
     schemas = build_schemas(data, config)
     schemas = inject_cross_refs(schemas, refs)
-    if config.provenance_path:
+    if config.provenance_dir:
         for schema_list in schemas.values():
             for schema in schema_list:
                 write_provenance_file(
-                    schema.id, config.provenance_path, str(file_path)
+                    schema.id, config.provenance_dir, str(input)
                 )
     write_schemas(schemas, config.output.loaded_base)
 
 
 def write_schemas(
-    schema_dict: dict[str, list[SchemaOrgBase]], output_path: Path
+    schema_dict: dict[str, list[SchemaOrgBase]], output_dir: Path
 ) -> None:
     """Flatten all built schemas and write each to its own JSON-LD file."""
     schemas = [s for schemas in schema_dict.values() for s in schemas]
-    logger.info("Writing %d JSON-LD file(s) to %s", len(schemas), output_path)
+    logger.info("Writing %d JSON-LD file(s) to %s", len(schemas), output_dir)
     for schema in schemas:
-        load_to_jsonld(schema, output_path=output_path)
+        load_to_jsonld(schema, output_dir=output_dir)

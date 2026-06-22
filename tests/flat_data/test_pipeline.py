@@ -49,7 +49,7 @@ def test_ingest_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     output_dir = tmp_path / "loaded_base"
 
     cfg = load_source_config(str(scenario_dir / "config.toml"))
-    cfg.extractor.file_path = xlsx
+    cfg.extractor.input = xlsx
     cfg.output.loaded_base = output_dir
 
     flat_data_etl(cfg)
@@ -63,8 +63,8 @@ def test_uplift_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     output_dir = tmp_path / "loaded_uplifted"
 
     cfg = load_uplift_config(str(scenario_dir / "uplift.toml")).flat_data
-    cfg.input_path = input_dir
-    cfg.output_path = output_dir
+    cfg.input_dir = input_dir
+    cfg.output_dir = output_dir
 
     LinkEngine(cfg).run()
 

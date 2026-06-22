@@ -1,7 +1,7 @@
 [flat_data]
-input_path = "loaded_base"
-output_path = "loaded_uplifted"
-provenance_path = "provenance_test"
+input_dir = "loaded_base"
+output_dir = "loaded_uplifted"
+provenance_dir = "provenance_test"
 # Product entities (sample stubs from the datahub) are loaded for indexing but not
 # written to the output — the biosamples uplift provides the canonical Product files.
 drop_types = ["Product"]

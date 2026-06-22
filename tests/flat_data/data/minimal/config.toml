@@ -3,7 +3,7 @@
 source_type = "flat_data"
 
 [extractor]
-file_path = "input.xlsx"
+input = "input.xlsx"
 sheet_name = ["author", "dataset"]
 header = 0
 
