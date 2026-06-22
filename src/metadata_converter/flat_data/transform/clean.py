@@ -1,4 +1,4 @@
-"""Clean wide-format DataFrames: strip whitespace, normalize sentinels, run plugins."""
+"""Clean wide-format DataFrames: run plugins, then strip whitespace, normalize sentinels."""
 
 import logging
 import re
@@ -6,7 +6,6 @@ import re
 import pandas as pd
 
 from metadata_converter.config import CleaningConfig, FlatDataConfig
-from metadata_converter.flat_data.transform.cleaning_plugin import CleaningPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -14,7 +13,10 @@ logger = logging.getLogger(__name__)
 def clean(
     data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
 ) -> dict[str, pd.DataFrame]:
-    """Apply configured cleaning to every sheet."""
+    """Run plugins on the whole dataset, then per-sheet built-in cleaning."""
+    for plugin in config.cleaning.plugins:
+        logger.info("Applying plugin: %s", type(plugin).__name__)
+        data_dict = plugin.run(data_dict)
     new_data: dict[str, pd.DataFrame] = {}
     for name, data in data_dict.items():
         logger.info("Cleaning sheet '%s'", name)
@@ -23,9 +25,7 @@ def clean(
 
 
 def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
-    """Apply configured cleaning steps in order: plugins → strip header/cell whitespace →
-    replace sentinels/placeholders → infer dtypes → drop fully empty rows."""
-    df = run_plugins(df, config.plugins)
+    """Apply built-in per-sheet cleaning: whitespace, sentinels, dtype inference, drop empty rows."""
     if config.strip_header_whitespace:
         df = strip_header_whitespace(df)
     if config.strip_cell_whitespace:
@@ -37,12 +37,6 @@ def clean_dataframe(df: pd.DataFrame, config: CleaningConfig) -> pd.DataFrame:
     df = df.convert_dtypes()
     df.dropna(how="all", inplace=True)
     return df.reset_index(drop=True)
-
-
-def run_plugins(df: pd.DataFrame, plugins: list[CleaningPlugin]) -> pd.DataFrame:
-    for plugin in plugins:
-        df = plugin.run(df)
-    return df
 
 
 def clean_string(value):

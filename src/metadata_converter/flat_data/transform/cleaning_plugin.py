@@ -6,73 +6,43 @@ from pathlib import Path
 import pandas as pd
 
 
-class CleaningPlugin(ABC):
-    """
-    Abstract base class for dataframe cleaning plugins.
+class Plugin(ABC):
+    """User-supplied step that operates on the full dataset before built-in cleaning.
 
-    Subclass this to implement a custom cleaning step that can be
-    loaded dynamically from a plugin directory. Each plugin file
-    may contain one or more subclasses of this class.
+    Subclass this to implement a fix that the built-in cleaning steps can't
+    express — e.g. a structural repair that reads one sheet to populate another,
+    or a per-sheet transform that needs to know its sheet name. Plugins receive
+    the whole ``{sheet_name: dataframe}`` dict and may modify any sheet.
 
     Examples
     --------
-    >>> class MyPlugin(CleaningPlugin):
-    ...     def run(self, df: pd.DataFrame) -> pd.DataFrame:
-    ...         return df.dropna(subset=["my_col"])
+    >>> class FillX(Plugin):
+    ...     def run(self, data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+    ...         data["target"]["x"] = data["source"]["x"]
+    ...         return data
     """
 
     @abstractmethod
-    def run(self, df: pd.DataFrame) -> pd.DataFrame:
-        """
-        Execute the cleaning step.
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            The dataframe to clean.
-
-        Returns
-        -------
-        pd.DataFrame
-            The cleaned dataframe.
-        """
+    def run(self, data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+        """Apply the plugin to the whole dataset."""
         ...
 
 
 def load_plugins(
     plugin_dir: str | Path, plugin_name: str | list[str] | None = None
-) -> list[CleaningPlugin]:
-    """
-    Discover and instantiate all cleaning plugins in a directory.
+) -> list[Plugin]:
+    """Discover and instantiate all ``Plugin`` subclasses in a directory.
 
-    Scans all Python files in ``plugin_dir`` for subclasses of
-    ``CleaningPlugin`` and returns one instance of each. Multiple
-    plugin classes may be defined in a single file. Files are
-    processed in alphabetical order; within a file, classes are
-    instantiated in alphabetical order by class name.
-
-    Parameters
-    ----------
-    plugin_dir : str or Path
-        Path to the directory containing plugin files.
-
-    Returns
-    -------
-    list of CleaningPlugin
-        Instantiated plugin objects in discovery order.
+    Scans Python files in ``plugin_dir`` for subclasses of ``Plugin`` and
+    returns one instance of each. Files are processed in alphabetical order;
+    within a file, classes are instantiated in alphabetical order by class name.
 
     Raises
     ------
     NotADirectoryError
         If ``plugin_dir`` does not exist or is not a directory.
     ImportError
-        If a plugin file fails to load, or if a Python file in
-        ``plugin_dir`` contains no ``CleaningPlugin`` subclasses.
-
-    Examples
-    --------
-    >>> plugins = load_plugins("plugins/")
-    >>> config = CleaningConfig(plugins=plugins)
+        If a plugin file fails to load, or contains no ``Plugin`` subclasses.
     """
     plugin_dir = Path(plugin_dir)
     if not plugin_dir.is_dir():
@@ -96,12 +66,12 @@ def load_plugins(
         found = [
             cls
             for _, cls in inspect.getmembers(module, inspect.isclass)
-            if issubclass(cls, CleaningPlugin) and cls is not CleaningPlugin
+            if issubclass(cls, Plugin) and cls is not Plugin
         ]
 
         if not found:
             raise ImportError(
-                f"{path.name} does not contain any `CleaningPlugin` subclasses"
+                f"{path.name} does not contain any `Plugin` subclasses"
             )
 
         plugins.extend(cls() for cls in found)

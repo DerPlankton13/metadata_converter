@@ -17,7 +17,7 @@ from pydantic import (
 
 from metadata_converter.api_fetching.query_models import Query
 from metadata_converter.flat_data.transform.cleaning_plugin import (
-    CleaningPlugin,
+    Plugin,
     load_plugins,
 )
 
@@ -78,7 +78,7 @@ class CleaningConfig(BaseModel):
     placeholder_pattern: str = r"^.*\[.*\]$"
     plugin_dir: Path | None = None
     plugin_name: str | list[str] | None = None
-    plugins: list[CleaningPlugin] = Field(default_factory=list)
+    plugins: list[Plugin] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def load_plugins_from_dir(self) -> CleaningConfig:
