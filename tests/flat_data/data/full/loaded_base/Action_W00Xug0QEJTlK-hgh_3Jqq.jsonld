@@ -3,10 +3,20 @@
     "@vocab": "https://schema.org/"
   },
   "@type": "Action",
-  "@id": "Action_aZel2p2Vb2B4TAjgpY0BS-.jsonld",
+  "@id": "Action_W00Xug0QEJTlK-hgh_3Jqq.jsonld",
   "description": "description method 2",
   "name": "Images from Helgoland Samples",
   "identifier": "Imaging",
+  "object": [
+    {
+      "@type": "Product",
+      "identifier": "SAMEA118673815"
+    },
+    {
+      "@type": "Product",
+      "identifier": "SAMEA118673891"
+    }
+  ],
   "agent": {
     "@type": "Person",
     "identifier": "0000-0001-0002-1234"

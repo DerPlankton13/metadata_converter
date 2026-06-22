@@ -12,6 +12,8 @@ strip_header_whitespace = true
 strip_cell_whitespace = true
 sentinels_to_na = false
 placeholders_to_na = false
+plugin_dir = "plugins"
+plugin_name = "fill_analysis_samples.py"
 
 [output]
 loaded_base = "loaded_base"
@@ -22,7 +24,7 @@ name = ["author:first-name", "author:last-name"]
 
 # Multi-value cells are split into separate rows before schema building.
 [split_fields]
-analysis = ["analysis:author-pid"]
+analysis = ["analysis:author-pid", "analysis:sample"]
 dataset = ["dataset:keywords"]
 file = ["file:analysis", "file:sample"]
 
@@ -84,7 +86,8 @@ identifier = "analysis:pid"
 description = "analysis:description"
 agent.type = "Person"
 agent.identifier = "analysis:author-pid"   # forward: uplift resolves to Person @id
-# object: filled at uplift from Product stubs (reverse via sample:analysis-pid)
+object.type = "Product"
+object.identifier = "analysis:sample"
 # result: filled at uplift from file Datasets (reverse via file:analysis)
 
 [mapping.sample]
