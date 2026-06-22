@@ -89,16 +89,6 @@ object.type = "Product"
 object.identifier = "analysis:sample"
 # result: filled at uplift from file Datasets (reverse via file:analysis)
 
-[mapping.sample]
-type = "Product"
-id = "@id"
-identifier = "sample:pid"
-
-# Reverse-lookup key — uplift uses this to populate Action.object.
-[[mapping.sample.additionalProperty]]
-type = "PropertyValue"
-name = "Literal:sample:analysis-pid"
-value = "sample:analysis-pid"
 
 [mapping.file]
 type = "Dataset"
