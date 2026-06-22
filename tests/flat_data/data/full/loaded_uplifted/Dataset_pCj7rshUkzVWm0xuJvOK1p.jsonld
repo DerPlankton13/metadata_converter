@@ -1,0 +1,16 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Dataset",
+  "@id": "Dataset_pCj7rshUkzVWm0xuJvOK1p.jsonld",
+  "description": "file description 4",
+  "url": "https://example.com/file4",
+  "name": "file4.png",
+  "encodingFormat": "png",
+  "comment": "file comment 4",
+  "about": {
+    "@type": "Product",
+    "@id": "Product_SAMEA118673815.jsonld"
+  }
+}

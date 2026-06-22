@@ -1,0 +1,34 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Action",
+  "@id": "Action_aZel2p2Vb2B4TAjgpY0BS-.jsonld",
+  "description": "description method 2",
+  "name": "Images from Helgoland Samples",
+  "identifier": "Imaging",
+  "result": [
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_jirnMOdaI19BVLwCsPEMJJ.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_zhfzWo9Gs7S9Z_oMh9Tn6-.jsonld"
+    }
+  ],
+  "object": [
+    {
+      "@type": "Product",
+      "@id": "Product_SAMEA118673815.jsonld"
+    },
+    {
+      "@type": "Product",
+      "@id": "Product_SAMEA118673891.jsonld"
+    }
+  ],
+  "agent": {
+    "@type": "Person",
+    "@id": "Person_eO5j5Fw4jJgY77YD5B2Bp3.jsonld"
+  }
+}

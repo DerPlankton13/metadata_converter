@@ -1,0 +1,22 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Dataset",
+  "@id": "Dataset_zhfzWo9Gs7S9Z_oMh9Tn6-.jsonld",
+  "additionalProperty": [
+    {
+      "@type": "PropertyValue",
+      "name": "file:analysis",
+      "value": "Imaging"
+    }
+  ],
+  "description": "file description 2",
+  "name": "file2.png",
+  "encodingFormat": "png",
+  "comment": "file comment 2",
+  "about": {
+    "@type": "Product",
+    "@id": "Product_SAMEA118673891.jsonld"
+  }
+}

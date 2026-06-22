@@ -1,0 +1,23 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Dataset",
+  "@id": "Dataset_886LGaLyMRe4bTUUpiVrVn.jsonld",
+  "additionalProperty": [
+    {
+      "@type": "PropertyValue",
+      "name": "file:analysis",
+      "value": "Metabarcoding"
+    }
+  ],
+  "description": "file description 1",
+  "url": "https://example.com/file1",
+  "name": "file1.fastq.gz",
+  "encodingFormat": "fastq",
+  "comment": "file comment 1",
+  "about": {
+    "@type": "Product",
+    "@id": "Product_SAMEA118673891.jsonld"
+  }
+}

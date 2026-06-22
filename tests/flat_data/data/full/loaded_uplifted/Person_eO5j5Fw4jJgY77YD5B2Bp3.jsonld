@@ -1,0 +1,30 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_eO5j5Fw4jJgY77YD5B2Bp3.jsonld",
+  "additionalProperty": [
+    {
+      "@type": "PropertyValue",
+      "name": "author:is-dataset-author",
+      "value": 1.0
+    }
+  ],
+  "name": "Ada Lovelace",
+  "identifier": {
+    "@type": "PropertyValue",
+    "url": "https://orcid.org/0000-0001-0002-1234",
+    "alternateName": "ORCID",
+    "name": "Open Researcher and Contributor ID",
+    "value": "0000-0001-0002-1234",
+    "propertyID": "https://registry.identifiers.org/registry/orcid"
+  },
+  "givenName": "Ada",
+  "email": "a.lovelace@institue.com",
+  "familyName": "Lovelace",
+  "affiliation": {
+    "@type": "Organization",
+    "name": "Super Computer Institute"
+  }
+}
