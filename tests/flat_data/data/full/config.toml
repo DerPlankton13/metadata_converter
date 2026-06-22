@@ -63,6 +63,7 @@ affiliation.name = "author:affiliation"
 type = "PropertyValue"
 name = "Literal:author:is-dataset-author"
 value = "author:is-dataset-author"
+description = "Literal:Helper property to allow populating DataCatalog.creator with this Person."
 
 [mapping.dataset]
 type = "DataCatalog"

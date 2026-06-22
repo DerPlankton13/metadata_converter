@@ -8,7 +8,8 @@
     {
       "@type": "PropertyValue",
       "name": "author:is-dataset-author",
-      "value": 0.0
+      "value": 0.0,
+      "description": "Helper property to allow populating DataCatalog.creator with this Person."
     }
   ],
   "name": "Bob Builder",
