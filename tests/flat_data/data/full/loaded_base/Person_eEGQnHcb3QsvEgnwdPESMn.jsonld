@@ -12,5 +12,13 @@
   "affiliation": {
     "@type": "Organization",
     "name": "Construction Institute"
+  },
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://example.com/super-funding-agency.jsonld"
+  },
+  "memberOf": {
+    "@type": "Project",
+    "@id": "https://example.com/super-funded-project.jsonld"
   }
 }

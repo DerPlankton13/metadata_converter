@@ -39,6 +39,10 @@ email = "author:email"
 identifier = "author:pid"
 affiliation.type = "Organization"
 affiliation.name = "author:affiliation"
+funding.type = "MonetaryGrant"
+funding.id = "Literal:https://example.com/super-funding-agency.jsonld"
+memberOf.type = "Project"
+memberOf.id = "Literal:https://example.com/super-funded-project.jsonld"
 
 [mapping.dataset]
 type = "DataCatalog"
@@ -54,6 +58,10 @@ license = "dataset:license"
 keywords = "dataset:keywords"
 creator = { type = "Person", id = { from_sheet = "author", filter_column = "author:is-dataset-author", filter_value = 1 } }
 dataset = { type = "Dataset", id = { from_sheet = "file" } }
+funding.type = "MonetaryGrant"
+funding.id = "Literal:https://example.com/super-funding-agency.jsonld"
+sourceOrganisation.type = "Project"
+sourceOrganisation.id = "Literal:https://example.com/super-funded-project.jsonld"
 
 [mapping.analysis]
 type = "Action"
@@ -76,6 +84,10 @@ description = "file:description"
 comment = "file:comment"
 about.type = "Product"
 about.identifier = "file:sample"            # forward: uplift resolves to Product_<pid>.jsonld
+funding.type = "MonetaryGrant"
+funding.id = "Literal:https://example.com/super-funding-agency.jsonld"
+sourceOrganisation.type = "Project"
+sourceOrganisation.id = "Literal:https://example.com/super-funded-project.jsonld"
 
 [[mapping.file.additionalProperty]]
 type = "PropertyValue"
