@@ -195,3 +195,303 @@ def test_integration_collect_then_inject_applies_filter(tmp_path):
     creator = results["dataset"][0].creator
     assert isinstance(creator, Person)
     assert creator.id == "Person_alice.jsonld"
+
+
+# ---------------------------------------------------------------------------
+# extract_inline_id_ref_broadcasts
+# ---------------------------------------------------------------------------
+
+
+def make_config_with_mapping(tmp_path, mapping: dict) -> FlatDataConfig:
+    """Build a FlatDataConfig with an arbitrary mapping; no broadcast_id_refs to start."""
+    return FlatDataConfig(
+        extractor=ExcelExtractorConfig(
+            input=tmp_path / "dummy.xlsx",
+            sheet_name=list(mapping.keys()),
+        ),
+        cleaning=CleaningConfig(),
+        output=OutputConfig(loaded_base=tmp_path / "out"),
+        mapping=mapping,
+    )
+
+
+def test_inline_broadcast_id_ref_with_filter_extracted_correctly(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {
+                    "type": "Person",
+                    "id": {
+                        "from_sheet": "author",
+                        "filter_column": "author:is-dataset-author",
+                        "filter_value": 1,
+                    },
+                },
+            },
+        },
+    )
+
+    extract_inline_id_ref_broadcasts(cfg)
+
+    assert len(cfg.broadcast_id_refs) == 1
+    ref = cfg.broadcast_id_refs[0]
+    assert ref.on_sheet == "dataset"
+    assert ref.property == "creator"
+    assert ref.from_sheet == "author"
+    assert ref.filter_column == "author:is-dataset-author"
+    assert ref.filter_value == 1
+
+
+def test_inline_broadcast_id_ref_without_filter_extracted_correctly(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "file": {"type": "Dataset"},
+            "dataset": {
+                "type": "DataCatalog",
+                "dataset": {"type": "Dataset", "id": {"from_sheet": "file"}},
+            },
+        },
+    )
+
+    extract_inline_id_ref_broadcasts(cfg)
+
+    [ref] = cfg.broadcast_id_refs
+    assert ref.from_sheet == "file"
+    assert ref.filter_column is None
+    assert ref.filter_value is None
+
+
+def test_inline_broadcast_id_ref_removed_from_mapping(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {
+                    "type": "Person",
+                    "id": {"from_sheet": "author"},
+                },
+            },
+        },
+    )
+
+    extract_inline_id_ref_broadcasts(cfg)
+
+    assert cfg.mapping["dataset"] == {"type": "DataCatalog"}
+
+
+def test_multiple_inline_broadcast_id_refs_all_extracted(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "file": {"type": "Dataset"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {"type": "Person", "id": {"from_sheet": "author"}},
+                "dataset": {"type": "Dataset", "id": {"from_sheet": "file"}},
+            },
+        },
+    )
+
+    extract_inline_id_ref_broadcasts(cfg)
+
+    assert {r.property for r in cfg.broadcast_id_refs} == {"creator", "dataset"}
+    assert "creator" not in cfg.mapping["dataset"]
+    assert "dataset" not in cfg.mapping["dataset"]
+
+
+def test_inline_broadcast_id_refs_appended_to_existing_broadcast_id_refs(tmp_path):
+    existing = BroadcastIdRef(
+        on_sheet="dataset", property="dataset", from_sheet="file"
+    )
+    cfg = FlatDataConfig(
+        extractor=ExcelExtractorConfig(
+            input=tmp_path / "dummy.xlsx", sheet_name=["author", "file", "dataset"]
+        ),
+        cleaning=CleaningConfig(),
+        output=OutputConfig(loaded_base=tmp_path / "out"),
+        mapping={
+            "author": {"type": "Person"},
+            "file": {"type": "Dataset"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {"type": "Person", "id": {"from_sheet": "author"}},
+            },
+        },
+        broadcast_id_refs=[existing],
+    )
+
+    extract_inline_id_ref_broadcasts(cfg)
+
+    assert len(cfg.broadcast_id_refs) == 2
+    assert cfg.broadcast_id_refs[0] is existing
+    assert cfg.broadcast_id_refs[1].property == "creator"
+
+
+def test_extract_is_idempotent_on_second_call(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {"type": "Person", "id": {"from_sheet": "author"}},
+            },
+        },
+    )
+
+    extract_inline_id_ref_broadcasts(cfg)
+    mapping_after_first = {k: dict(v) for k, v in cfg.mapping.items()}
+    refs_after_first = list(cfg.broadcast_id_refs)
+    extract_inline_id_ref_broadcasts(cfg)
+
+    assert cfg.broadcast_id_refs == refs_after_first
+    assert cfg.mapping == mapping_after_first
+
+
+def test_dict_with_id_as_string_passes_through_unchanged(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {"type": "Person", "id": "author:pid"},
+            },
+        },
+    )
+
+    extract_inline_id_ref_broadcasts(cfg)
+
+    assert cfg.broadcast_id_refs == []
+    assert cfg.mapping["dataset"]["creator"] == {
+        "type": "Person",
+        "id": "author:pid",
+    }
+
+
+def test_dict_with_id_dict_without_from_sheet_passes_through_unchanged(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {
+                    "type": "Person",
+                    "id": {"something_else": "foo"},
+                },
+            },
+        },
+    )
+
+    extract_inline_id_ref_broadcasts(cfg)
+
+    assert cfg.broadcast_id_refs == []
+    assert cfg.mapping["dataset"]["creator"] == {
+        "type": "Person",
+        "id": {"something_else": "foo"},
+    }
+
+
+def test_inline_broadcast_id_ref_with_extra_outer_key_raises(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {
+                    "type": "Person",
+                    "id": {"from_sheet": "author"},
+                    "name": "stray",
+                },
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="unexpected keys"):
+        extract_inline_id_ref_broadcasts(cfg)
+
+
+def test_inline_broadcast_id_ref_with_extra_inner_key_raises(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {
+                    "type": "Person",
+                    "id": {"from_sheet": "author", "garbage": 1},
+                },
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="garbage"):
+        extract_inline_id_ref_broadcasts(cfg)
+
+
+@pytest.mark.parametrize(
+    "id_dict",
+    [
+        pytest.param({"from_sheet": "author", "filter_column": "x"}, id="column-only"),
+        pytest.param({"from_sheet": "author", "filter_value": 1}, id="value-only"),
+    ],
+)
+def test_inline_broadcast_id_ref_with_half_filter_raises(tmp_path, id_dict):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {"type": "Person", "id": id_dict},
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="filter_column and filter_value"):
+        extract_inline_id_ref_broadcasts(cfg)
+
+
+def test_inline_broadcast_id_ref_with_unknown_from_sheet_raises(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {
+                    "type": "Person",
+                    "id": {"from_sheet": "missing"},
+                },
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="unknown sheet 'missing'"):
+        extract_inline_id_ref_broadcasts(cfg)
+
+
+def test_inline_broadcast_id_ref_with_type_mismatch_raises(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {
+                    "type": "Organization",
+                    "id": {"from_sheet": "author"},
+                },
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="does not match"):
+        extract_inline_id_ref_broadcasts(cfg)
