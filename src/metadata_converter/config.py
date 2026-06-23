@@ -47,13 +47,39 @@ class FlatDataConfig(BaseModel):
 
 
 class FlatDataUpliftConfig(BaseModel):
-    """Uplift config for flat-data sources, driven by declarative link rules."""
+    """Uplift config for flat-data sources, driven by declarative rules."""
 
     model_config = ConfigDict(extra="forbid")
     input_dir: Path
     output_dir: Path
     provenance_dir: Path | None = None
     links: list[LinkRule] = Field(default_factory=list)
+    enrichments: list[EnrichmentRule] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _no_target_overlap(self) -> FlatDataUpliftConfig:
+        """Reject configs that have two rules targeting the same on_type.target_property.
+
+        Each ``(on_type, target_property)`` may be touched by at most one rule across
+        ``links`` and ``enrichments`` combined. The pair is the contract for what
+        gets written; overlap would mean the last rule silently overwrites the others.
+        """
+        seen: dict[tuple[str, str], str] = {}
+        rules_by_kind = (
+            *(("link", r) for r in self.links),
+            *(("enrichment", r) for r in self.enrichments),
+        )
+        for kind, rule in rules_by_kind:
+            key = (rule.on_type, rule.target_property)
+            if key in seen:
+                existing = seen[key]
+                raise ValueError(
+                    f"{rule.on_type}.{rule.target_property} is targeted by multiple "
+                    f"uplift rules: {existing!r} rule and {kind!r} rule. Configure "
+                    f"them on different target properties or consolidate."
+                )
+            seen[key] = kind
+        return self
 
 
 class ExcelExtractorConfig(BaseModel):
@@ -103,6 +129,27 @@ class BroadcastIdRef(BaseModel):
     )
     filter_value: Any = Field(
         None, description="Value to match (normalized string comparison)."
+    )
+
+
+class EnrichmentRule(BaseModel):
+    """Wrap a scalar property value in a custom PropertyValue subclass at uplift time.
+
+    For each entity of ``on_type``, the applier reads ``target_property`` and replaces
+    the scalar value with ``cls(value=scalar)`` where ``cls`` is resolved from
+    ``enrich_as``. The class's Pydantic validators populate the rest of the enriched
+    PropertyValue (url, name, propertyID, etc.).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    on_type: str = Field(description="@type of entities to modify.")
+    target_property: str = Field(
+        description="Property whose scalar value will be wrapped."
+    )
+    enrich_as: str = Field(
+        description="Class name to construct around the scalar (e.g. 'Orcid', 'DOI'). "
+        "Must name a PropertyValue subclass. The scalar becomes the class's "
+        "``value`` field; the class's validators fill out the rest."
     )
 
 
