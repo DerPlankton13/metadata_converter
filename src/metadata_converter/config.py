@@ -54,10 +54,6 @@ class FlatDataUpliftConfig(BaseModel):
     output_dir: Path
     provenance_dir: Path | None = None
     links: list[LinkRule] = Field(default_factory=list)
-    drop_types: list[str] = Field(
-        default_factory=list,
-        description="@types loaded for indexing but not written to output (e.g. sample stubs).",
-    )
 
 
 class ExcelExtractorConfig(BaseModel):

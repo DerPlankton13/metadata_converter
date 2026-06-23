@@ -55,30 +55,15 @@ class EntityStore:
         """Return the list of entities for a given ``@type`` (empty when none)."""
         return self.by_type.get(type_name, [])
 
-    def write(self, output_dir: Path, drop_types: list[str] | None = None) -> None:
-        """Export every entity through ``load_to_jsonld``.
-
-        Entities whose ``@type`` appears in ``drop_types`` are skipped — they
-        were loaded only to be available as link candidates (e.g. sample stubs
-        that the biosamples uplift owns canonically).
-        """
+    def write(self, output_dir: Path) -> None:
+        """Export every held entity to ``output_dir`` via ``load_to_jsonld``."""
         output_dir.mkdir(parents=True, exist_ok=True)
-        dropped = set(drop_types or [])
         written = 0
-        skipped = 0
-        for entity_type, models in self.by_type.items():
-            if entity_type in dropped:
-                skipped += len(models)
-                continue
+        for models in self.by_type.values():
             for model in models:
                 load_to_jsonld(model, output_dir)
                 written += 1
-        logger.info(
-            "Wrote %d uplifted file(s) to %s (skipped %d via drop_types)",
-            written,
-            output_dir,
-            skipped,
-        )
+        logger.info("Wrote %d uplifted file(s) to %s", written, output_dir)
 
 
 def load_as_model(data: dict, source: str) -> SchemaOrgBase | None:
