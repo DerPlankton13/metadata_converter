@@ -1,8 +1,8 @@
 """Collect and inject in-sheet cross-references during ingest.
 
-Two-phase: ``collect_cross_ref_ids`` reads @id lists from the still-wide-format
+Two-phase: ``prepare_id_ref_broadcast`` reads @id lists from the still-wide-format
 DataFrames (where ``filter_column`` and ``@id`` are real columns), and
-``inject_cross_refs`` later wires those references into the already-built
+``broadcast_id_refs`` later wires those references into the already-built
 schema.org models.
 """
 
@@ -11,41 +11,41 @@ from typing import Any
 
 import pandas as pd
 
-from metadata_converter.config import CrossSheetRef, FlatDataConfig
+from metadata_converter.config import BroadcastIdRef, FlatDataConfig
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 
 logger = logging.getLogger(__name__)
 
 # (rule, ref_type, collected @id strings)
-CollectedRef = tuple[CrossSheetRef, str, list[str]]
+Broadcast = tuple[BroadcastIdRef, str, list[str]]
 
 
-def extract_inline_sheet_refs(config: FlatDataConfig) -> None:
-    """Lift inline ``id = { from_sheet = ... }`` mapping entries into ``config.cross_sheet_refs``.
+def extract_inline_id_ref_broadcasts(config: FlatDataConfig) -> None:
+    """Lift inline ``id = { from_sheet = ... }`` mapping entries into ``config.broadcast_id_refs``.
 
-    Mutates ``config.mapping`` and ``config.cross_sheet_refs`` in place. Idempotent —
+    Mutates ``config.mapping`` and ``config.broadcast_id_refs`` in place. Idempotent —
     on a second call there are no inline entries left to extract.
 
     A property whose value matches the shape::
 
         { type = "<Type>", id = { from_sheet = "<sheet>", filter_column = "...", filter_value = ... } }
 
-    is removed from the mapping and re-expressed as a ``CrossSheetRef``. The schema
+    is removed from the mapping and re-expressed as a ``BroadcastIdRef``. The schema
     builder then sees only embedded sub-objects and column refs.
     """
     for sheet_name, sheet_mapping in config.mapping.items():
         for prop in list(sheet_mapping.keys()):
             ref = _try_extract(sheet_mapping[prop], sheet_name, prop, config.mapping)
             if ref is not None:
-                config.cross_sheet_refs.append(CrossSheetRef(**ref))
+                config.broadcast_id_refs.append(BroadcastIdRef(**ref))
                 del sheet_mapping[prop]
 
 
 def _try_extract(
     value: Any, sheet_name: str, prop: str, mapping: dict
 ) -> dict | None:
-    """Return a ``CrossSheetRef``-shaped dict if ``value`` is an inline sheet ref, else None.
+    """Return a ``BroadcastIdRef``-shaped dict if ``value`` is an inline broadcast @id ref, else None.
 
     Raises ``ValueError`` if the shape is clearly intended-as-ref but malformed.
     """
@@ -55,15 +55,15 @@ def _try_extract(
     if not isinstance(id_spec, dict) or "from_sheet" not in id_spec:
         return None
 
-    # From here, the user clearly intended a sheet ref. Strict-validate.
+    # From here, the user clearly intended a broadcast @id ref. Strict-validate.
     path = f"{sheet_name}.{prop}"
 
     if "type" not in value:
-        raise ValueError(f"{path}: inline sheet ref is missing `type`.")
+        raise ValueError(f"{path}: inline broadcast @id ref is missing `type`.")
     outer_extras = set(value) - {"type", "id"}
     if outer_extras:
         raise ValueError(
-            f"{path}: inline sheet ref must have exactly `type` and `id`; "
+            f"{path}: inline broadcast @id ref must have exactly `type` and `id`; "
             f"got unexpected keys {sorted(outer_extras)}."
         )
 
@@ -129,16 +129,16 @@ def to_lookup_key(value: Any) -> str | None:
     return str(value).strip().lower()
 
 
-def collect_cross_ref_ids(
+def prepare_id_ref_broadcast(
     data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
-) -> list[CollectedRef]:
-    """Collect @id lists for each cross-sheet ref rule while data is still wide-format.
+) -> list[Broadcast]:
+    """Collect @id lists for each broadcast @id ref rule while data is still wide-format.
 
     Wide format is required because filter_column and @id are still actual columns here.
     The ref_type is captured now so the injection step needs no access to the config.
     """
-    collected: list[CollectedRef] = []
-    for ref in config.cross_sheet_refs:
+    collected: list[Broadcast] = []
+    for ref in config.broadcast_id_refs:
         src = data_dict[ref.from_sheet]
         if ref.filter_column is not None:
             filter_key = to_lookup_key(ref.filter_value)
@@ -149,15 +149,15 @@ def collect_cross_ref_ids(
     return collected
 
 
-def inject_cross_refs(
+def broadcast_id_refs(
     results: dict[str, list[SchemaOrgBase]],
-    collected: list[CollectedRef],
+    collected: list[Broadcast],
 ) -> dict[str, list[SchemaOrgBase]]:
-    """Inject pre-collected cross-sheet references into already-built schemas."""
+    """Inject pre-collected broadcast @id references into already-built schemas."""
     for ref, ref_type, ids in collected:
         if not ids:
             logger.warning(
-                "cross_sheet_refs: no sources for %s.%s", ref.on_sheet, ref.property
+                "broadcast_id_refs: no sources for %s.%s", ref.on_sheet, ref.property
             )
             continue
         ref_cls = get_schema(ref_type)

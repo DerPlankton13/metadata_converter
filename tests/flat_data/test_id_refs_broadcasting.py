@@ -1,8 +1,10 @@
-"""Tests for the flat_data cross-sheet reference pipeline.
+"""Tests for the flat_data broadcast @id reference pipeline.
 
-Covers to_lookup_key (canonical-string normalisation), collect_cross_ref_ids
-(wide-format DataFrame access), and inject_cross_refs (schema object manipulation)
-in isolation so the full Excel-file pipeline is not needed.
+Covers to_lookup_key (canonical-string normalisation), extract_inline_id_ref_broadcasts
+(facade that lifts inline mapping entries into config.broadcast_id_refs),
+prepare_id_ref_broadcast (wide-format DataFrame access), and broadcast_id_refs
+(schema object manipulation) in isolation so the full Excel-file pipeline is not
+needed.
 """
 
 import pandas as pd
@@ -10,14 +12,15 @@ import pytest
 
 from metadata_converter.config import (
     CleaningConfig,
-    CrossSheetRef,
+    BroadcastIdRef,
     ExcelExtractorConfig,
     FlatDataConfig,
     OutputConfig,
 )
-from metadata_converter.flat_data.transform.cross_sheet_refs import (
-    collect_cross_ref_ids,
-    inject_cross_refs,
+from metadata_converter.flat_data.transform.id_refs_broadcasting import (
+    prepare_id_ref_broadcast,
+    extract_inline_id_ref_broadcasts,
+    broadcast_id_refs,
     to_lookup_key,
 )
 from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, Person
@@ -48,8 +51,8 @@ def test_to_lookup_key_normalises_to_canonical_string(value, expected):
 # ---------------------------------------------------------------------------
 
 
-def make_config(tmp_path, cross_sheet_refs: list[CrossSheetRef]) -> FlatDataConfig:
-    """Build a FlatDataConfig where everything except cross_sheet_refs is boilerplate."""
+def make_config(tmp_path, refs: list[BroadcastIdRef]) -> FlatDataConfig:
+    """Build a FlatDataConfig where everything except broadcast_id_refs is boilerplate."""
     return FlatDataConfig(
         extractor=ExcelExtractorConfig(
             input=tmp_path / "dummy.xlsx",
@@ -61,7 +64,7 @@ def make_config(tmp_path, cross_sheet_refs: list[CrossSheetRef]) -> FlatDataConf
             "author": {"type": "Person"},
             "dataset": {"type": "DataCatalog"},
         },
-        cross_sheet_refs=cross_sheet_refs,
+        broadcast_id_refs=refs,
     )
 
 
@@ -77,12 +80,12 @@ def author_df(is_dataset_author: tuple[int, int] = (1, 0)) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
-# collect_cross_ref_ids
+# prepare_id_ref_broadcast
 # ---------------------------------------------------------------------------
 
 
 def test_collect_filter_returns_ref_type_and_matching_ids(tmp_path):
-    ref = CrossSheetRef(
+    ref = BroadcastIdRef(
         on_sheet="dataset",
         property="creator",
         from_sheet="author",
@@ -92,7 +95,7 @@ def test_collect_filter_returns_ref_type_and_matching_ids(tmp_path):
     config = make_config(tmp_path, [ref])
     data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
 
-    [(returned_ref, ref_type, ids)] = collect_cross_ref_ids(data_dict, config)
+    [(returned_ref, ref_type, ids)] = prepare_id_ref_broadcast(data_dict, config)
 
     assert returned_ref is ref
     assert ref_type == "Person"
@@ -100,17 +103,17 @@ def test_collect_filter_returns_ref_type_and_matching_ids(tmp_path):
 
 
 def test_collect_no_filter_returns_all_ids(tmp_path):
-    ref = CrossSheetRef(on_sheet="dataset", property="creator", from_sheet="author")
+    ref = BroadcastIdRef(on_sheet="dataset", property="creator", from_sheet="author")
     config = make_config(tmp_path, [ref])
     data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
 
-    _, _, ids = collect_cross_ref_ids(data_dict, config)[0]
+    _, _, ids = prepare_id_ref_broadcast(data_dict, config)[0]
 
     assert set(ids) == {"Person_alice.jsonld", "Person_bob.jsonld"}
 
 
 def test_collect_returns_empty_ids_when_filter_matches_nothing(tmp_path):
-    ref = CrossSheetRef(
+    ref = BroadcastIdRef(
         on_sheet="dataset",
         property="creator",
         from_sheet="author",
@@ -123,21 +126,21 @@ def test_collect_returns_empty_ids_when_filter_matches_nothing(tmp_path):
         "dataset": pd.DataFrame(),
     }
 
-    _, _, ids = collect_cross_ref_ids(data_dict, config)[0]
+    _, _, ids = prepare_id_ref_broadcast(data_dict, config)[0]
 
     assert ids == []
 
 
 # ---------------------------------------------------------------------------
-# inject_cross_refs
+# broadcast_id_refs
 # ---------------------------------------------------------------------------
 
 
 def test_inject_single_ref_sets_scalar_property():
     catalog = DataCatalog(id="DataCatalog_main.jsonld")
-    ref = CrossSheetRef(on_sheet="dataset", property="creator", from_sheet="author")
+    ref = BroadcastIdRef(on_sheet="dataset", property="creator", from_sheet="author")
 
-    results = inject_cross_refs(
+    results = broadcast_id_refs(
         {"dataset": [catalog]}, [(ref, "Person", ["Person_alice.jsonld"])]
     )
 
@@ -148,10 +151,10 @@ def test_inject_single_ref_sets_scalar_property():
 
 def test_inject_multiple_refs_sets_list():
     catalog = DataCatalog(id="DataCatalog_main.jsonld")
-    ref = CrossSheetRef(on_sheet="dataset", property="creator", from_sheet="author")
+    ref = BroadcastIdRef(on_sheet="dataset", property="creator", from_sheet="author")
     ids = ["Person_alice.jsonld", "Person_bob.jsonld"]
 
-    results = inject_cross_refs({"dataset": [catalog]}, [(ref, "Person", ids)])
+    results = broadcast_id_refs({"dataset": [catalog]}, [(ref, "Person", ids)])
 
     creator = results["dataset"][0].creator
     assert isinstance(creator, list)
@@ -160,10 +163,10 @@ def test_inject_multiple_refs_sets_list():
 
 def test_inject_empty_ids_leaves_property_unchanged_and_warns(caplog):
     catalog = DataCatalog(id="DataCatalog_main.jsonld")
-    ref = CrossSheetRef(on_sheet="dataset", property="creator", from_sheet="author")
+    ref = BroadcastIdRef(on_sheet="dataset", property="creator", from_sheet="author")
 
     with caplog.at_level("WARNING"):
-        results = inject_cross_refs({"dataset": [catalog]}, [(ref, "Person", [])])
+        results = broadcast_id_refs({"dataset": [catalog]}, [(ref, "Person", [])])
 
     assert results["dataset"][0].creator is None
     assert "no sources for dataset.creator" in caplog.text
@@ -175,7 +178,7 @@ def test_inject_empty_ids_leaves_property_unchanged_and_warns(caplog):
 
 
 def test_integration_collect_then_inject_applies_filter(tmp_path):
-    ref = CrossSheetRef(
+    ref = BroadcastIdRef(
         on_sheet="dataset",
         property="creator",
         from_sheet="author",
@@ -186,8 +189,8 @@ def test_integration_collect_then_inject_applies_filter(tmp_path):
     data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
     catalog = DataCatalog(id="DataCatalog_main.jsonld")
 
-    collected = collect_cross_ref_ids(data_dict, config)
-    results = inject_cross_refs({"dataset": [catalog]}, collected)
+    collected = prepare_id_ref_broadcast(data_dict, config)
+    results = broadcast_id_refs({"dataset": [catalog]}, collected)
 
     creator = results["dataset"][0].creator
     assert isinstance(creator, Person)

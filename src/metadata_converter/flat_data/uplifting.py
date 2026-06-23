@@ -43,7 +43,7 @@ from typing import Any
 from pydantic import BaseModel, ValidationError
 
 from metadata_converter.config import FlatDataUpliftConfig, LinkRule
-from metadata_converter.flat_data.transform.cross_sheet_refs import to_lookup_key
+from metadata_converter.flat_data.transform.id_refs_broadcasting import to_lookup_key
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (

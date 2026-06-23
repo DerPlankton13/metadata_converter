@@ -23,7 +23,7 @@ id = "@id"
 name = "dataset:title"
 description = "dataset:description"
 
-[[cross_sheet_refs]]
+[[broadcast_id_refs]]
 on_sheet = "dataset"
 property = "creator"
 from_sheet = "author"

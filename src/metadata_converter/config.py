@@ -43,7 +43,7 @@ class FlatDataConfig(BaseModel):
         ),
     )
     split_fields: dict[str, list[str]] = Field(default_factory=dict)
-    cross_sheet_refs: list[CrossSheetRef] = Field(default_factory=list)
+    broadcast_id_refs: list[BroadcastIdRef] = Field(default_factory=list)
 
 
 class FlatDataUpliftConfig(BaseModel):
@@ -87,8 +87,8 @@ class CleaningConfig(BaseModel):
         return self
 
 
-class CrossSheetRef(BaseModel):
-    """Ingest-time cross-sheet reference: inject typed entity refs from one sheet into another."""
+class BroadcastIdRef(BaseModel):
+    """Ingest-time broadcast @id reference: inject typed entity refs from one sheet into another."""
 
     model_config = ConfigDict(extra="forbid")
     on_sheet: str = Field(
