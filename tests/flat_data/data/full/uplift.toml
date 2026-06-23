@@ -3,6 +3,9 @@ input_dir = "loaded_base"
 output_dir = "loaded_uplifted"
 provenance_dir = "provenance_test"
 
+# ===================================================================
+# Links properties
+# ===================================================================
 # Action.agent → Person  (forward via stub identifier)
 [[flat_data.links]]
 on_type = "Action"
@@ -28,10 +31,63 @@ match_value = "identifier"
 in_type = "Dataset"
 in_additional_property = "file:analysis"
 
-# Dataset(file).about → Product  (forward via stub identifier)
+# Dataset(file).about → Product
 [[flat_data.links]]
 on_type = "Dataset"
 target_property = "about"
 match_value = "about.identifier"
 in_type = "Product"
 in_property = "identifier"
+ref_id_template = "Product_{identifier}.jsonld"
+
+[[flat_data.enrichments]]
+on_type = "Person"
+target_property = "identifier"
+enrich_as = "Orcid"
+
+# ===================================================================
+# Add funding information
+# ===================================================================
+[[flat_data.adds]]
+on_type = "DataCatalog"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[flat_data.adds]]
+on_type = "DataCatalog"
+target_property = "sourceOrganisation"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"
+
+[[flat_data.adds]]
+on_type = "Dataset"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[flat_data.adds]]
+on_type = "Dataset"
+target_property = "sourceOrganisation"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"
+
+[[flat_data.adds]]
+on_type = "Person"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[flat_data.adds]]
+on_type = "Person"
+target_property = "memberOf"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"
+
+# ===================================================================
+# Remove properties that were used for the linking
+# ===================================================================
+[[flat_data.removals]]
+on_type = "Dataset"
+target_property = "additionalProperty"
+where = { property = "description", contains = "Helper Property for" }
