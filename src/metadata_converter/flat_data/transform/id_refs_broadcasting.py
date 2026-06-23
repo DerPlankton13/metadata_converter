@@ -118,7 +118,7 @@ def to_lookup_key(value: Any) -> str | None:
       ``match_literal = "1"`` still match such a value.
     - everything else → ``str(value).strip().lower()``.
 
-    Also used by ``LinkEngine`` in ``uplifting.py`` for cross-file link matching.
+    Also used by ``LinkApplier`` in ``uplift/link.py`` for cross-file link matching.
     """
     if value is None:
         return None

@@ -13,7 +13,7 @@ from metadata_converter.config import (
     UpliftingConfig,
 )
 from metadata_converter.flat_data.run import flat_data_etl
-from metadata_converter.flat_data.uplifting import uplift_flat_data
+from metadata_converter.flat_data.uplift import run_uplift
 from metadata_converter.parse import parse_cli
 from metadata_converter.utils.log_setup import setup_logging
 
@@ -39,7 +39,7 @@ def main():
             if config.biosamples:
                 uplift_biosamples(config.biosamples)
             if config.flat_data:
-                uplift_flat_data(config.flat_data)
+                run_uplift(config.flat_data)
         case _:
             source = getattr(config, "source_type", "uplift")
             logger.error(

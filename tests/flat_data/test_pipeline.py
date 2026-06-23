@@ -18,7 +18,7 @@ import pytest
 
 from metadata_converter.config import load_source_config, load_uplift_config
 from metadata_converter.flat_data.run import flat_data_etl
-from metadata_converter.flat_data.uplifting import LinkEngine
+from metadata_converter.flat_data.uplift import run_uplift
 
 DATA_DIR = Path(__file__).parent / "data"
 LOAD_SCENARIOS = sorted(p.parent for p in DATA_DIR.glob("*/config.toml"))
@@ -66,6 +66,6 @@ def test_uplift_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     cfg.input_dir = input_dir
     cfg.output_dir = output_dir
 
-    LinkEngine(cfg).run()
+    run_uplift(cfg)
 
     assert_jsonld_dir_matches(output_dir, scenario_dir / "loaded_uplifted")
