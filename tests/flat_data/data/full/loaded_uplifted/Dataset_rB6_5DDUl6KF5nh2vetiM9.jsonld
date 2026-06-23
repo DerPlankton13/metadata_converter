@@ -7,5 +7,13 @@
   "description": "file description 3",
   "name": "file3.fastq.gz",
   "encodingFormat": "fastq",
-  "comment": "file comment 3"
+  "comment": "file comment 3",
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://example.com/super-funding-agency.jsonld"
+  },
+  "sourceOrganisation": {
+    "@type": "Project",
+    "@id": "https://example.com/super-funded-project.jsonld"
+  }
 }
