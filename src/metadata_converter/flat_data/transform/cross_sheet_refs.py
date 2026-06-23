@@ -21,6 +21,88 @@ logger = logging.getLogger(__name__)
 CollectedRef = tuple[CrossSheetRef, str, list[str]]
 
 
+def extract_inline_sheet_refs(config: FlatDataConfig) -> None:
+    """Lift inline ``id = { from_sheet = ... }`` mapping entries into ``config.cross_sheet_refs``.
+
+    Mutates ``config.mapping`` and ``config.cross_sheet_refs`` in place. Idempotent —
+    on a second call there are no inline entries left to extract.
+
+    A property whose value matches the shape::
+
+        { type = "<Type>", id = { from_sheet = "<sheet>", filter_column = "...", filter_value = ... } }
+
+    is removed from the mapping and re-expressed as a ``CrossSheetRef``. The schema
+    builder then sees only embedded sub-objects and column refs.
+    """
+    for sheet_name, sheet_mapping in config.mapping.items():
+        for prop in list(sheet_mapping.keys()):
+            ref = _try_extract(sheet_mapping[prop], sheet_name, prop, config.mapping)
+            if ref is not None:
+                config.cross_sheet_refs.append(CrossSheetRef(**ref))
+                del sheet_mapping[prop]
+
+
+def _try_extract(
+    value: Any, sheet_name: str, prop: str, mapping: dict
+) -> dict | None:
+    """Return a ``CrossSheetRef``-shaped dict if ``value`` is an inline sheet ref, else None.
+
+    Raises ``ValueError`` if the shape is clearly intended-as-ref but malformed.
+    """
+    if not isinstance(value, dict):
+        return None
+    id_spec = value.get("id")
+    if not isinstance(id_spec, dict) or "from_sheet" not in id_spec:
+        return None
+
+    # From here, the user clearly intended a sheet ref. Strict-validate.
+    path = f"{sheet_name}.{prop}"
+
+    if "type" not in value:
+        raise ValueError(f"{path}: inline sheet ref is missing `type`.")
+    outer_extras = set(value) - {"type", "id"}
+    if outer_extras:
+        raise ValueError(
+            f"{path}: inline sheet ref must have exactly `type` and `id`; "
+            f"got unexpected keys {sorted(outer_extras)}."
+        )
+
+    inner_extras = set(id_spec) - {"from_sheet", "filter_column", "filter_value"}
+    if inner_extras:
+        raise ValueError(
+            f"{path}.id: unexpected keys {sorted(inner_extras)}; "
+            f"allowed: from_sheet, filter_column, filter_value."
+        )
+    if (id_spec.get("filter_column") is None) != (id_spec.get("filter_value") is None):
+        raise ValueError(
+            f"{path}.id: filter_column and filter_value must be provided together."
+        )
+
+    from_sheet = id_spec["from_sheet"]
+    if from_sheet not in mapping:
+        raise ValueError(
+            f"{path}.id.from_sheet: unknown sheet '{from_sheet}'. "
+            f"Known sheets: {sorted(mapping)}."
+        )
+    declared = value["type"]
+    target = (
+        mapping[from_sheet].get("type") if isinstance(mapping[from_sheet], dict) else None
+    )
+    if target is not None and declared != target:
+        raise ValueError(
+            f"{path}: declared type '{declared}' does not match "
+            f"mapping['{from_sheet}'].type ('{target}')."
+        )
+
+    return {
+        "on_sheet": sheet_name,
+        "property": prop,
+        "from_sheet": from_sheet,
+        "filter_column": id_spec.get("filter_column"),
+        "filter_value": id_spec.get("filter_value"),
+    }
+
+
 def to_lookup_key(value: Any) -> str | None:
     """Convert a raw data value to the canonical string used for value matching.
 
