@@ -210,8 +210,14 @@ def build_nested(mapping: Nested, row: dict[str, list[Any]]) -> list[SchemaOrgBa
 
     Rules
     -----
-    - **No row-derived data** (no columns, no nested sub-results): return
-      ``[]``. Literal labels alone don't justify a sub-object.
+    - **No data of any kind** (no columns resolved, no nested sub-results,
+      no literals): return ``[]``.
+    - **Literal-only mapping** (no column refs declared anywhere in the
+      subtree): the literals are the entire content; emit one constant instance
+      regardless of the row.
+    - **Literals alongside an empty column** (column refs declared but all
+      came back empty for this row): the literals were decoration for missing
+      data; return ``[]``.
     - **One value per column** (or only literals/nested): return one instance.
     - **N values in one or more columns**: return N instances. Columns with
       length N contribute their i-th value to the i-th instance; columns with
@@ -227,7 +233,9 @@ def build_nested(mapping: Nested, row: dict[str, list[Any]]) -> list[SchemaOrgBa
     broadcast ``name="label"``.
     """
     column, nested, literal = resolve_fields(mapping, row)
-    if not column and not nested:
+    # Literals carry content only when the mapping itself doesn't depend on the row.
+    content_literals = literal if not _reads_row_data(mapping) else {}
+    if not (column or nested or content_literals):
         return []
 
     n = max((len(v) for v in column.values()), default=1)
@@ -251,6 +259,28 @@ def build_nested(mapping: Nested, row: dict[str, list[Any]]) -> list[SchemaOrgBa
         kwargs = {**literal, **nested, **per_instance_columns}
         instances.extend(instantiate(cls, kwargs))
     return instances
+
+
+def _reads_row_data(mapping: Nested) -> bool:
+    """True if ``mapping`` has any ``ColumnRef`` anywhere in its subtree.
+
+    Distinguishes ``{type: PropertyValue, name: "Literal:flag", value: "col"}``
+    (declares a column ref; literals are decoration) from
+    ``{type: MonetaryGrant, id: "Literal:..."}`` (purely literal, no row
+    dependency). The former is dropped when its column is empty; the latter
+    is emitted regardless of row.
+    """
+    for sub in mapping.fields.values():
+        match sub:
+            case ColumnRef():
+                return True
+            case Nested():
+                if _reads_row_data(sub):
+                    return True
+            case Repeated(items=blocks):
+                if any(_reads_row_data(b) for b in blocks):
+                    return True
+    return False
 
 
 def unwrap_single(items: list) -> Any:
