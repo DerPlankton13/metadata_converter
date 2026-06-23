@@ -2,9 +2,6 @@
 input_dir = "loaded_base"
 output_dir = "loaded_uplifted"
 provenance_dir = "provenance_test"
-# Product entities (sample stubs from the datahub) are loaded for indexing but not
-# written to the output — the biosamples uplift provides the canonical Product files.
-drop_types = ["Product"]
 
 # Action.agent → Person  (forward via stub identifier)
 [[flat_data.links]]

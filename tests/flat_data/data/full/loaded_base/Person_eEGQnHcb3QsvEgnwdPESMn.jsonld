@@ -4,14 +4,6 @@
   },
   "@type": "Person",
   "@id": "Person_eEGQnHcb3QsvEgnwdPESMn.jsonld",
-  "additionalProperty": [
-    {
-      "@type": "PropertyValue",
-      "name": "author:is-dataset-author",
-      "value": 0.0,
-      "description": "Helper property to allow populating DataCatalog.creator with this Person."
-    }
-  ],
   "name": "Bob Builder",
   "identifier": "0000-0001-0003-1234",
   "givenName": "Bob",

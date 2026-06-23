@@ -28,24 +28,6 @@ analysis = ["analysis:author-pid", "analysis:sample"]
 dataset = ["dataset:keywords"]
 file = ["file:analysis", "file:sample"]
 
-# Cross-sheet references resolved at ingest time, scoped to this source file.
-# These handle relationships where there is no join key — the implicit link is
-# that all entities come from the same Excel file.
-
-# Persons flagged as dataset authors → DataCatalog.creator
-[[cross_sheet_refs]]
-on_sheet = "dataset"
-property = "creator"
-from_sheet = "author"
-filter_column = "author:is-dataset-author"
-filter_value = 1
-
-# All file Datasets → DataCatalog.dataset
-[[cross_sheet_refs]]
-on_sheet = "dataset"
-property = "dataset"
-from_sheet = "file"
-
 [mapping]
 [mapping.author]
 type = "Person"
@@ -57,13 +39,6 @@ email = "author:email"
 identifier = "author:pid"
 affiliation.type = "Organization"
 affiliation.name = "author:affiliation"
-
-# Flag used at ingest (cross_sheet_refs) to populate DataCatalog.creator with this Person.
-[[mapping.author.additionalProperty]]
-type = "PropertyValue"
-name = "Literal:author:is-dataset-author"
-value = "author:is-dataset-author"
-description = "Literal:Helper property to allow populating DataCatalog.creator with this Person."
 
 [mapping.dataset]
 type = "DataCatalog"
@@ -77,6 +52,8 @@ datePublished = "dataset:date-public"
 inLanguage = "dataset:language"
 license = "dataset:license"
 keywords = "dataset:keywords"
+creator = { type = "Person", id = { from_sheet = "author", filter_column = "author:is-dataset-author", filter_value = 1 } }
+dataset = { type = "Dataset", id = { from_sheet = "file" } }
 
 [mapping.analysis]
 type = "Action"
@@ -88,8 +65,6 @@ agent.type = "Person"
 agent.identifier = "analysis:author-pid"   # forward: uplift resolves to Person @id
 object.type = "Product"
 object.identifier = "analysis:sample"
-# result: filled at uplift from file Datasets (reverse via file:analysis)
-
 
 [mapping.file]
 type = "Dataset"
