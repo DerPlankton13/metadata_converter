@@ -22,10 +22,4 @@ type = "DataCatalog"
 id = "@id"
 name = "dataset:title"
 description = "dataset:description"
-
-[[broadcast_id_refs]]
-on_sheet = "dataset"
-property = "creator"
-from_sheet = "author"
-filter_column = "author:is-dataset-author"
-filter_value = 1
+creator = { type = "Person", id = { from_sheet = "author", filter_column = "author:is-dataset-author", filter_value = 1 } }
