@@ -55,6 +55,7 @@ class FlatDataUpliftConfig(BaseModel):
     provenance_dir: Path | None = None
     links: list[LinkRule] = Field(default_factory=list)
     enrichments: list[EnrichmentRule] = Field(default_factory=list)
+    removals: list[RemovalRule] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _no_target_overlap(self) -> FlatDataUpliftConfig:
@@ -63,6 +64,8 @@ class FlatDataUpliftConfig(BaseModel):
         Each ``(on_type, target_property)`` may be touched by at most one rule across
         ``links`` and ``enrichments`` combined. The pair is the contract for what
         gets written; overlap would mean the last rule silently overwrites the others.
+        ``removals`` are exempt — they legitimately undo or refine what another rule
+        (or ingest) produced, and two removals may target the same list.
         """
         seen: dict[tuple[str, str], str] = {}
         rules_by_kind = (
@@ -130,6 +133,46 @@ class BroadcastIdRef(BaseModel):
     filter_value: Any = Field(
         None, description="Value to match (normalized string comparison)."
     )
+
+
+class RemovalWhere(BaseModel):
+    """Predicate selecting which items to remove from a list-valued property.
+
+    Reads ``property`` (a possibly nested dot-selector) on each item and compares
+    on string form. Exactly one of ``equals`` (exact) or ``contains`` (substring)
+    must be set; both are case-sensitive.
+    """
+
+    model_config = ConfigDict(extra="forbid", populate_by_name=True)
+    property: str = Field(
+        description="Dot-selector on each item to test (e.g. 'name', 'valueReference.termCode')."
+    )
+    equals: str | None = Field(
+        default=None, description="Exact match. Mutually exclusive with contains."
+    )
+    contains: str | None = Field(
+        default=None, description="Substring match. Mutually exclusive with equals."
+    )
+
+    @model_validator(mode="after")
+    def _exactly_one_mode(self) -> RemovalWhere:
+        if (self.equals is None) == (self.contains is None):
+            raise ValueError("exactly one of 'equals' or 'contains' must be set in `where`")
+        return self
+
+
+class RemovalRule(BaseModel):
+    """Filter items out of a list-valued property at uplift time.
+
+    For each entity of ``on_type``, items of ``target_property`` matching ``where``
+    are removed. A single (non-list) value is treated as a one-item collection; an
+    emptied collection collapses to ``None``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    on_type: str = Field(description="@type of entities to modify.")
+    target_property: str = Field(description="List-valued property to filter.")
+    where: RemovalWhere = Field(description="Predicate selecting items to remove.")
 
 
 class EnrichmentRule(BaseModel):

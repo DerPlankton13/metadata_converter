@@ -11,6 +11,7 @@ from metadata_converter.config import FlatDataUpliftConfig
 from metadata_converter.flat_data.uplift.enrichment import EnrichmentApplier
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.flat_data.uplift.link import LinkApplier
+from metadata_converter.flat_data.uplift.remove import RemoveApplier
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +25,14 @@ def run_uplift(config: FlatDataUpliftConfig) -> None:
        group entities by ``@type`` into an ``EntityStore``.
     2. **Link** — apply every ``LinkRule`` in ``config.links``.
     3. **Enrich** — apply every ``EnrichmentRule`` in ``config.enrichments``.
-    4. **Write** — export every entity to ``config.output_dir``.
+    4. **Remove** — apply every ``RemovalRule`` in ``config.removals`` (scrubs
+       linking scaffolding now that links have been resolved).
+    5. **Write** — export every entity to ``config.output_dir``.
     """
     logger.info("Starting flat-data uplift from %s", config.input_dir)
     store = EntityStore.load(config.input_dir)
     LinkApplier(store).apply_all(config.links)
     EnrichmentApplier(store).apply_all(config.enrichments)
+    RemoveApplier(store).apply_all(config.removals)
     store.write(config.output_dir)
     logger.info("Flat-data uplift complete. Output: %s", config.output_dir)
