@@ -157,8 +157,25 @@ There are three source types plus a separate uplift config:
   to add units, then optionally "uplifts" the raw records into `Product` + `Action` JSON-LD pairs.
 - **`api`** — queries external APIs (currently Zenodo) and fetches JSON-LD records via either an export
   endpoint or HTML scraping.
-- **uplift config** — no `source_type`; used exclusively with `converter uplift` to resolve cross-references between
-  ingested JSON-LD files via declarative link rules.
+- **uplift config** — no `source_type`; used with `converter uplift` to post-process already-ingested JSON-LD via
+  declarative rules. Operations: **link** (resolve cross-references), **enrich** (wrap a scalar in a custom
+  PropertyValue subclass), **remove** (filter scaffolding items out of a list), and **add** (set a fixed value). See
+  the flat-data uplift subsection below.
+
+### Where each transformation belongs
+
+The converter produces JSON-LD *files*; it does not build or query a graph. Decide where a transformation lives by its
+nature:
+
+- **Ingest (table space)** — shape source data into well-formed entities, including data-structure *repair* via plugins
+  (e.g. materialising a join the source only expressed implicitly across sheets).
+- **Uplift (entity space)** — declarative post-processing that must be written into the artifact: resolving
+  cross-references by naming convention (relative-IRI assignment), enriching scalars, scrubbing scaffolding.
+- **Graph space (downstream `paper` repo, in SPARQL)** — true inferences/derivations (transitive closure, cross-source
+  harmonisation). A SPARQL engine is intentionally *not* a converter dependency yet; defer such features to the graph.
+
+Corollary: linking scaffolding (markers needed only to resolve a reference) should ride as `additionalProperty` entries
+and be removed at uplift — never become first-class stub entities that merely duplicate another entity's identity.
 
 ### Schema.org models (`src/metadata_converter/schema_org_models/`)
 
@@ -204,20 +221,50 @@ The config's `mapping` dict controls how tabular columns become schema.org prope
 must have a `type` key (schema.org class name) and then property-to-column mappings:
 
 - **String value** → direct column lookup: `"name": "dataset:title"`
+- **`Literal:` prefix** → constant value, no column lookup: `"funding": {"type": "MonetaryGrant", "id": "Literal:https://…"}`
 - **Dict value** → nested schema object (must also contain `type`):
   `"author": {"type": "Person", "name": "author:name"}`
 - **List of dicts** → list of nested objects: `"creator": [{"type": "Person", ...}]`
+- **Inline broadcast `@id` ref** → `{"type": "<Type>", "id": {"from_sheet": "<sheet>", "filter_column": …, "filter_value": …}}`
+  fills the property with refs to *all* entities of another sheet in the same file (optionally filtered). See
+  `transform/id_refs_broadcasting.py`.
 
-When a nested entity has parallel lists of equal length, `build_schema` automatically splits them into one instance per
-row.
+`build_schemas` (`transform/schema_builder.py`) parses each mapping into a typed AST (`Literal`, `ColumnRef`, `Nested`,
+`Repeated`) once, then evaluates it per entity. When a nested entity has multi-value columns, it fans out into one
+instance per value; a literal-only mapping emits a constant; output lists are collapsed to scalars where possible
+(one value → not a list).
 
-`preprocess_datahub` is a **hardcoded preprocessing step** for the BIOcean5D datahub input format. It expects exactly
-five sheets named `author`, `dataset`, `analysis`, `sample`, and `file`, and wires up cross-sheet relationships (
-author → creator, sample → object, file → result) before schema building. Samples are removed from the output because
-their JSON-LD is produced by the biosamples workflow instead.
+Cleaning plugins subclass `Plugin` (`transform/cleaning_plugin.py`) and implement `run(data: dict[str, DataFrame]) ->
+dict[str, DataFrame]` — they receive the whole dataset (so they can read one sheet and write another) and run before
+the built-in cleaning steps. They are discovered dynamically from a `plugin_dir`. After cleaning, sheets with no
+`mapping` entry are dropped (loaded only as plugin/broadcast sources).
 
-Cleaning plugins implement `CleaningPlugin.run(df) -> df` and are discovered dynamically from a `plugin_dir`. They run
-before all other cleaning steps.
+### Flat-data uplift (`src/metadata_converter/flat_data/uplift/`)
+
+A **project-agnostic** post-processing stage over already-ingested JSON-LD — it knows nothing about specific @types or
+properties; the rules in `FlatDataUpliftConfig` drive everything. Nothing here is flat-data-specific: only the config
+class name and the package location tie it to `flat_data`, and it is **slated to move to its own top-level package**.
+(The one remaining coupling is `link.py` importing `to_lookup_key` from `flat_data.transform`, to be relocated on
+extraction.) Do not confuse this with biosamples `uplifting.py`, which is project-*specific* data transformation, not
+generic graph post-processing — the shared name is historical.
+
+`run_uplift` loads every `*.jsonld` from `input_dir` into an `EntityStore` (indexed by `@type`), applies each operation
+in a fixed order, then writes every entity to `output_dir`:
+
+1. **`LinkApplier`** (`link.py`) — `LinkRule`: resolve cross-references; set a property to a ref (or list of refs) to
+   matched candidates, optionally via a `ref_id_template`.
+2. **`EnrichmentApplier`** (`enrichment.py`) — `EnrichmentRule`: wrap a scalar in a custom PropertyValue subclass
+   (`enrich_as`, e.g. `Orcid`); the class's validators fill the enriched fields. One value per entity (a multi-value
+   list raises — an entity carries at most one identifier of a given type).
+3. **`AddApplier`** — `AdditionRule`: set a property to a fixed constant value (planned).
+4. **`RemoveApplier`** (`remove.py`) — `RemovalRule`: filter items out of a list-valued property by a `where` predicate
+   (`equals`/`contains` on a possibly nested subproperty, string-form, case-sensitive); runs last to scrub linking
+   scaffolding.
+
+`select.py` holds the shared `select_values` dot-selector (auto-unwraps PropertyValue `.value`) and `render_ref_id`.
+A config validator rejects two rules across links/enrichments/additions targeting the same `(on_type, target_property)`;
+removals are exempt (they legitimately refine other rules' output). Output convention throughout: collapse to the
+shortest shape — 0 → `None`, 1 → scalar, ≥2 → list.
 
 ### Metadata-collector workflow (`src/metadata_converter/api_fetching/`)
 
