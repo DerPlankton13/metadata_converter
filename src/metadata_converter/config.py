@@ -55,6 +55,7 @@ class FlatDataUpliftConfig(BaseModel):
     provenance_dir: Path | None = None
     links: list[LinkRule] = Field(default_factory=list)
     enrichments: list[EnrichmentRule] = Field(default_factory=list)
+    additions: list[AdditionRule] = Field(default_factory=list)
     removals: list[RemovalRule] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -62,15 +63,17 @@ class FlatDataUpliftConfig(BaseModel):
         """Reject configs that have two rules targeting the same on_type.target_property.
 
         Each ``(on_type, target_property)`` may be touched by at most one rule across
-        ``links`` and ``enrichments`` combined. The pair is the contract for what
-        gets written; overlap would mean the last rule silently overwrites the others.
-        ``removals`` are exempt — they legitimately undo or refine what another rule
-        (or ingest) produced, and two removals may target the same list.
+        ``links``, ``enrichments`` and ``additions`` combined. The pair is the
+        contract for what gets written; overlap would mean the last rule silently
+        overwrites the others. ``removals`` are exempt — they legitimately undo or
+        refine what another rule (or ingest) produced, and two removals may target
+        the same list.
         """
         seen: dict[tuple[str, str], str] = {}
         rules_by_kind = (
             *(("link", r) for r in self.links),
             *(("enrichment", r) for r in self.enrichments),
+            *(("addition", r) for r in self.additions),
         )
         for kind, rule in rules_by_kind:
             key = (rule.on_type, rule.target_property)
@@ -193,6 +196,23 @@ class EnrichmentRule(BaseModel):
         description="Class name to construct around the scalar (e.g. 'Orcid', 'DOI'). "
         "Must name a PropertyValue subclass. The scalar becomes the class's "
         "``value`` field; the class's validators fill out the rest."
+    )
+
+
+class AdditionRule(BaseModel):
+    """Set a property to a fixed constant value on every entity of a type at uplift time.
+
+    The ``value`` is either a *literal* (a scalar DataType — Text/Number/Boolean) set
+    directly, a *node* (a mapping carrying a ``type`` key, plus ``id`` and any schema.org
+    fields, that builds a typed schema object, recursively), or a list of these (set
+    as-is, not collapsed). The constant overwrites any existing value of ``target_property``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    on_type: str = Field(description="@type of entities to modify.")
+    target_property: str = Field(description="Property to set on each on_type entity.")
+    value: str | int | float | bool | list[Any] | dict[str, Any] = Field(
+        description="The constant to set: a literal, a node (mapping with a 'type' key), or a list of these."
     )
 
 
