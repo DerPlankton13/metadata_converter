@@ -48,37 +48,37 @@ enrich_as = "Orcid"
 # ===================================================================
 # Add funding information
 # ===================================================================
-[[flat_data.adds]]
+[[flat_data.additions]]
 on_type = "DataCatalog"
 target_property = "funding"
 value.type = "MonetaryGrant"
 value.id = "https://example.com/super-funding-agency.jsonld"
 
-[[flat_data.adds]]
+[[flat_data.additions]]
 on_type = "DataCatalog"
 target_property = "sourceOrganisation"
 value.type = "Project"
 value.id = "https://example.com/super-funded-project.jsonld"
 
-[[flat_data.adds]]
+[[flat_data.additions]]
 on_type = "Dataset"
 target_property = "funding"
 value.type = "MonetaryGrant"
 value.id = "https://example.com/super-funding-agency.jsonld"
 
-[[flat_data.adds]]
+[[flat_data.additions]]
 on_type = "Dataset"
 target_property = "sourceOrganisation"
 value.type = "Project"
 value.id = "https://example.com/super-funded-project.jsonld"
 
-[[flat_data.adds]]
+[[flat_data.additions]]
 on_type = "Person"
 target_property = "funding"
 value.type = "MonetaryGrant"
 value.id = "https://example.com/super-funding-agency.jsonld"
 
-[[flat_data.adds]]
+[[flat_data.additions]]
 on_type = "Person"
 target_property = "memberOf"
 value.type = "Project"
