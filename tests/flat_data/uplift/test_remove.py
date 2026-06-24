@@ -77,6 +77,32 @@ def test_removal_filters_matching_item(where):
     assert dataset.additionalProperty[1].value == "more data"
 
 
+def test_removal_removes_all_matching_items():
+    store = EntityStore()
+    store.by_type["Dataset"] = [
+        Dataset(
+            id="Dataset_f1.jsonld",
+            additionalProperty=[
+                PropertyValue(name="file:analysis", value="metabarcoding"),
+                PropertyValue(name="file:analysis", value="imaging"),
+                PropertyValue(name="keep-me", value="real data"),
+            ],
+        )
+    ]
+
+    RemoveApplier(store).apply(
+        RemovalRule(
+            on_type="Dataset",
+            target_property="additionalProperty",
+            where=RemovalWhere(property="name", equals="file:analysis"),
+        )
+    )
+
+    [dataset] = store.of_type("Dataset")
+    assert dataset.additionalProperty.name == "keep-me"
+    assert dataset.additionalProperty.value == "real data"
+
+
 def test_removal_collapses_to_single_survivor():
     store = EntityStore()
     store.by_type["Dataset"] = [
