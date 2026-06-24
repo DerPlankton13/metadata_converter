@@ -178,9 +178,8 @@ def test_removal_matches_nested_subproperty():
     )
 
     [dataset] = store.of_type("Dataset")
-    assert len(dataset.additionalProperty) == 1
-    assert dataset.additionalProperty[0].name == "other"
-    assert dataset.additionalProperty[0].valueReference.termCode == "NCBI_999"
+    assert dataset.additionalProperty.name == "other"
+    assert dataset.additionalProperty.valueReference.termCode == "NCBI_999"
 
 
 def test_removal_keeps_item_when_predicate_field_absent():
@@ -206,8 +205,7 @@ def test_removal_keeps_item_when_predicate_field_absent():
     )
 
     [dataset] = store.of_type("Dataset")
-    assert len(dataset.additionalProperty) == 1
-    assert dataset.additionalProperty[0].name == "keep-me"
+    assert dataset.additionalProperty.name == "keep-me"
 
 
 def test_removal_matches_when_any_resolved_value_matches():
