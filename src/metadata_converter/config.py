@@ -50,7 +50,11 @@ class FlatDataUpliftConfig(BaseModel):
     """Uplift config for flat-data sources, driven by declarative rules."""
 
     model_config = ConfigDict(extra="forbid")
-    input_dir: Path
+    input_dir: Path | list[Path] = Field(
+        description="One input directory, or several whose JSON-LD is merged into a "
+        "single store (e.g. one per ingested source). A duplicate @id across "
+        "directories is an error."
+    )
     output_dir: Path
     provenance_dir: Path | None = None
     links: list[LinkRule] = Field(default_factory=list)

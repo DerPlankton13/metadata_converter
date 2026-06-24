@@ -31,21 +31,40 @@ class EntityStore:
         self.by_type: dict[str, list[SchemaOrgBase]] = {}
 
     @classmethod
-    def load(cls, input_dir: Path) -> "EntityStore":
-        """Read every ``*.jsonld`` file in ``input_dir`` and group models by ``@type``.
+    def load(cls, input_dir: Path | list[Path]) -> "EntityStore":
+        """Read every ``*.jsonld`` file from one or more directories, grouping by ``@type``.
 
-        Files that fail to load or validate are logged and skipped — the rest of
-        the run continues. A warning is logged when the input directory is empty.
+        A single ``Path`` or a list of them may be given; the latter merges several
+        ingested sources into one store. Files that fail to load or validate are
+        logged and skipped, and a warning is logged for any empty directory.
+
+        Raises
+        ------
+        ValueError
+            If the same ``@id`` appears in more than one file across the given
+            directories. A collision points to a source-setup problem, so the run
+            stops rather than silently keeping one entity over another.
         """
+        input_dirs = [input_dir] if isinstance(input_dir, Path) else input_dir
         store = cls()
-        files = sorted(input_dir.glob("*.jsonld"))
-        if not files:
-            logger.warning("No JSON-LD files found in %s", input_dir)
-        for path in files:
-            with path.open() as f:
-                data = json.load(f)
-            model = load_as_model(data, path.name)
-            if model is not None:
+        seen_ids: dict[str, Path] = {}
+        for directory in input_dirs:
+            files = sorted(directory.glob("*.jsonld"))
+            if not files:
+                logger.warning("No JSON-LD files found in %s", directory)
+            for path in files:
+                with path.open() as f:
+                    data = json.load(f)
+                model = load_as_model(data, path.name)
+                if model is None:
+                    continue
+                if model.id in seen_ids:
+                    raise ValueError(
+                        f"Duplicate @id {model.id!r} found in {path} and "
+                        f"{seen_ids[model.id]}; each entity must have a unique @id "
+                        f"across all input directories."
+                    )
+                seen_ids[model.id] = path
                 store.by_type.setdefault(model.type, []).append(model)
         total = sum(len(models) for models in store.by_type.values())
         logger.info("Loaded %d entity file(s)", total)
@@ -70,8 +89,8 @@ def load_as_model(data: dict, source: str) -> SchemaOrgBase | None:
     """Instantiate the schema.org Pydantic model for one JSON-LD entity.
 
     Returns ``None`` (with a warning log) when the entity has no scalar ``@type``,
-    an unknown ``@type``, or fails Pydantic validation; callers may skip such
-    entities cleanly.
+    an unknown ``@type``, no ``@id``, or fails Pydantic validation; callers may skip
+    such entities cleanly.
     """
     entity_type = data.get("@type")
     if not isinstance(entity_type, str):
@@ -83,10 +102,14 @@ def load_as_model(data: dict, source: str) -> SchemaOrgBase | None:
         logger.warning("%s: unknown schema.org @type %r; skipping", source, entity_type)
         return None
     try:
-        return model_cls(**data)
+        model = model_cls(**data)
     except ValidationError as e:
         logger.warning(
             "%s: Pydantic validation failed for @type %r", source, entity_type
         )
         log_validation_error(e, logger, level="warning")
         return None
+    if model.id is None:
+        logger.warning("%s: entity has no @id; skipping", source)
+        return None
+    return model
