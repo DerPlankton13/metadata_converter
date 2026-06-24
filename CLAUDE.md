@@ -105,12 +105,18 @@ Rules of thumb when writing or refactoring tests:
 - **Test names describe the scenario and the expected outcome.** Read as a sentence:
   `test_<what is set up>_<what should happen>`. `test_collect_no_filter_returns_all_ids` says exactly what failed when
   it goes red. `test_collect_works` says nothing.
+- **Keep names concise and implementation-free.** Trim words that restate the verb (`test_removal_..._is_removed`),
+  filler (`..._of_value`, `..._list_items_...`), and redundant prefixes already implied by the file/scenario. Never
+  name a test after *how* it works (`..._treats_as_list`) — name it after the observable scenario
+  (`..._matching_single_item`). Shorter is better as long as the sentence still reads true.
 - **Parametrize over data, not over logic.** When two tests differ only in inputs and expected outputs, collapse them
   with `@pytest.mark.parametrize`. When two tests differ in what they verify (different scenarios, different
   assertions), keep them separate — parametrize is not a tool for merging distinct behaviors into one function.
 - **Every part of the return value should be asserted somewhere.** If a function returns three values and the test
   suite only ever asserts on two, the third is either dead code (and should be removed) or untested (and needs a case
-  that checks it).
+  that checks it). When a function returns an enriched object, assert every populated field so a validator that
+  silently stops filling one is caught. When an operation filters or mutates a collection, assert the survivors are
+  *intact* (their own fields unchanged), not merely present, so a filter that accidentally rebuilds items is caught.
 - **No logic in tests.** No `if`, no loops, no arithmetic in the test body. Hardcode the expected value. If you find
   yourself computing it, you are re-implementing the production code inside the test — which means the test cannot
   catch a wrong implementation that makes the same mistake.
@@ -128,6 +134,16 @@ Rules of thumb when writing or refactoring tests:
   failures across many unrelated test files, the suite is over-coupled — usually through shared fixtures or helpers
   that try to serve too many scenarios at once. Move setup into each test until every failure points clearly at the
   cause.
+- **Scope coverage by orthogonal axes, not the cross product.** Identify the independent axes of a behavior (e.g. a
+  match-mode axis vs. an outcome-shape axis). When axes are independent, test each axis once rather than every
+  combination — exercising the same downstream code through a different upstream choice is over-testing. Spell out the
+  axes when proposing the test plan so the intentional gaps are visible, not accidental.
+- **Choose example data deliberately.** Use the same literal for the same role across tests, varying it only when the
+  variation *is* the point — consistent literals let a reader spot what actually differs. Keep values domain-faithful
+  (respect the real constraints of the type) and use generic placeholders rather than values lifted from real input.
+- **Pin informative error messages.** When a test expects a raised error, `match=` on the *specific, diagnostic* part
+  of the message — the offending field/property name and the reason — not a generic fragment. This both documents the
+  message contract and forces the implementation to keep the message useful.
 
 ## Architecture
 
