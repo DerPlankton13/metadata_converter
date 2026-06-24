@@ -54,6 +54,11 @@ def test_removal_filters_matching_item(where):
                     description="A real description",
                     value="real data",
                 ),
+                PropertyValue(
+                    name="keep-me-too",
+                    description="Another real description",
+                    value="more data",
+                ),
             ],
         )
     ]
@@ -65,10 +70,36 @@ def test_removal_filters_matching_item(where):
     )
 
     [dataset] = store.of_type("Dataset")
-    assert len(dataset.additionalProperty) == 1
+    assert len(dataset.additionalProperty) == 2
     assert dataset.additionalProperty[0].name == "keep-me"
     assert dataset.additionalProperty[0].value == "real data"
-    assert dataset.additionalProperty[0].description == "A real description"
+    assert dataset.additionalProperty[1].name == "keep-me-too"
+    assert dataset.additionalProperty[1].value == "more data"
+
+
+def test_removal_collapses_to_single_survivor():
+    store = EntityStore()
+    store.by_type["Dataset"] = [
+        Dataset(
+            id="Dataset_f1.jsonld",
+            additionalProperty=[
+                PropertyValue(name="file:analysis", value="metabarcoding"),
+                PropertyValue(name="keep-me", value="real data"),
+            ],
+        )
+    ]
+
+    RemoveApplier(store).apply(
+        RemovalRule(
+            on_type="Dataset",
+            target_property="additionalProperty",
+            where=RemovalWhere(property="name", equals="file:analysis"),
+        )
+    )
+
+    [dataset] = store.of_type("Dataset")
+    assert dataset.additionalProperty.name == "keep-me"
+    assert dataset.additionalProperty.value == "real data"
 
 
 def test_removal_collapses_emptied_list_to_none():
