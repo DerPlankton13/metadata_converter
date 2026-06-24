@@ -2,7 +2,7 @@
 
 An addition sets ``target_property`` on every entity of ``on_type`` to a fixed
 constant. The constant is either a *literal* (a scalar DataType value) or a *node*
-(a typed table that builds a schema.org object, recursively). Models are built in
+(a typed mapping that builds a schema.org object, recursively). Models are built in
 non-strict mode; an unknown field is kept but logged as a warning, while an unknown
 ``type`` cannot be built and raises. An addition overwrites any existing value and
 logs when it does.

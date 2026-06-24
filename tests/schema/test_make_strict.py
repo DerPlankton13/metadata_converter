@@ -19,6 +19,7 @@ def test_make_strict_accepts_valid_input():
     instance = strict.model_validate({"@id": "project.jsonld"})
 
     assert instance.id == "project.jsonld"
+    assert instance.type == "Project"
 
 
 def test_make_strict_rejects_extra_field():

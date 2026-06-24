@@ -54,8 +54,9 @@ def test_load_multiple_dirs_merges_same_type(tmp_path):
 
     store = EntityStore.load([input_dir_a, input_dir_b])
 
-    people = store.of_type("Person")
-    assert {p.id for p in people} == {"Person_alice.jsonld", "Person_bob.jsonld"}
+    alice, bob = store.of_type("Person")
+    assert alice.id == "Person_alice.jsonld"
+    assert bob.id == "Person_bob.jsonld"
 
 
 def test_load_duplicate_id_across_dirs_raises(tmp_path):
