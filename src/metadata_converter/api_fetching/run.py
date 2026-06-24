@@ -53,7 +53,7 @@ def ingest_api_data(config: ApiFetchingConfig) -> None:
                 jsonld = json.load(f)
             schema_type = jsonld["@type"].split("/")[-1]
             schema = get_schema(schema_type)(**jsonld)
-            load_to_jsonld(schema, output_path=config.output.loaded_base)
+            load_to_jsonld(schema, output_dir=config.output.loaded_base)
         except Exception as e:
             logger.error("Failed to ingest %s", fetched_file.name)
             log_validation_error(e, logger)
