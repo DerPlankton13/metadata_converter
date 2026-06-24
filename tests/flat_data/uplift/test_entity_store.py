@@ -1,6 +1,7 @@
 """Tests for ``EntityStore`` in ``uplift/entity_store.py``: load → write round-trip,
 and loading from one or several input directories."""
 import json
+import logging
 from pathlib import Path
 
 import pytest
@@ -57,6 +58,21 @@ def test_load_multiple_dirs_merges_same_type(tmp_path):
     alice, bob = store.of_type("Person")
     assert alice.id == "Person_alice.jsonld"
     assert bob.id == "Person_bob.jsonld"
+
+
+def test_load_entity_without_id_is_skipped(tmp_path, caplog):
+    input_dir = tmp_path / "in"
+    input_dir.mkdir()
+    (input_dir / "no_id.jsonld").write_text(json.dumps({
+        "@context": {"@vocab": "https://schema.org"},
+        "@type": "Person",
+    }))
+
+    with caplog.at_level(logging.WARNING):
+        store = EntityStore.load(input_dir)
+
+    assert store.of_type("Person") == []
+    assert "no_id.jsonld" in caplog.text
 
 
 def test_load_duplicate_id_across_dirs_raises(tmp_path):
