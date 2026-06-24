@@ -9,6 +9,7 @@ strict : False
 
 from __future__ import annotations
 
+import sys
 from datetime import date, datetime, time, timedelta
 from functools import cache
 from typing import Any
@@ -23,6 +24,9 @@ class SchemaOrgBase(BaseModel):
     Provides the two fields common to all JSON-LD nodes and configures
     Pydantic to accept both Python attribute names and JSON-LD @-prefixed
     aliases interchangeably.
+    Defers build until first model validation to massively reduce run
+    time as most models are not used and ensures that each new
+    assignment is also validated.
     """
 
     model_config = ConfigDict(
@@ -42,6 +46,24 @@ class SchemaOrgBase(BaseModel):
     additionalProperty: PropertyValue | str | list[str | PropertyValue] | None = Field(
         default=None
     )
+
+
+@cache
+def make_strict(cls):
+    """Create a strict variant of a schema.org model that forbids extra fields.
+
+    The variant is a dynamically created subclass, so Pydantic must re-resolve the
+    model's forward references. Bind them to the source model's own module namespace —
+    otherwise (Pydantic >= 2.12) resolution falls back to the caller's namespace, which
+    lacks the schema.org type names, and the subclass raises "not fully defined".
+    """
+    strict = type(
+        f"Strict{cls.__name__}",
+        (cls,),
+        {"model_config": ConfigDict(**{**cls.model_config, "extra": "forbid"})},
+    )
+    strict.model_rebuild(_types_namespace=vars(sys.modules[cls.__module__]))
+    return strict
 
 
 class Thing(SchemaOrgBase):
@@ -12715,21 +12737,6 @@ class _3DModel(MediaObject):
 
     type: str = Field(default="3DModel", alias="@type")
     isResizable: bool | str | list[bool | str] | None = Field(default=None)
-
-
-# ---------------------------------------------------------------------------
-# Add a strict mode
-# ---------------------------------------------------------------------------
-
-
-@cache
-def make_strict(cls):
-    """Allows creating a strict version of the pydantic models that forbid extra parameters."""
-    return type(
-        f"Strict{cls.__name__}",
-        (cls,),
-        {"model_config": ConfigDict(**{**cls.model_config, "extra": "forbid"})},
-    )
 
 
 # ---------------------------------------------------------------------------
