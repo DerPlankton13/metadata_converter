@@ -38,3 +38,8 @@ testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 88
+
+[tool.ruff.lint.per-file-ignores]
+# SchemaOrgBase in the generator references PropertyValue — a name that exists only
+# in the generated output module, where it resolves as a forward reference.
+"src/metadata_converter/schema_org_models/schema_org_model_generator.py" = ["F821"]
