@@ -52,9 +52,16 @@ For non-trivial work, follow this rhythm by default (unless the user signals oth
    any code. Surface trade-offs and alternatives; settle naming and semantics up front.
 2. **Break it into smaller pieces.** Sequence the work into independently shippable steps and recommend
    an order. Confirm the order before starting.
-3. **Implement each piece test-driven.** For every piece, write the tests **first**, pause for the user to
-   review and refine them (names, error messages, assertions), confirm they fail, then implement until
-   green. One commit per piece.
+3. **Implement each piece test-driven.** Every piece has **two distinct review gates, and both require the
+   user's explicit approval before you move past them**:
+   - **Gate A — the test-plan table.** Before writing any test bodies, get the table approved (see below).
+   - **Gate B — the written test bodies.** After writing the bodies, **stop and hand them to the user for
+     review**. Do *not* write any production code until the user explicitly signs off on the bodies.
+   Only then implement until green. One commit per piece.
+
+   "Confirm they fail" is part of Gate B and is a checkpoint **for the user**, not a self-serve gate you
+   clear by running pytest yourself. A passing or failing test run is never your own permission to proceed —
+   table approval is not a green light to implement, and neither is a red pytest run.
 
 For the tests-first step, **begin with a compact test-plan table for approval** —
 `name | scenario | key data | assertions` — and list the orthogonal coverage axes (with intentional gaps
@@ -117,6 +124,10 @@ Rules of thumb when writing or refactoring tests:
   that checks it). When a function returns an enriched object, assert every populated field so a validator that
   silently stops filling one is caught. When an operation filters or mutates a collection, assert the survivors are
   *intact* (their own fields unchanged), not merely present, so a filter that accidentally rebuilds items is caught.
+  **For any operation that sets or mutates one field of an object (e.g. an uplift rule writing a property), always
+  ask the second question — "what must stay the same?" — and assert the untouched siblings, not just the changed
+  field.** Asserting only the field you set cannot catch an implementation that clobbers or rebuilds the rest of the
+  object; this holds even when you "know" the current implementation is safe, because the test guards future ones.
 - **No logic in tests.** No `if`, no loops, no arithmetic in the test body. Hardcode the expected value. If you find
   yourself computing it, you are re-implementing the production code inside the test — which means the test cannot
   catch a wrong implementation that makes the same mistake.
@@ -181,7 +192,10 @@ and be removed at uplift — never become first-class stub entities that merely 
 
 - **`schemaorg_models.py`** — auto-generated Pydantic models for all schema.org types. Do not edit manually; regenerate
   with `schema_org_model_generator.py`. `SchemaOrgBase` is the root; it defines `@context`, `@type`, `@id`, and
-  `additionalProperty` (which all our schema objects may carry).
+  `additionalProperty` (which all our schema objects may carry). It sets `populate_by_name=True`, so models accept
+  **either** field names (`cls(id=...)`) **or** aliases (`cls(**{"@id": ...})`) on construction; the `@id`/`@type`
+  aliases are what `model_dump(by_alias=True)` emits. Because field names work, building from the `type`/`id` mapping
+  grammar needs no alias remap (see `schema_builder.instantiate` and `flat_data/uplift/add.py`).
 - **`custom_models.py`** — project-specific `PropertyValue` subclasses (e.g. `Orcid`, `DOI`, `ISSN`, `ISBN`,
   `UrlIdentifier`) with validation logic. Also exposes `get_schema(type_name)` for dynamic type lookup by string name.
 - **`schemaorg_models.py` (end)** — `make_strict()` creates a strict variant of any model; `rebuild_all_models()` forces
