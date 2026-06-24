@@ -44,6 +44,25 @@ converter <phase> <config.toml>
 
 Dependencies are managed with `uv`. The project uses `hatchling` as the build backend.
 
+## Workflow
+
+For non-trivial work, follow this rhythm by default (unless the user signals otherwise):
+
+1. **Discuss the larger implementation first.** Agree on the overall design and approach before writing
+   any code. Surface trade-offs and alternatives; settle naming and semantics up front.
+2. **Break it into smaller pieces.** Sequence the work into independently shippable steps and recommend
+   an order. Confirm the order before starting.
+3. **Implement each piece test-driven.** For every piece, write the tests **first**, pause for the user to
+   review and refine them (names, error messages, assertions), confirm they fail, then implement until
+   green. One commit per piece.
+
+For the tests-first step, **begin with a compact test-plan table for approval** —
+`name | scenario | key data | assertions` — and list the orthogonal coverage axes (with intentional gaps
+called out) *before* writing any test bodies. Revising a table row is cheap; revising eight code blocks is
+not. Write the test code only for the approved rows, then proceed to implementation.
+
+Do not jump straight to implementation on a multi-part task.
+
 ## Code Style
 
 Docstrings use NumPy style. Simple functions get a single-line docstring; only use the full NumPy sections (Parameters,
