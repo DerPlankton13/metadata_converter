@@ -24,6 +24,8 @@ Then in your application::
     person = Person(name="Ada Lovelace", email="ada@example.com")
 """
 
+from __future__ import annotations
+
 import argparse
 import inspect
 import json
@@ -34,6 +36,7 @@ import textwrap
 import urllib.request
 from collections import defaultdict
 from datetime import date, datetime, time, timedelta
+from functools import cache
 from keyword import iskeyword
 from pathlib import Path
 from typing import Any, TypedDict
@@ -112,9 +115,34 @@ class SchemaOrgBase(BaseModel):
         validate_assignment=True,
     )
 
+    # these are all not schema.org properties, but they are needed for jsonld
+    context: str | dict[str, Any] | None = Field(default=None, alias="@context")
     # The schema.org class name, will be set automatically by each generated subclass.
     type: str = Field(alias="@type")
     id: str | None = Field(default=None, alias="@id")
+
+    # this is our modification of schema.org, saying, that we always allow additionalProperty
+    additionalProperty: PropertyValue | str | list[str | PropertyValue] | None = Field(
+        default=None
+    )
+
+
+@cache
+def make_strict(cls):
+    """Create a strict variant of a schema.org model that forbids extra fields.
+
+    The variant is a dynamically created subclass, so Pydantic must re-resolve the
+    model's forward references. Bind them to the source model's own module namespace —
+    otherwise (Pydantic >= 2.12) resolution falls back to the caller's namespace, which
+    lacks the schema.org type names, and the subclass raises "not fully defined".
+    """
+    strict = type(
+        f"Strict{cls.__name__}",
+        (cls,),
+        {"model_config": ConfigDict(**{**cls.model_config, "extra": "forbid"})},
+    )
+    strict.model_rebuild(_types_namespace=vars(sys.modules[cls.__module__]))
+    return strict
 
 
 # def get_schema(type_name: str) -> type[SchemaOrgBase]:
@@ -459,13 +487,17 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         '"""',
         "from __future__ import annotations",
         "",
+        "import sys",
         "from datetime import date, datetime, time, timedelta",
+        "from functools import cache",
         "from typing import Any",
         "",
         "from pydantic import AnyUrl, BaseModel, ConfigDict, Field",
         "",
         "",
         inspect.getsource(SchemaOrgBase),
+        "",
+        inspect.getsource(make_strict),
         "",
     ]
 
