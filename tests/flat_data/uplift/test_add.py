@@ -148,6 +148,22 @@ def test_add_applies_to_all_entities():
     assert bob.name == "Bob"
 
 
+def test_add_apply_all_applies_each_rule():
+    store = EntityStore()
+    store.by_type["Person"] = [Person(id="Person_alice.jsonld", name="Alice")]
+
+    AddApplier(store).apply_all([
+        AdditionRule(on_type="Person", target_property="jobTitle", value="Researcher"),
+        AdditionRule(on_type="Person", target_property="description", value="A scientist"),
+    ])
+
+    [person] = store.of_type("Person")
+    assert person.jobTitle == "Researcher"
+    assert person.description == "A scientist"
+    assert person.id == "Person_alice.jsonld"
+    assert person.name == "Alice"
+
+
 def test_add_unknown_type_raises():
     store = EntityStore()
     store.by_type["Person"] = [Person(id="Person_alice.jsonld", name="Alice")]
