@@ -13,12 +13,12 @@ retained. An unknown ``type`` cannot be built and raises.
 import logging
 from typing import Any
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel
 
 from metadata_converter.config import AdditionRule
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.custom_models import get_schema
-from metadata_converter.schema_org_models.schemaorg_models import make_strict
+from metadata_converter.schema_org_models.schemaorg_models import validate_strict
 
 logger = logging.getLogger(__name__)
 
@@ -81,12 +81,13 @@ class AddApplier:
             if key != "type"
         }
 
+        instance = cls(**fields)
         try:
-            make_strict(cls).model_validate(fields)
-        except ValidationError as e:
+            validate_strict(instance)
+        except ValueError as e:
             logger.warning(
                 "Addition %s.%s: value for type %r does not strictly validate against "
                 "the schema.org model — keeping it, but it may not be intended. %s",
                 rule.on_type, rule.target_property, type_name, e,
             )
-        return cls(**fields)
+        return instance

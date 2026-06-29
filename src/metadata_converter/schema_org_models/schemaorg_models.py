@@ -9,9 +9,7 @@ strict : False
 
 from __future__ import annotations
 
-import sys
 from datetime import date, datetime, time, timedelta
-from functools import cache
 from typing import Any
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field
@@ -48,22 +46,26 @@ class SchemaOrgBase(BaseModel):
     )
 
 
-@cache
-def make_strict(cls):
-    """Create a strict variant of a schema.org model that forbids extra fields.
+def validate_strict(model) -> None:
+    """Raise if a parsed model — or any nested model — has fields not in the schema.
 
-    The variant is a dynamically created subclass, so Pydantic must re-resolve the
-    model's forward references. Bind them to the source model's own module namespace —
-    otherwise (Pydantic >= 2.12) resolution falls back to the caller's namespace, which
-    lacks the schema.org type names, and the subclass raises "not fully defined".
+    Models parse with ``extra="allow"``, which keeps unknown fields in ``model_extra``
+    instead of rejecting them. This walks the parsed object and raises on the first
+    offender, at any depth.
     """
-    strict = type(
-        f"Strict{cls.__name__}",
-        (cls,),
-        {"model_config": ConfigDict(**{**cls.model_config, "extra": "forbid"})},
-    )
-    strict.model_rebuild(_types_namespace=vars(sys.modules[cls.__module__]))
-    return strict
+    if isinstance(model, list):
+        for item in model:
+            validate_strict(item)
+        return
+    if not isinstance(model, BaseModel):
+        return
+    if model.model_extra:
+        raise ValueError(
+            f"{type(model).__name__} has fields outside the schema.org model: "
+            f"{sorted(model.model_extra)}"
+        )
+    for field_name in type(model).model_fields:
+        validate_strict(getattr(model, field_name))
 
 
 class Thing(SchemaOrgBase):

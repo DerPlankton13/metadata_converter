@@ -15,7 +15,7 @@ from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
     Product,
-    make_strict,
+    validate_strict,
 )
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.io import write_json
@@ -206,12 +206,11 @@ def uplift_biosamples(config: SourcePaths):
             product = Product(**product_dict)
             load_to_jsonld(product, output_dir=config.output_dir)
             try:
-                make_strict(Product).model_validate(product_dict)
-            except ValidationError as e:
+                validate_strict(product)
+            except ValueError as e:
                 logger.warning(
-                    "Strict validation failed for Product from %s", path.name
+                    "Strict validation failed for Product from %s: %s", path.name, e
                 )
-                log_validation_error(e, logger, level="warning")
         except ValidationError as e:
             logger.error("Failed to build Product for %s.", path.name)
             log_validation_error(e, logger)
@@ -220,10 +219,9 @@ def uplift_biosamples(config: SourcePaths):
             action = Action(**action_dict)
             load_to_jsonld(action, output_dir=config.output_dir)
             try:
-                make_strict(Action).model_validate(action_dict)
-            except ValidationError as e:
-                logger.warning("Strict validation failed for Action from %s", path.name)
-                log_validation_error(e, logger, level="warning")
+                validate_strict(action)
+            except ValueError as e:
+                logger.warning("Strict validation failed for Action from %s: %s", path.name, e)
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)
             log_validation_error(e, logger)
