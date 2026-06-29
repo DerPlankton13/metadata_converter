@@ -7,6 +7,8 @@ prepare_id_ref_broadcast (wide-format DataFrame access), and broadcast_id_refs
 needed.
 """
 
+import copy
+
 import pandas as pd
 import pytest
 
@@ -84,7 +86,7 @@ def author_df(is_dataset_author: tuple[int, int] = (1, 0)) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 
 
-def test_collect_filter_returns_ref_type_and_matching_ids(tmp_path):
+def test_prepare_filter_returns_ref_type_and_matching_ids(tmp_path):
     ref = BroadcastIdRef(
         on_sheet="dataset",
         property="creator",
@@ -102,17 +104,17 @@ def test_collect_filter_returns_ref_type_and_matching_ids(tmp_path):
     assert ids == ["Person_alice.jsonld"]
 
 
-def test_collect_no_filter_returns_all_ids(tmp_path):
+def test_prepare_no_filter_returns_all_ids(tmp_path):
     ref = BroadcastIdRef(on_sheet="dataset", property="creator", from_sheet="author")
     config = make_config(tmp_path, [ref])
     data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
 
     _, _, ids = prepare_id_ref_broadcast(data_dict, config)[0]
 
-    assert set(ids) == {"Person_alice.jsonld", "Person_bob.jsonld"}
+    assert ids == ["Person_alice.jsonld", "Person_bob.jsonld"]
 
 
-def test_collect_returns_empty_ids_when_filter_matches_nothing(tmp_path):
+def test_prepare_returns_empty_ids_when_filter_matches_nothing(tmp_path):
     ref = BroadcastIdRef(
         on_sheet="dataset",
         property="creator",
@@ -158,7 +160,9 @@ def test_inject_multiple_refs_sets_list():
 
     creator = results["dataset"][0].creator
     assert isinstance(creator, list)
-    assert {c.id for c in creator} == set(ids)
+    alice, bob = creator
+    assert alice.id == "Person_alice.jsonld"
+    assert bob.id == "Person_bob.jsonld"
 
 
 def test_inject_empty_ids_leaves_property_unchanged_and_warns(caplog):
@@ -301,7 +305,9 @@ def test_multiple_inline_broadcast_id_refs_all_extracted(tmp_path):
 
     extract_inline_id_ref_broadcasts(cfg)
 
-    assert {r.property for r in cfg.broadcast_id_refs} == {"creator", "dataset"}
+    creator_ref, dataset_ref = cfg.broadcast_id_refs
+    assert creator_ref.property == "creator"
+    assert dataset_ref.property == "dataset"
     assert "creator" not in cfg.mapping["dataset"]
     assert "dataset" not in cfg.mapping["dataset"]
 
@@ -347,7 +353,7 @@ def test_extract_is_idempotent_on_second_call(tmp_path):
     )
 
     extract_inline_id_ref_broadcasts(cfg)
-    mapping_after_first = {k: dict(v) for k, v in cfg.mapping.items()}
+    mapping_after_first = copy.deepcopy(cfg.mapping)
     refs_after_first = list(cfg.broadcast_id_refs)
     extract_inline_id_ref_broadcasts(cfg)
 
@@ -396,6 +402,22 @@ def test_dict_with_id_dict_without_from_sheet_passes_through_unchanged(tmp_path)
         "type": "Person",
         "id": {"something_else": "foo"},
     }
+
+
+def test_inline_broadcast_id_ref_missing_type_raises(tmp_path):
+    cfg = make_config_with_mapping(
+        tmp_path,
+        {
+            "author": {"type": "Person"},
+            "dataset": {
+                "type": "DataCatalog",
+                "creator": {"id": {"from_sheet": "author"}},
+            },
+        },
+    )
+
+    with pytest.raises(ValueError, match="missing `type`"):
+        extract_inline_id_ref_broadcasts(cfg)
 
 
 def test_inline_broadcast_id_ref_with_extra_outer_key_raises(tmp_path):
