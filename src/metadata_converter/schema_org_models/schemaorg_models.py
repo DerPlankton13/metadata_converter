@@ -12739,26 +12739,3 @@ class _3DModel(MediaObject):
 
     type: str = Field(default="3DModel", alias="@type")
     isResizable: bool | str | list[bool | str] | None = Field(default=None)
-
-
-# ---------------------------------------------------------------------------
-# Dynamic lookup
-# ---------------------------------------------------------------------------
-
-
-def rebuild_all_models():
-    import sys
-
-    module = sys.modules[__name__]
-
-    models = [
-        obj
-        for obj in module.__dict__.values()
-        if isinstance(obj, type)
-        and issubclass(obj, BaseModel)
-        and obj is not BaseModel
-        and not getattr(obj, "__pydantic_generic_metadata__", None)
-    ]
-
-    for m in models:
-        m.model_rebuild(force=True)
