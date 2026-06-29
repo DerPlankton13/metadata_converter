@@ -26,6 +26,10 @@ projects/
 # Run all tests
 python -m pytest
 
+# Run with branch coverage (default check when adding/changing tests — an unhit
+# branch usually means a missing case; see the orthogonal-axes testing rule)
+python -m pytest --cov=src --cov-branch --cov-report=term-missing
+
 # Run a single test file
 python -m pytest tests/biosamples/test_biosamples.py
 
@@ -146,9 +150,14 @@ Rules of thumb when writing or refactoring tests:
   that try to serve too many scenarios at once. Move setup into each test until every failure points clearly at the
   cause.
 - **Scope coverage by orthogonal axes, not the cross product.** Identify the independent axes of a behavior (e.g. a
-  match-mode axis vs. an outcome-shape axis). When axes are independent, test each axis once rather than every
-  combination — exercising the same downstream code through a different upstream choice is over-testing. Spell out the
-  axes when proposing the test plan so the intentional gaps are visible, not accidental.
+  match-mode axis vs. an outcome-shape axis). **Derive the axes from the function's own structure — every
+  `isinstance`/`if`/recursion point and each input shape it dispatches on is an axis — not from the examples salient in
+  the current discussion**, or you will test what you are thinking about and miss a branch you just wrote (e.g. the
+  list case in a recursive walker). When axes are independent, test each axis once rather than every combination —
+  exercising the same downstream code through a different upstream choice is over-testing. Spell out the axes when
+  proposing the test plan so the intentional gaps are visible, not accidental — do this even for "small/obvious" test
+  sets, since that is exactly when a branch slips through. Run `pytest --cov-branch` as a mechanical backstop: an unhit
+  branch is a missing case.
 - **Choose example data deliberately.** Use the same literal for the same role across tests, varying it only when the
   variation *is* the point — consistent literals let a reader spot what actually differs. Keep values domain-faithful
   (respect the real constraints of the type) and use generic placeholders rather than values lifted from real input.
