@@ -3,11 +3,7 @@ import pytest
 
 from metadata_converter.config import LinkRule
 from metadata_converter.flat_data.uplift import run_uplift
-from tests.flat_data.uplift.conftest import (
-    DATAHUB_RULES,
-    load_jsonld,
-    write_jsonld,
-)
+from tests.flat_data.uplift.conftest import load_jsonld, write_jsonld
 
 
 # ---------------------------------------------------------------------------
@@ -54,16 +50,6 @@ def test_link_resolves_to_reference(uplifted, filename, target_property, expecte
 # ---------------------------------------------------------------------------
 
 
-def test_no_flagged_person_leaves_creator_unset(ingested, config_factory):
-    for fname in ("Person_alice.jsonld", "Person_bob.jsonld"):
-        p = load_jsonld(ingested / fname)
-        p["additionalProperty"][0]["value"] = 0
-        write_jsonld(ingested / fname, p)
-    cfg = config_factory(out_name="no_creator")
-    run_uplift(cfg)
-    assert "creator" not in load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld")
-
-
 def test_unresolvable_agent_orcid_keeps_stub_intact(ingested, config_factory):
     action = load_jsonld(ingested / "Action_analysis1.jsonld")
     action["agent"]["identifier"] = "0000-0009-9999-9999"  # nobody has this
@@ -88,11 +74,10 @@ def test_multiple_samples_for_one_analysis_aggregate_into_list(ingested, config_
     cfg = config_factory(out_name="multi_sample")
     run_uplift(cfg)
     action = load_jsonld(cfg.output_dir / "Action_analysis1.jsonld")
-    assert isinstance(action["object"], list)
-    assert {ref["@id"] for ref in action["object"]} == {
-        "Product_SAMEA0001.jsonld",
-        "Product_SAMEA0002.jsonld",
-    }
+    assert action["object"] == [
+        {"@type": "Product", "@id": "Product_SAMEA0001.jsonld"},
+        {"@type": "Product", "@id": "Product_SAMEA0002.jsonld"},
+    ]
 
 
 def test_ref_id_template_constructs_id_from_candidate_property(ingested, config_factory):
@@ -122,36 +107,36 @@ def test_literal_1_matches_int_and_string_one(ingested, config_factory, flag_val
     write_jsonld(ingested / "Person_alice.jsonld", alice)
     cfg = config_factory(out_name=f"literal_1_{flag_value!r}")
     run_uplift(cfg)
-    assert load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld").get("creator")
+    assert load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld")["creator"] == {
+        "@type": "Person", "@id": "Person_alice.jsonld",
+    }
 
 
 @pytest.mark.parametrize("flag_value", [True, "true"])
 def test_literal_true_matches_bool_and_string(ingested, config_factory, flag_value):
-    # match_literal="true" must match both the Python bool True and the string "true".
-    # Mixed-case variants ("True", "TRUE") are normalised to "true" by to_lookup_key
-    # and are covered by test_to_lookup_key_normalises_to_canonical_string in test_id_refs_broadcasting.py.
-    rules = [
-        r.model_copy(update={"match_literal": "true"})
-        if r.target_property == "creator" else r
-        for r in DATAHUB_RULES
-    ]
     alice = load_jsonld(ingested / "Person_alice.jsonld")
     alice["additionalProperty"][0]["value"] = flag_value
     write_jsonld(ingested / "Person_alice.jsonld", alice)
-    cfg = config_factory(rules=rules, out_name=f"literal_true_{flag_value!r}")
+    rule = LinkRule(
+        on_type="DataCatalog", target_property="creator",
+        match_literal="true",
+        in_type="Person", in_additional_property="author:is-dataset-author",
+    )
+    cfg = config_factory(rules=[rule], out_name=f"literal_true_{flag_value!r}")
     run_uplift(cfg)
-    assert load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld").get("creator")
+    assert load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld")["creator"] == {
+        "@type": "Person", "@id": "Person_alice.jsonld",
+    }
 
 
 @pytest.mark.parametrize("flag_value", [0, False])
 def test_falsy_flag_values_leave_creator_unset(ingested, config_factory, flag_value):
-    # int 0 and bool False both normalise to strings that don't match "1".
-    # String variants ("0", "false") follow from test_to_lookup_key_normalises_to_canonical_string
-    # in test_id_refs_broadcasting.py and are not repeated here.
-    for fname in ("Person_alice.jsonld", "Person_bob.jsonld"):
-        p = load_jsonld(ingested / fname)
-        p["additionalProperty"][0]["value"] = flag_value
-        write_jsonld(ingested / fname, p)
+    alice = load_jsonld(ingested / "Person_alice.jsonld")
+    alice["additionalProperty"][0]["value"] = flag_value
+    write_jsonld(ingested / "Person_alice.jsonld", alice)
+    bob = load_jsonld(ingested / "Person_bob.jsonld")
+    bob["additionalProperty"][0]["value"] = flag_value
+    write_jsonld(ingested / "Person_bob.jsonld", bob)
     cfg = config_factory(out_name=f"falsy_{flag_value!r}")
     run_uplift(cfg)
     assert "creator" not in load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld")
