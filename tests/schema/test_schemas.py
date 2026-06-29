@@ -1,35 +1,50 @@
+"""Tests that real schema.org example documents are faithfully represented by the models.
+
+Each example is parsed and then ``validate_strict``-checked — so a field not declared
+on the models (at any depth) is rejected rather than silently kept by ``extra="allow"`` —
+and must round-trip exactly, proving no content is dropped or coerced.
+"""
 import json
+from pathlib import Path
 
 import pytest
-from pydantic import ValidationError
 
 from metadata_converter import get_schema
+from metadata_converter.schema_org_models.schemaorg_models import validate_strict
 
-INPUT_FILES = [f"Example{i}.jsonld" for i in range(1, 10)]
-OUT_OF_SCOPE = ["Example3.jsonld", "Example7.jsonld"]  # mark these as xfail
+DATA_DIR = Path(__file__).parent / "data"
+
+# Each example is a real schema.org JSON-LD document. Two are out of scope:
+# Example3 uses the Role pattern (a Role carrying an arbitrary role-qualified property),
+# which the models don't represent, and Example7 is a multi-node @graph document with no
+# single top-level @type. Both xfail (strict, so they flag us if support ever lands).
+EXAMPLE_FILES = [
+    "Example1.jsonld",
+    "Example2.jsonld",
+    pytest.param(
+        "Example3.jsonld",
+        marks=pytest.mark.xfail(reason="Role pattern not modelled", strict=True),
+    ),
+    "Example4.jsonld",
+    "Example5.jsonld",
+    "Example6.jsonld",
+    pytest.param(
+        "Example7.jsonld",
+        marks=pytest.mark.xfail(
+            reason="@graph document — no single top-level @type", strict=True
+        ),
+    ),
+    "Example8.jsonld",
+    "Example9.jsonld",
+]
 
 
-@pytest.mark.parametrize("input_file", INPUT_FILES)
-def test_creation(input_file):
+@pytest.mark.parametrize("filename", EXAMPLE_FILES)
+def test_example_is_strictly_modelled_and_round_trips(filename):
+    data = json.loads((DATA_DIR / filename).read_text())
+    data.pop("@context", None)
 
-    # If file is out of scope, mark as expected failure
-    if input_file in OUT_OF_SCOPE:
-        pytest.xfail(f"{input_file} is out of scope for current implementation")
+    model = get_schema(data["@type"])(**data)
 
-    with open(f"tests/schema/data/{input_file}", "r") as f:
-        definition_dict = json.load(f)
-
-    definition_dict.pop("@context", None)
-    model_type = definition_dict["@type"]
-    cls = get_schema(model_type)
-
-    try:
-        cls(**definition_dict)
-    except ValidationError as e:
-        print(f"Error in input file {input_file}")
-        for error in e.errors():
-            print(f"Field: {error['loc']}")
-            print(f"Got input: {error.get(input)}")
-            print(f"Error: {error['msg']}")
-            print("---")
-        raise
+    validate_strict(model)
+    assert model.model_dump(by_alias=True, exclude_none=True) == data
