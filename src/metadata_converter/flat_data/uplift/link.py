@@ -132,8 +132,6 @@ class LinkApplier:
                 values = select_values(candidate, rule.in_property)
             for value in values:
                 key = to_lookup_key(value)
-                if key is None:
-                    continue
                 candidates_by_value.setdefault(key, []).append(candidate)
 
         if not candidates_by_value:
@@ -164,15 +162,12 @@ class LinkApplier:
     ) -> list[SchemaOrgBase]:
         """Resolve each lookup value to candidates, deduplicated by ``@id``.
 
-        Candidates without an ``@id`` are skipped — they cannot be turned into
-        a reference.
+        Every stored entity has an ``@id`` (``EntityStore.load`` skips those without),
+        so every matched candidate can be turned into a reference.
         """
         matches_by_id: dict[str, SchemaOrgBase] = {}
         for value in lookup_values:
             key = to_lookup_key(value)
-            if key is None:
-                continue
             for candidate in candidates_by_value.get(key, []):
-                if candidate.id:
-                    matches_by_id.setdefault(candidate.id, candidate)
+                matches_by_id.setdefault(candidate.id, candidate)
         return list(matches_by_id.values())

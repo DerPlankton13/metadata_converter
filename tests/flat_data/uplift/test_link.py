@@ -1,8 +1,13 @@
 """Tests for ``LinkApplier`` in ``uplift/link.py``: rule application and edge cases."""
+import logging
+
 import pytest
 
 from metadata_converter.config import LinkRule
 from metadata_converter.flat_data.uplift import run_uplift
+from metadata_converter.flat_data.uplift.entity_store import EntityStore
+from metadata_converter.flat_data.uplift.link import LinkApplier
+from metadata_converter.schema_org_models.schemaorg_models import Action, Person, Product
 from tests.flat_data.uplift.conftest import load_jsonld, write_jsonld
 
 
@@ -127,6 +132,89 @@ def test_literal_true_matches_bool_and_string(ingested, config_factory, flag_val
     assert load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld")["creator"] == {
         "@type": "Person", "@id": "Person_alice.jsonld",
     }
+
+
+# ---------------------------------------------------------------------------
+# Error and edge paths — direct LinkApplier unit tests
+# ---------------------------------------------------------------------------
+
+
+def test_link_unknown_in_type_skips_rule(caplog):
+    store = EntityStore()
+    store.by_type["Action"] = [Action(id="Action_1.jsonld", identifier="p1")]
+
+    with caplog.at_level(logging.WARNING):
+        LinkApplier(store).apply(LinkRule(
+            on_type="Action", target_property="object",
+            match_value="identifier", in_type="Nonexistent", in_property="identifier",
+        ))
+
+
+    [action] = store.of_type("Action")
+    assert action.object is None
+    assert "unknown @type" in caplog.text
+
+
+def test_link_no_candidates_leaves_target_unset(caplog):
+    store = EntityStore()
+    store.by_type["Action"] = [Action(id="Action_1.jsonld", identifier="p1")]
+
+    with caplog.at_level(logging.WARNING):
+        LinkApplier(store).apply(LinkRule(
+            on_type="Action", target_property="object",
+            match_value="identifier", in_type="Product", in_property="identifier",
+        ))
+
+    [action] = store.of_type("Action")
+    assert action.object is None
+    assert "no candidates of @type 'Product'" in caplog.text
+
+
+def test_link_missing_match_value_skips_entity():
+    store = EntityStore()
+    store.by_type["Person"] = [Person(id="Person_1.jsonld", identifier="p1")]
+    store.by_type["Action"] = [Action(id="Action_1.jsonld")]
+
+    LinkApplier(store).apply(LinkRule(
+        on_type="Action", target_property="agent",
+        match_value="agent.identifier", in_type="Person", in_property="identifier",
+    ))
+
+    [action] = store.of_type("Action")
+    assert action.agent is None
+
+
+def test_link_unrenderable_template_skips_match(caplog):
+    store = EntityStore()
+    store.by_type["Product"] = [Product(id="Product_1.jsonld", identifier="p1")]
+    store.by_type["Action"] = [Action(id="Action_1.jsonld", identifier="p1")]
+
+    with caplog.at_level(logging.WARNING):
+        LinkApplier(store).apply(LinkRule(
+            on_type="Action", target_property="object",
+            match_value="identifier", in_type="Product", in_property="identifier",
+            ref_id_template="Product_{missing}.jsonld",
+        ))
+
+    [action] = store.of_type("Action")
+    assert action.object is None
+    assert "could not be rendered" in caplog.text
+
+
+def test_link_invalid_assignment_skips_entity(caplog):
+    store = EntityStore()
+    store.by_type["Product"] = [Product(id="Product_1.jsonld", identifier="p1")]
+    store.by_type["Person"] = [Person(id="Person_1.jsonld", identifier="p1")]
+
+    with caplog.at_level(logging.WARNING):
+        LinkApplier(store).apply(LinkRule(
+            on_type="Person", target_property="birthDate",
+            match_value="identifier", in_type="Product", in_property="identifier",
+        ))
+
+    [person] = store.of_type("Person")
+    assert person.birthDate is None
+    assert "assignment failed" in caplog.text
 
 
 @pytest.mark.parametrize("flag_value", [0, False])
