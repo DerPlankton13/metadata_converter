@@ -60,19 +60,37 @@ def test_load_multiple_dirs_merges_same_type(tmp_path):
     assert bob.id == "Person_bob.jsonld"
 
 
-def test_load_entity_without_id_is_skipped(tmp_path, caplog):
+@pytest.mark.parametrize(
+    "entity, expected_warning",
+    [
+        pytest.param(
+            {"@id": "x.jsonld", "name": "n"},
+            "missing or non-scalar @type",
+            id="missing-type",
+        ),
+        pytest.param(
+            {"@type": "Nonexistent", "@id": "x.jsonld"},
+            "unknown schema.org @type",
+            id="unknown-type",
+        ),
+        pytest.param(
+            {"@type": "Person", "@id": ["a", "b"]},
+            "Pydantic validation failed",
+            id="validation-error",
+        ),
+        pytest.param({"@type": "Person"}, "entity has no @id", id="missing-id"),
+    ],
+)
+def test_load_skips_unusable_entity_with_warning(tmp_path, caplog, entity, expected_warning):
     input_dir = tmp_path / "in"
     input_dir.mkdir()
-    (input_dir / "no_id.jsonld").write_text(json.dumps({
-        "@context": {"@vocab": "https://schema.org"},
-        "@type": "Person",
-    }))
+    (input_dir / "bad.jsonld").write_text(json.dumps(entity))
 
     with caplog.at_level(logging.WARNING):
         store = EntityStore.load(input_dir)
 
-    assert store.of_type("Person") == []
-    assert "no_id.jsonld" in caplog.text
+    assert store.by_type == {}
+    assert expected_warning in caplog.text
 
 
 def test_load_duplicate_id_across_dirs_raises(tmp_path):
