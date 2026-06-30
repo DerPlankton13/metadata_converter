@@ -10,6 +10,7 @@ from metadata_converter.config import ApiFetchingConfig
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.log_setup import log_validation_error
+from metadata_converter.utils.provenance_writer import write_provenance_file
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,17 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
         fetched_file = fetched_path / f"{record.source_id}.jsonld"
         logger.debug("Writing fetched JSON-LD to %s", fetched_file)
         write_json(jsonld, fetched_file)
+
+        if config.provenance_dir is not None:
+            if config.extractor.fetch_strategy == "export_endpoint":
+                source_url = config.extractor.export_url_template.format(
+                    record_id=record.source_id
+                )
+            else:
+                source_url = record.url
+            write_provenance_file(
+                jsonld["@id"], config.provenance_dir, source_url, "load"
+            )
 
     logger.info("API fetch complete. Output: %s", fetched_path)
 

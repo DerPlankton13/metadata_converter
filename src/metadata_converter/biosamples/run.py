@@ -8,7 +8,11 @@ import pandas as pd
 from pydantic import ValidationError
 from tqdm import tqdm
 
-from metadata_converter.biosamples.fetch import fuse_metadata, get_metadata
+from metadata_converter.biosamples.fetch import (
+    fuse_metadata,
+    get_metadata,
+    sample_source_urls,
+)
 from metadata_converter.biosamples.uplifting import SampleUplifter
 from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourcePaths
 from metadata_converter.load import load_to_jsonld
@@ -20,6 +24,7 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.log_setup import log_validation_error
+from metadata_converter.utils.provenance_writer import write_provenance_file
 
 logger = logging.getLogger(__name__)
 
@@ -94,6 +99,12 @@ def fetch_biosamples(config: BiosamplesConfig):
 
     fetched_path = config.output.input
     fetched_path.mkdir(parents=True, exist_ok=True)
+
+    if config.provenance_dir is not None:
+        for sid in all_sample_ids:
+            write_provenance_file(
+                f"{sid}.jsonld", config.provenance_dir, sample_source_urls(sid), "load"
+            )
 
     already_fetched = {
         sid
