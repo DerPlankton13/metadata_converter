@@ -2,7 +2,7 @@
 
 `metadata_converter` is a CLI tool that converts source-specific metadata into
 JSON-LD files conforming to schema.org, driven by a TOML config. It supports
-three independent ingest workflows and a separate uplift/linking step.
+three independent load workflows and a separate uplift/linking step.
 
 ---
 
@@ -22,14 +22,14 @@ pip install metadata_converter
 converter <phase> <config.toml>
 ```
 
-`phase` is one of `fetch`, `ingest`, or `uplift`. The `source_type` key in the
+`phase` is one of `fetch`, `load`, or `uplift`. The `source_type` key in the
 config identifies the data source; the phase selects the step to execute:
 
 | Phase | Applicable source types | What it does |
 |---|---|---|
 | `fetch` | `biosamples`, `api` | Download raw records from external APIs |
-| `ingest` | `flat_data`, `biosamples`, `api` | Transform raw/tabular data into schema.org JSON-LD |
-| `uplift` | *(uplift config, no source_type)* | Resolve cross-references between ingested JSON-LD files |
+| `load` | `flat_data`, `biosamples`, `api` | Transform raw/tabular data into schema.org JSON-LD (`loaded_base`) |
+| `uplift` | *(uplift config, no source_type)* | Resolve cross-references, enrich, add, and remove across loaded JSON-LD |
 
 Source configs (`flat_data`, `biosamples`, `api`) use `source_type` as their
 discriminator. The uplift config has no `source_type` — it is a separate config
@@ -78,10 +78,10 @@ and writes one JSON-LD file per entity.
 source_type = "flat_data"
 
 [extractor]
-file_path  = "data/raw/input.xlsx"
+input      = "data/raw/input.xlsx"   # an .xlsx file, or a directory of them
 sheet_name = ["author", "dataset"]
 header     = 0
-skiprows   = [1, 2]          # skip descriptor rows below the header
+skiprows   = [1, 2]          # optional: skip descriptor rows below the header
 
 [cleaning]
 strip_header_whitespace = true
@@ -90,7 +90,7 @@ sentinels_to_na         = false
 placeholders_to_na      = false
 
 [output]
-ingested = "data/ingested/my_source"
+loaded_base = "data/loaded_base/my_source"
 
 [mapping.author]
 type       = "Person"
@@ -99,10 +99,13 @@ givenName  = "author:first-name"
 familyName = "author:last-name"
 
 [mapping.dataset]
-type       = "DataCatalog"
-id         = "@id"
-name       = "dataset:title"
+type = "DataCatalog"
+id   = "@id"
+name = "dataset:title"
 ```
+
+Every entity gets a content-hash `@id` of the form `<Type>_<hash>.jsonld`
+automatically; `id = "@id"` in the mapping is the conventional placeholder for it.
 
 ### Mapping syntax
 
@@ -112,49 +115,52 @@ names the schema.org class; every other key is a property name. Values can be:
 | Value form | Meaning |
 |---|---|
 | `"col-name"` | Look up this column in the current row |
-| `"Literal:some text"` | Use the literal string `some text` (prefix stripped) |
-| `{type = "Person", name = "col"}` | Build a nested schema.org object |
-| `[{type = "PropertyValue", …}]` | Build a list of nested objects |
+| `"Literal:some text"` | Use the literal string `some text` (prefix stripped), not a column |
+| `{ type = "Person", name = "col" }` | Build a nested schema.org object (also writable in dotted form, e.g. `author.type = "Person"`) |
+| `[{ type = "PropertyValue", … }]` | Build a list of nested objects (each element must be a typed object) |
+| `{ type = "Person", id = { from_sheet = "author", … } }` | A **broadcast `@id` reference** — fill this property with refs to entities from another sheet (see below) |
 
-`Literal:` is designed for flag values and controlled vocabulary terms that are
-constants, not column lookups — e.g. `name = "Literal:author:is-dataset-author"`.
+`Literal:` is for flag values and controlled-vocabulary constants that are not
+column lookups — e.g. `name = "Literal:author:is-dataset-author"`.
 
 ### Cleaning plugins
 
-Optional Python files that transform a sheet's DataFrame before any other
-cleaning step. Each file must define a `CleaningPlugin` subclass with a `run`
-method:
+Optional Python files that transform the **whole dataset** (a `dict[str,
+DataFrame]`, keyed by sheet name) before the built-in cleaning steps. Receiving
+the whole dataset lets a plugin read one sheet and write another. Each file
+defines a `Plugin` subclass implementing `run`:
 
 ```python
 # plugins/my_plugin.py
-from metadata_converter.flat_data.cleaning_plugin import CleaningPlugin
+import pandas as pd
+from metadata_converter.flat_data.transform.cleaning_plugin import Plugin
 
-class MyPlugin(CleaningPlugin):
-    def run(self, df):
-        df["new_col"] = df["a"] + df["b"]
-        return df
+class MyPlugin(Plugin):
+    def run(self, data: dict[str, pd.DataFrame]) -> dict[str, pd.DataFrame]:
+        data["author"]["new_col"] = data["author"]["a"] + data["author"]["b"]
+        return data
 ```
 
 Activate with:
 ```toml
 [cleaning]
 plugin_dir  = "plugins"
-plugin_name = "my_plugin.py"
+plugin_name = "my_plugin.py"   # a single name or a list of names
 ```
 
 ### Combining columns
 
 Use `combined_columns` to concatenate several source columns into a new column
-before schema building. This is declared separately from the mapping so the
-mapping only ever contains plain column references:
+before schema building, so the mapping only ever contains plain column
+references:
 
 ```toml
 [combined_columns.author]
 name = ["author:first-name", "author:last-name"]
 
 [mapping.author]
-type   = "Person"
-name   = "name"   # references the combined column
+type = "Person"
+name = "name"   # references the combined column
 ```
 
 Source columns are joined with a single space. Multiple target columns per sheet
@@ -170,52 +176,58 @@ separate rows before schema building:
 analysis = ["analysis:author-pid", "analysis:keywords"]
 ```
 
-### Cross-sheet references (ingest-time)
+### Broadcast `@id` references (load-time)
 
-Inject typed references from one sheet into another when there is no explicit join
-key — the implicit link is that the entities belong to the same source file.
+Inject typed references from one sheet into another when there is no explicit
+join key — the implicit link is that the entities belong to the same source
+file. Write it **inline** in the mapping as an `id` whose value is a table with
+`from_sheet`:
 
 ```toml
+[mapping.dataset]
+type = "DataCatalog"
+id   = "@id"
 # Persons with author:is-dataset-author == 1 → DataCatalog.creator
-[[cross_sheet_refs]]
+creator = { type = "Person", id = { from_sheet = "author", filter_column = "author:is-dataset-author", filter_value = 1 } }
+# All Datasets from the "file" sheet → DataCatalog.dataset
+dataset = { type = "Dataset", id = { from_sheet = "file" } }
+```
+
+`filter_column` / `filter_value` are optional; omit them to inject all entities
+from `from_sheet`. Comparison is normalised: `1` (int), `1.0` (float), and `"1"`
+(string) all match; booleans compare as `"true"` / `"false"`.
+
+These inline entries are lifted out of the mapping into the config's
+`broadcast_id_refs` before schema building; you can also declare them explicitly:
+
+```toml
+[[broadcast_id_refs]]
 on_sheet      = "dataset"
 property      = "creator"
 from_sheet    = "author"
 filter_column = "author:is-dataset-author"
 filter_value  = 1
-
-# All file Datasets → DataCatalog.dataset
-[[cross_sheet_refs]]
-on_sheet   = "dataset"
-property   = "dataset"
-from_sheet = "file"
 ```
-
-The `@type` of the injected references is taken from
-`mapping[from_sheet].type` — no need to repeat it on each rule.
-
-`filter_column` / `filter_value` are optional. When omitted, all entities from
-`from_sheet` are injected. Comparison is normalised: `1` (int), `1.0` (float),
-and `"1"` (string) all match each other; booleans compare as `"true"` / `"false"`.
 
 ---
 
 ## Source type: `biosamples`
 
 Fetches `.ldjson` and `.json` metadata from EBI BioSamples, fuses them to add
-units, and uplifts each record into a `Product` + `Action` JSON-LD pair.
+units (the `load` phase), and uplifts each record into a `Product` + `Action`
+JSON-LD pair (the `uplift` phase).
 
 ```toml
 source_type = "biosamples"
 
 [input]
-input_path  = "data/raw/biosamples/sample_list.xlsx"
+input_dir   = "data/raw/biosamples/sample_list.xlsx"
 sheet_name  = "sample"
 header_name = "sample:pid"
 
 [output]
-fetched  = "data/fetched/biosamples"
-ingested = "data/ingested/biosamples"
+input       = "data/fetched/biosamples"   # where `fetch` writes and `load` reads
+loaded_base = "data/loaded_base/biosamples"
 ```
 
 ---
@@ -228,35 +240,34 @@ Queries external repositories (currently Zenodo) and fetches JSON-LD records.
 source_type = "api"
 
 [extractor]
-api_url              = "https://zenodo.org/api/records"
-fetch_strategy       = "export_endpoint"
-export_url_template  = "https://zenodo.org/records/{record_id}/export/json-ld"
+api_url             = "https://zenodo.org/api/records"
+fetch_strategy      = "export_endpoint"
+export_url_template = "https://zenodo.org/records/{record_id}/export/json-ld"
 
 [extractor.query]
 field = "communities"
 value = "biocean5d"
 
 [output]
-fetched  = "data/fetched/zenodo"
-ingested = "data/ingested/zenodo"
+input       = "data/fetched/zenodo"     # where `fetch` writes and `load` reads
+loaded_base = "data/loaded_base/zenodo"
 ```
 
 ---
 
 ## Uplift phase config
 
-Resolves cross-references in already-ingested JSON-LD. Reads files from each
-configured source's output, applies declarative link rules, and writes the
-result. This step runs *after* all ingest workflows have completed.
-
-The uplift config has no `source_type` — it is a separate config kind used
+Post-processes already-loaded JSON-LD: resolves cross-references, enriches
+scalars, adds fixed values, and removes scaffolding. It runs *after* all `load`
+workflows have completed. The uplift config has no `source_type`; it is used
 exclusively with `converter uplift`.
 
 ```toml
 [flat_data]
-input_path  = "data/ingested/datahub"
-output_path = "data/uplifted/datahub"
-drop_types  = ["Product"]     # loaded for linking but not written to output
+# One directory, or several merged into a single store (e.g. one per loaded
+# source). A duplicate @id across directories is an error.
+input_dir  = ["data/loaded_base/datahub", "data/loaded_base/biosamples"]
+output_dir = "data/uplifted/datahub"
 
 [[flat_data.links]]
 on_type         = "Action"
@@ -264,7 +275,29 @@ target_property = "agent"
 match_value     = "agent.identifier"
 in_type         = "Person"
 in_property     = "identifier"
+
+[[flat_data.enrichments]]
+on_type         = "Person"
+target_property = "identifier"
+enrich_as       = "Orcid"
+
+[[flat_data.additions]]
+on_type         = "DataCatalog"
+target_property = "funding"
+value.type      = "MonetaryGrant"
+value.id        = "https://example.org/grant.jsonld"
+
+[[flat_data.removals]]
+on_type         = "Dataset"
+target_property = "additionalProperty"
+where           = { property = "description", contains = "Helper Property for" }
 ```
+
+Operations are applied in a fixed order: **link → enrich → add → remove → write**.
+A config validator rejects two `link`/`enrich`/`add` rules that target the same
+`(on_type, target_property)`; `removals` are exempt (they refine other rules'
+output). Output shape throughout collapses to the shortest form: 0 → omitted,
+1 → scalar, ≥2 → list.
 
 ### Link rule fields
 
@@ -278,6 +311,14 @@ in_property     = "identifier"
 | `in_property` | one of two | Dot-selector to index candidates by (mutually exclusive with `in_additional_property`) |
 | `in_additional_property` | one of two | Name of an `additionalProperty` entry on candidates to index by |
 | `ref_id_template` | no | Template for the ref `@id`, e.g. `"Product_{identifier}.jsonld"`. When omitted, the candidate's own `@id` is used. |
+
+### Enrichment / addition / removal rules
+
+| Rule | Key fields | Effect |
+|---|---|---|
+| `enrichments` | `on_type`, `target_property`, `enrich_as` | Wrap the scalar value in a custom `PropertyValue` subclass (e.g. `Orcid`, `DOI`); its validators fill out `url`/`name`/`propertyID`. At most one value per entity. |
+| `additions` | `on_type`, `target_property`, `value` | Set `target_property` to a fixed constant on every entity. `value` is a literal, or a `node` table (`value.type` + `value.id` + fields) built and validated against the schema.org models, or a list. Overwrites any existing value. |
+| `removals` | `on_type`, `target_property`, `where` | Filter items out of a list-valued property. `where` is `{ property = "<dot-selector>", equals = "…" }` or `{ …, contains = "…" }` (exactly one; case-sensitive, string-form). |
 
 ### Dot-selectors
 
@@ -303,20 +344,13 @@ ref_id_template = "Product_{identifier}.jsonld"
 ```
 
 `{identifier}` is replaced with the value returned by
-`select_values(candidate, "identifier")`. This is useful when the ingest-time
-stub carries a different `@id` than the canonical file produced by another
-workflow — `ref_id_template` bridges the naming gap.
+`select_values(candidate, "identifier")`. This is useful when the load-time stub
+carries a different `@id` than the canonical file produced by another workflow —
+`ref_id_template` bridges the naming gap.
 
 If any placeholder cannot be resolved for a particular candidate, that candidate
-is skipped and a warning is logged. If no candidates survive, the `target_property`
-is left untouched.
-
-### `drop_types`
-
-Types listed under `drop_types` are fully loaded and indexed so link rules can
-match against them, but they are **not written** to the output directory. Use this
-when stubs for a type are generated at ingest only as reverse-lookup carriers, and
-a different workflow (e.g. biosamples) produces the canonical files for those types.
+is skipped and a warning is logged. If no candidates survive, the
+`target_property` is left untouched.
 
 ### Value normalisation
 
