@@ -26,3 +26,21 @@ def test_provenance_writes_document(tmp_path):
     }
     assert doc["description"] == "stage: load"
     assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", doc["dateCreated"])
+
+
+def test_provenance_records_multiple_sources(tmp_path):
+    write_provenance_file(
+        "SAMEA1.jsonld",
+        tmp_path,
+        [
+            "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.ldjson",
+            "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.json",
+        ],
+        "load",
+    )
+
+    doc = json.loads((tmp_path / "Provenance_SAMEA1.jsonld").read_text())
+    assert doc["isBasedOn"] == [
+        {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.ldjson"},
+        {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.json"},
+    ]
