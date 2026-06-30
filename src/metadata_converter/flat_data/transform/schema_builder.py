@@ -6,7 +6,7 @@ declares" separate from "how we resolve a row against it", the mapping is
 parsed once into a typed **AST** ("Abstract Syntax Tree" — the compiler-style
 trick of representing structured input as a tree of typed objects where each
 node names exactly what kind of thing it is). Four dataclasses below —
-``Literal``, ``ColumnRef``, ``Nested``, ``Repeated`` — are the AST node types,
+``Literal``, ``ColumnRef``, ``Nested``, ``NestedList`` — are the AST node types,
 one per kind of mapping entry. Per-entity evaluation then just dispatches on
 the typed node.
 
@@ -16,9 +16,8 @@ Mapping AST
 - ``ColumnRef(name)``         — column lookup; emits the entity's value(s) for ``name``.
 - ``Nested(type, fields)`` — nested schema; emits a sub-object of class ``type``,
                               with each field resolved by its own AST node.
-- ``Repeated(items)``      — repeated entries (TOML ``[[block]]``); each item is
-                              a ``Nested``; results are concatenated and the
-                              field always carries a list.
+- ``NestedList(items)``    — a list of nested objects (TOML ``[[block]]``); each
+                              item is a ``Nested``; the field always carries a list.
 
 Evaluation
 ----------
@@ -32,7 +31,7 @@ Internal invariants
 -------------------
 - Every column value lives in a ``list`` inside the walker. Empty = missing.
 - Singleton lists collapse to scalars at field assignment for ``Nested``
-  sub-fields. ``Repeated`` sub-fields never collapse — list is their declared shape.
+  sub-fields. ``NestedList`` sub-fields never collapse — list is their declared shape.
 """
 
 import logging
@@ -79,13 +78,13 @@ class Nested:
 
 
 @dataclass
-class Repeated:
-    """Repeated schema entries (TOML ``[[block]]`` syntax); concatenated into a list."""
+class NestedList:
+    """A list of nested objects (TOML ``[[block]]`` syntax); always emitted as a list."""
 
     items: list[Nested]
 
 
-Node = Literal | ColumnRef | Nested | Repeated
+Node = Literal | ColumnRef | Nested | NestedList
 
 
 def parse_mapping(raw: Any) -> Node:
@@ -112,7 +111,7 @@ def parse_mapping(raw: Any) -> Node:
             if not isinstance(node, Nested):
                 raise TypeError(f"Mapping list elements must be schemas; got {node!r}.")
             items.append(node)
-        return Repeated(items=items)
+        return NestedList(items=items)
     raise TypeError(f"Unsupported mapping node: {raw!r}")
 
 
@@ -164,7 +163,7 @@ def resolve_fields(
 
     - ``column``: column-derived value lists (drive fan-out cardinality).
     - ``nested``: sub-object results, already shaped (``Nested`` branches collapsed
-      to scalar when length 1; ``Repeated`` branches kept as lists).
+      to scalar when length 1; ``NestedList`` branches kept as lists).
     - ``literal``: constants from ``Literal`` nodes (broadcast across instances).
     """
     column: dict[str, list[Any]] = {}
@@ -182,7 +181,7 @@ def resolve_fields(
                 items = build_nested(sub, row)
                 if items:
                     nested[prop] = unwrap_single(items)
-            case Repeated(items=blocks):
+            case NestedList(items=blocks):
                 items = []
                 for block in blocks:
                     items.extend(build_nested(block, row))
@@ -277,7 +276,7 @@ def _reads_row_data(mapping: Nested) -> bool:
             case Nested():
                 if _reads_row_data(sub):
                     return True
-            case Repeated(items=blocks):
+            case NestedList(items=blocks):
                 if any(_reads_row_data(b) for b in blocks):
                     return True
     return False

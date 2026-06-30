@@ -253,7 +253,7 @@ must have a `type` key (schema.org class name) and then property-to-column mappi
   `transform/id_refs_broadcasting.py`.
 
 `build_schemas` (`transform/schema_builder.py`) parses each mapping into a typed AST (`Literal`, `ColumnRef`, `Nested`,
-`Repeated`) once, then evaluates it per entity. When a nested entity has multi-value columns, it fans out into one
+`NestedList`) once, then evaluates it per entity. When a nested entity has multi-value columns, it fans out into one
 instance per value; a literal-only mapping emits a constant; output lists are collapsed to scalars where possible
 (one value → not a list).
 
