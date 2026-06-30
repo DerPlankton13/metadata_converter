@@ -124,11 +124,13 @@ def config_factory(loaded_base, tmp_path):
         *,
         rules: list[LinkRule] | None = None,
         out_name: str = "uplifted",
+        provenance_dir: Path | None = None,
     ) -> FlatDataUpliftConfig:
         return FlatDataUpliftConfig(
             input_dir=loaded_base,
             output_dir=tmp_path / out_name,
             links=rules if rules is not None else DATAHUB_RULES,
+            provenance_dir=provenance_dir,
         )
     return make
 
