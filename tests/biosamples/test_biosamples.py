@@ -1,10 +1,17 @@
 import json
+import re
 from pathlib import Path
 
 import pytest
 from deepdiff import DeepDiff
 
-from metadata_converter.biosamples.fetch import fuse_metadata
+from metadata_converter.biosamples.fetch import fuse_metadata, sample_source_urls
+from metadata_converter.biosamples.run import fetch_biosamples
+from metadata_converter.config import (
+    BiosamplesConfig,
+    BiosamplesInput,
+    FetchedOutputConfig,
+)
 from metadata_converter.biosamples.uplifting import (
     ActionBuilder,
     SampleRecord,
@@ -390,3 +397,79 @@ def test_build_instrument_multi_value():
             ],
         }
     ]
+
+
+# ---------------------------------------------------------------------------
+# Provenance: source URLs and per-record sidecars
+# ---------------------------------------------------------------------------
+
+
+def test_sample_source_urls():
+    assert sample_source_urls("SAMEA1") == [
+        "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.ldjson",
+        "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.json",
+    ]
+
+
+@pytest.fixture
+def offline_biosamples_input(tmp_path, monkeypatch):
+    """An input dir holding an Excel file the glob finds, with sample-id discovery
+    and the per-sample network fetch stubbed so fetch_biosamples runs offline for a
+    single sample SAMEA1."""
+    input_dir = tmp_path / "in"
+    input_dir.mkdir()
+    (input_dir / "samples.xlsx").touch()
+    monkeypatch.setattr(
+        "metadata_converter.biosamples.run.get_sample_ids",
+        lambda excel_file, cfg: {"SAMEA1"},
+    )
+    monkeypatch.setattr(
+        "metadata_converter.biosamples.run.fetch_sample",
+        lambda sid, path, cfg: True,
+    )
+    return input_dir
+
+
+def test_biosamples_fetch_writes_provenance(tmp_path, offline_biosamples_input):
+    config = BiosamplesConfig(
+        input=BiosamplesInput(input_dir=offline_biosamples_input),
+        output=FetchedOutputConfig(
+            input=tmp_path / "fetched", loaded_base=tmp_path / "loaded_base"
+        ),
+        provenance_dir=tmp_path / "provenance",
+    )
+
+    fetch_biosamples(config)
+
+    doc = json.loads(
+        (tmp_path / "provenance" / "Provenance_SAMEA1.jsonld").read_text()
+    )
+    assert doc == {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "DigitalDocument",
+        "@id": "Provenance_SAMEA1.jsonld",
+        "about": {"@type": "Thing", "@id": "SAMEA1.jsonld"},
+        "isBasedOn": [
+            {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.ldjson"},
+            {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.json"},
+        ],
+        "description": "stage: load",
+        "dateCreated": doc["dateCreated"],
+    }
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", doc["dateCreated"])
+
+
+def test_biosamples_fetch_without_provenance_dir_writes_nothing(
+    tmp_path, offline_biosamples_input
+):
+    config = BiosamplesConfig(
+        input=BiosamplesInput(input_dir=offline_biosamples_input),
+        output=FetchedOutputConfig(
+            input=tmp_path / "fetched", loaded_base=tmp_path / "loaded_base"
+        ),
+        provenance_dir=None,
+    )
+
+    fetch_biosamples(config)
+
+    assert not (tmp_path / "provenance").exists()
