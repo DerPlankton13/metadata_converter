@@ -18,9 +18,9 @@ in_property = "identifier"
 [[flat_data.links]]
 on_type = "Action"
 target_property = "object"
-match_value = "identifier"
+match_value = "object.identifier"
 in_type = "Product"
-in_additional_property = "sample:analysis-pid"
+in_property = "identifier"
 ref_id_template = "Product_{identifier}.jsonld"
 
 # Action.result ← Dataset(file)  (reverse via file:analysis marker)
