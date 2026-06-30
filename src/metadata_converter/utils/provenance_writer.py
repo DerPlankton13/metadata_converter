@@ -10,20 +10,27 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 
 
 def write_provenance_file(
-    about_file_id: str, provenance_path: Path, based_on: str, stage: str
+    about_file_id: str,
+    provenance_path: Path,
+    based_on: str | list[str],
+    stage: str,
 ) -> None:
-    """Write a per-record provenance sidecar linking a metadata file to its source.
+    """Write a per-record provenance sidecar linking a metadata file to its source(s).
 
-    ``about`` (the described file) and ``isBasedOn`` (the source it was produced
+    ``about`` (the described file) and ``isBasedOn`` (the source(s) it was produced
     from — an ``@id`` for an entity source, a URL for a fetched one) are built as
     node references so they serialize as ``@id`` IRIs rather than literal strings.
-    ``stage`` records which pipeline step produced the file.
+    A file merged from several sources (e.g. a biosample fused from two endpoints)
+    records all of them; a single source collapses to one node. ``stage`` records
+    which pipeline step produced the file.
     """
     provenance_id = "Provenance_" + about_file_id.split("/")[-1]
+    sources = [based_on] if isinstance(based_on, str) else based_on
+    refs = [CreativeWork(id=source) for source in sources]
     provenance = DigitalDocument(
         id=provenance_id,
         about=Thing(id=about_file_id),
-        isBasedOn=CreativeWork(id=based_on),
+        isBasedOn=refs[0] if len(refs) == 1 else refs,
         description=f"stage: {stage}",
         dateCreated=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
