@@ -2,19 +2,29 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.schema_org_models.schemaorg_models import DigitalDocument
+from metadata_converter.schema_org_models.schemaorg_models import (
+    CreativeWork,
+    DigitalDocument,
+    Thing,
+)
 
 
 def write_provenance_file(
-    about_file_id: str, provenance_path: Path, based_on: str
+    about_file_id: str, provenance_path: Path, based_on: str, stage: str
 ) -> None:
-    """Create a provenance file linking the metadata file to its metadata source."""
+    """Write a per-record provenance sidecar linking a metadata file to its source.
+
+    ``about`` (the described file) and ``isBasedOn`` (the source it was produced
+    from — an ``@id`` for an entity source, a URL for a fetched one) are built as
+    node references so they serialize as ``@id`` IRIs rather than literal strings.
+    ``stage`` records which pipeline step produced the file.
+    """
     provenance_id = "Provenance_" + about_file_id.split("/")[-1]
     provenance = DigitalDocument(
         id=provenance_id,
-        about=about_file_id,
-        abstract="Provenance information of " + about_file_id,
+        about=Thing(id=about_file_id),
+        isBasedOn=CreativeWork(id=based_on),
+        description=f"stage: {stage}",
         dateCreated=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        isBasedOn=based_on,
     )
     load_to_jsonld(provenance, provenance_path)
