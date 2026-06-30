@@ -35,6 +35,9 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put the project root on sys.path so `from tests.…` imports resolve under a bare
+# `pytest` invocation (plain `pytest` does not add the CWD the way `python -m pytest` does).
+pythonpath = ["."]
 
 
 [tool.ruff]
