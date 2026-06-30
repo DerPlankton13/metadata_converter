@@ -27,6 +27,17 @@ def api_config(fetched, loaded_base, provenance_dir, fetch_strategy="export_endp
     )
 
 
+def patch_query_and_fetch(monkeypatch, record):
+    """Stubs the network so the source query yields this one record, fetched as a Dataset."""
+    monkeypatch.setattr(
+        "metadata_converter.api_fetching.run.query_source", lambda extractor: [record]
+    )
+    monkeypatch.setattr(
+        "metadata_converter.api_fetching.run.fetch_jsonld",
+        lambda rec, extractor: {"@type": "Dataset", "@id": "Dataset_rec1.jsonld"},
+    )
+
+
 def test_api_fetch_export_endpoint_records_export_url(tmp_path, monkeypatch):
     config = api_config(
         tmp_path / "fetched", tmp_path / "loaded_base", tmp_path / "provenance"
@@ -35,13 +46,7 @@ def test_api_fetch_export_endpoint_records_export_url(tmp_path, monkeypatch):
         doi="10.x/1", title="T", publisher="P",
         url="https://zenodo.org/records/rec1", source_id="rec1",
     )
-    monkeypatch.setattr(
-        "metadata_converter.api_fetching.run.query_source", lambda extractor: [record]
-    )
-    monkeypatch.setattr(
-        "metadata_converter.api_fetching.run.fetch_jsonld",
-        lambda rec, extractor: {"@type": "Dataset", "@id": "Dataset_rec1.jsonld"},
-    )
+    patch_query_and_fetch(monkeypatch, record)
 
     fetch_api_data(config)
 
@@ -72,13 +77,7 @@ def test_api_fetch_html_jsonld_records_landing_url(tmp_path, monkeypatch):
         doi="10.x/1", title="T", publisher="P",
         url="https://seanoe.org/data/rec1", source_id="rec1",
     )
-    monkeypatch.setattr(
-        "metadata_converter.api_fetching.run.query_source", lambda extractor: [record]
-    )
-    monkeypatch.setattr(
-        "metadata_converter.api_fetching.run.fetch_jsonld",
-        lambda rec, extractor: {"@type": "Dataset", "@id": "Dataset_rec1.jsonld"},
-    )
+    patch_query_and_fetch(monkeypatch, record)
 
     fetch_api_data(config)
 
@@ -97,13 +96,7 @@ def test_api_fetch_without_provenance_dir_writes_nothing(tmp_path, monkeypatch):
         doi="10.x/1", title="T", publisher="P",
         url="https://zenodo.org/records/rec1", source_id="rec1",
     )
-    monkeypatch.setattr(
-        "metadata_converter.api_fetching.run.query_source", lambda extractor: [record]
-    )
-    monkeypatch.setattr(
-        "metadata_converter.api_fetching.run.fetch_jsonld",
-        lambda rec, extractor: {"@type": "Dataset", "@id": "Dataset_rec1.jsonld"},
-    )
+    patch_query_and_fetch(monkeypatch, record)
 
     fetch_api_data(config)
 
