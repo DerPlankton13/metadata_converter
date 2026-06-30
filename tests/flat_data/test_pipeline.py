@@ -51,6 +51,7 @@ def test_load_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     cfg = load_source_config(str(scenario_dir / "config.toml"))
     cfg.extractor.input = xlsx
     cfg.output.loaded_base = output_dir
+    cfg.provenance_dir = tmp_path / "provenance"
 
     load_flat_data(cfg)
 
