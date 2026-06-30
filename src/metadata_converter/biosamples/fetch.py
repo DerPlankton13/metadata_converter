@@ -33,9 +33,15 @@ def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dic
     return structured_metadata
 
 
+def sample_source_urls(sample_id: str) -> list[str]:
+    """The two source URLs a sample is fused from: structured (.ldjson) and unstructured (.json)."""
+    base = f"https://www.ebi.ac.uk/biosamples/samples/{sample_id}"
+    return [f"{base}.ldjson", f"{base}.json"]
+
+
 def get_metadata(sample_id: str, session: requests.Session, fetched_path: Path) -> None:
-    base_url = f"https://www.ebi.ac.uk/biosamples/samples/{sample_id}"
-    structured = fetch_metadata(base_url + ".ldjson", session)
-    unstructured = fetch_metadata(base_url + ".json", session)
+    ldjson_url, json_url = sample_source_urls(sample_id)
+    structured = fetch_metadata(ldjson_url, session)
+    unstructured = fetch_metadata(json_url, session)
     write_json(structured, fetched_path / f"{sample_id}.ldjson")
     write_json(unstructured, fetched_path / f"{sample_id}.json")
