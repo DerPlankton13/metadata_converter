@@ -1,9 +1,9 @@
 import logging
 
-from metadata_converter.api_fetching.run import fetch_api_data, ingest_api_data
+from metadata_converter.api_fetching.run import fetch_api_data, load_api_data
 from metadata_converter.biosamples.run import (
     fetch_biosamples,
-    ingest_biosamples,
+    load_biosamples,
     uplift_biosamples,
 )
 from metadata_converter.config import (
@@ -12,7 +12,7 @@ from metadata_converter.config import (
     FlatDataConfig,
     UpliftingConfig,
 )
-from metadata_converter.flat_data.run import flat_data_etl
+from metadata_converter.flat_data.run import load_flat_data
 from metadata_converter.flat_data.uplift import run_uplift
 from metadata_converter.parse import parse_cli
 from metadata_converter.utils.log_setup import setup_logging
@@ -29,12 +29,12 @@ def main():
             fetch_biosamples(config)
         case ("fetch", ApiFetchingConfig()):
             fetch_api_data(config)
-        case ("ingest", FlatDataConfig()):
-            flat_data_etl(config)
-        case ("ingest", BiosamplesConfig()):
-            ingest_biosamples(config)
-        case ("ingest", ApiFetchingConfig()):
-            ingest_api_data(config)
+        case ("load", FlatDataConfig()):
+            load_flat_data(config)
+        case ("load", BiosamplesConfig()):
+            load_biosamples(config)
+        case ("load", ApiFetchingConfig()):
+            load_api_data(config)
         case ("uplift", UpliftingConfig()):
             if config.biosamples:
                 uplift_biosamples(config.biosamples)

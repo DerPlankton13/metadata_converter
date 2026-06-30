@@ -52,7 +52,7 @@ class FlatDataUpliftConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     input_dir: Path | list[Path] = Field(
         description="One input directory, or several whose JSON-LD is merged into a "
-        "single store (e.g. one per ingested source). A duplicate @id across "
+        "single store (e.g. one per loaded source). A duplicate @id across "
         "directories is an error."
     )
     output_dir: Path
@@ -70,7 +70,7 @@ class FlatDataUpliftConfig(BaseModel):
         ``links``, ``enrichments`` and ``additions`` combined. The pair is the
         contract for what gets written; overlap would mean the last rule silently
         overwrites the others. ``removals`` are exempt — they legitimately undo or
-        refine what another rule (or ingest) produced, and two removals may target
+        refine what another rule (or load) produced, and two removals may target
         the same list.
         """
         seen: dict[tuple[str, str], str] = {}
@@ -120,7 +120,7 @@ class CleaningConfig(BaseModel):
 
 
 class BroadcastIdRef(BaseModel):
-    """Ingest-time broadcast @id reference: inject typed entity refs from one sheet into another."""
+    """Load-time broadcast @id reference: inject typed entity refs from one sheet into another."""
 
     model_config = ConfigDict(extra="forbid")
     on_sheet: str = Field(
@@ -408,7 +408,7 @@ class FetchedOutputConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 # Discriminated union of the three data-source config types.
-# Used by load_source_config for the fetch and ingest phases.
+# Used by load_source_config for the fetch and load phases.
 SourceConfig = Annotated[
     Union[FlatDataConfig, ApiFetchingConfig, BiosamplesConfig],
     Field(discriminator="source_type"),

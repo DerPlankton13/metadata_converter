@@ -1,4 +1,4 @@
-# Ingest config for the minimal flat_data integration-test scenario.
+# Load config for the minimal flat_data integration-test scenario.
 # Paths below are placeholders — the test overrides them with tmp_path locations.
 source_type = "flat_data"
 

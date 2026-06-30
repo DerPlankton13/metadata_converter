@@ -1,8 +1,8 @@
 """Integration tests for the flat_data pipeline.
 
 Each subdirectory of ``data/`` is one scenario. A scenario contains
-``config.toml`` (ingest), ``uplift.toml`` (uplift), or both. Inputs live under
-``input/`` (CSVs for ingest, JSON-LD for uplift-only scenarios). Expected
+``config.toml`` (load), ``uplift.toml`` (uplift), or both. Inputs live under
+``input/`` (CSVs for load, JSON-LD for uplift-only scenarios). Expected
 outputs live under ``loaded_base/`` and ``loaded_uplifted/``.
 
 For full-pipeline scenarios (both TOMLs present), the uplift test consumes
@@ -17,7 +17,7 @@ import pandas as pd
 import pytest
 
 from metadata_converter.config import load_source_config, load_uplift_config
-from metadata_converter.flat_data.run import flat_data_etl
+from metadata_converter.flat_data.run import load_flat_data
 from metadata_converter.flat_data.uplift import run_uplift
 
 DATA_DIR = Path(__file__).parent / "data"
@@ -44,7 +44,7 @@ def assert_jsonld_dir_matches(actual_dir: Path, expected_dir: Path) -> None:
 
 
 @pytest.mark.parametrize("scenario_dir", LOAD_SCENARIOS, ids=lambda p: p.name)
-def test_ingest_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
+def test_load_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     xlsx = build_xlsx(scenario_dir / "input", tmp_path / "input.xlsx")
     output_dir = tmp_path / "loaded_base"
 
@@ -52,7 +52,7 @@ def test_ingest_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     cfg.extractor.input = xlsx
     cfg.output.loaded_base = output_dir
 
-    flat_data_etl(cfg)
+    load_flat_data(cfg)
 
     assert_jsonld_dir_matches(output_dir, scenario_dir / "loaded_base")
 

@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_uplift(config: FlatDataUpliftConfig) -> None:
-    """Resolve cross-references in ingested flat_data JSON-LD.
+    """Resolve cross-references in loaded flat_data JSON-LD.
 
     Phases, in order:
 

@@ -55,10 +55,10 @@ def test_link_resolves_to_reference(uplifted, filename, target_property, expecte
 # ---------------------------------------------------------------------------
 
 
-def test_unresolvable_agent_orcid_keeps_stub_intact(ingested, config_factory):
-    action = load_jsonld(ingested / "Action_analysis1.jsonld")
+def test_unresolvable_agent_orcid_keeps_stub_intact(loaded_base, config_factory):
+    action = load_jsonld(loaded_base / "Action_analysis1.jsonld")
     action["agent"]["identifier"] = "0000-0009-9999-9999"  # nobody has this
-    write_jsonld(ingested / "Action_analysis1.jsonld", action)
+    write_jsonld(loaded_base / "Action_analysis1.jsonld", action)
     cfg = config_factory(out_name="unresolvable")
     run_uplift(cfg)
     agent = load_jsonld(cfg.output_dir / "Action_analysis1.jsonld")["agent"]
@@ -66,8 +66,8 @@ def test_unresolvable_agent_orcid_keeps_stub_intact(ingested, config_factory):
     assert agent.get("@id") is None
 
 
-def test_multiple_samples_for_one_analysis_aggregate_into_list(ingested, config_factory):
-    write_jsonld(ingested / "Product_SAMEA0002.jsonld", {
+def test_multiple_samples_for_one_analysis_aggregate_into_list(loaded_base, config_factory):
+    write_jsonld(loaded_base / "Product_SAMEA0002.jsonld", {
         "@context": {"@vocab": "https://schema.org"},
         "@type": "Product", "@id": "Product_SAMEA0002.jsonld",
         "identifier": "SAMEA0002",
@@ -85,7 +85,7 @@ def test_multiple_samples_for_one_analysis_aggregate_into_list(ingested, config_
     ]
 
 
-def test_ref_id_template_constructs_id_from_candidate_property(ingested, config_factory):
+def test_ref_id_template_constructs_id_from_candidate_property(loaded_base, config_factory):
     # Use ref_id_template so the ref @id is built from the sample's identifier
     # rather than taken directly from the stub's @id.
     rule = LinkRule(
@@ -106,10 +106,10 @@ def test_ref_id_template_constructs_id_from_candidate_property(ingested, config_
 
 
 @pytest.mark.parametrize("flag_value", [1, "1"])
-def test_literal_1_matches_int_and_string_one(ingested, config_factory, flag_value):
-    alice = load_jsonld(ingested / "Person_alice.jsonld")
+def test_literal_1_matches_int_and_string_one(loaded_base, config_factory, flag_value):
+    alice = load_jsonld(loaded_base / "Person_alice.jsonld")
     alice["additionalProperty"][0]["value"] = flag_value
-    write_jsonld(ingested / "Person_alice.jsonld", alice)
+    write_jsonld(loaded_base / "Person_alice.jsonld", alice)
     cfg = config_factory(out_name=f"literal_1_{flag_value!r}")
     run_uplift(cfg)
     assert load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld")["creator"] == {
@@ -118,10 +118,10 @@ def test_literal_1_matches_int_and_string_one(ingested, config_factory, flag_val
 
 
 @pytest.mark.parametrize("flag_value", [True, "true"])
-def test_literal_true_matches_bool_and_string(ingested, config_factory, flag_value):
-    alice = load_jsonld(ingested / "Person_alice.jsonld")
+def test_literal_true_matches_bool_and_string(loaded_base, config_factory, flag_value):
+    alice = load_jsonld(loaded_base / "Person_alice.jsonld")
     alice["additionalProperty"][0]["value"] = flag_value
-    write_jsonld(ingested / "Person_alice.jsonld", alice)
+    write_jsonld(loaded_base / "Person_alice.jsonld", alice)
     rule = LinkRule(
         on_type="DataCatalog", target_property="creator",
         match_literal="true",
@@ -218,13 +218,13 @@ def test_link_invalid_assignment_skips_entity(caplog):
 
 
 @pytest.mark.parametrize("flag_value", [0, False])
-def test_falsy_flag_values_leave_creator_unset(ingested, config_factory, flag_value):
-    alice = load_jsonld(ingested / "Person_alice.jsonld")
+def test_falsy_flag_values_leave_creator_unset(loaded_base, config_factory, flag_value):
+    alice = load_jsonld(loaded_base / "Person_alice.jsonld")
     alice["additionalProperty"][0]["value"] = flag_value
-    write_jsonld(ingested / "Person_alice.jsonld", alice)
-    bob = load_jsonld(ingested / "Person_bob.jsonld")
+    write_jsonld(loaded_base / "Person_alice.jsonld", alice)
+    bob = load_jsonld(loaded_base / "Person_bob.jsonld")
     bob["additionalProperty"][0]["value"] = flag_value
-    write_jsonld(ingested / "Person_bob.jsonld", bob)
+    write_jsonld(loaded_base / "Person_bob.jsonld", bob)
     cfg = config_factory(out_name=f"falsy_{flag_value!r}")
     run_uplift(cfg)
     assert "creator" not in load_jsonld(cfg.output_dir / "DataCatalog_main.jsonld")

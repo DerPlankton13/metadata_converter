@@ -1,7 +1,7 @@
 """Shared fixtures for the flat_data uplift test suite.
 
-The ``ingested`` fixture writes a minimal datahub-shaped JSON-LD corpus into
-``tmp_path / "ingested"``. ``config_factory`` builds a ``FlatDataUpliftConfig``
+The ``loaded_base`` fixture writes a minimal datahub-shaped JSON-LD corpus into
+``tmp_path / "loaded_base"``. ``config_factory`` builds a ``FlatDataUpliftConfig``
 against it with optional rule/drop overrides. ``uplifted`` runs the engine and
 returns the loaded output files keyed by filename.
 """
@@ -58,12 +58,12 @@ def load_jsonld(path: Path) -> dict:
 
 
 @pytest.fixture
-def ingested(tmp_path) -> Path:
-    """A minimal datahub-shaped ingested corpus.
+def loaded_base(tmp_path) -> Path:
+    """A minimal datahub-shaped loaded corpus.
 
     Tests may mutate files in this directory before invoking the engine.
     """
-    d = tmp_path / "ingested"
+    d = tmp_path / "loaded_base"
     write_jsonld(d / "Person_alice.jsonld", {
         "@context": {"@vocab": "https://schema.org"},
         "@type": "Person", "@id": "Person_alice.jsonld",
@@ -118,7 +118,7 @@ def ingested(tmp_path) -> Path:
 
 
 @pytest.fixture
-def config_factory(ingested, tmp_path):
+def config_factory(loaded_base, tmp_path):
     """Returns a callable that builds a FlatDataUpliftConfig with optional overrides."""
     def make(
         *,
@@ -126,7 +126,7 @@ def config_factory(ingested, tmp_path):
         out_name: str = "uplifted",
     ) -> FlatDataUpliftConfig:
         return FlatDataUpliftConfig(
-            input_dir=ingested,
+            input_dir=loaded_base,
             output_dir=tmp_path / out_name,
             links=rules if rules is not None else DATAHUB_RULES,
         )

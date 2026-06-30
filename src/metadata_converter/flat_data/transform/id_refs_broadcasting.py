@@ -1,4 +1,4 @@
-"""Collect and inject in-sheet cross-references during ingest.
+"""Collect and inject in-sheet cross-references during load.
 
 Two-phase: ``prepare_id_ref_broadcast`` reads @id lists from the still-wide-format
 DataFrames (where ``filter_column`` and ``@id`` are real columns), and

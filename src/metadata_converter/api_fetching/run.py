@@ -35,8 +35,8 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
     logger.info("API fetch complete. Output: %s", fetched_path)
 
 
-def ingest_api_data(config: ApiFetchingConfig) -> None:
-    logger.info("Starting API ingest")
+def load_api_data(config: ApiFetchingConfig) -> None:
+    logger.info("Starting API load")
 
     fetched_path = config.output.input
     fetched_files = list(fetched_path.glob("*.jsonld"))
@@ -46,7 +46,7 @@ def ingest_api_data(config: ApiFetchingConfig) -> None:
 
     failures = 0
     for fetched_file in tqdm(
-        fetched_files, desc="Ingesting records", unit="rec", file=sys.stdout
+        fetched_files, desc="Loading records", unit="rec", file=sys.stdout
     ):
         try:
             with fetched_file.open() as f:
@@ -55,13 +55,13 @@ def ingest_api_data(config: ApiFetchingConfig) -> None:
             schema = get_schema(schema_type)(**jsonld)
             load_to_jsonld(schema, output_dir=config.output.loaded_base)
         except Exception as e:
-            logger.error("Failed to ingest %s", fetched_file.name)
+            logger.error("Failed to load %s", fetched_file.name)
             log_validation_error(e, logger)
             failures += 1
 
     if failures:
         raise RuntimeError(
-            f"{failures} of {len(fetched_files)} record(s) failed to ingest — "
+            f"{failures} of {len(fetched_files)} record(s) failed to load — "
             "check the log for details"
         )
-    logger.info("API ingest complete. Output: %s", config.output.loaded_base)
+    logger.info("API load complete. Output: %s", config.output.loaded_base)

@@ -141,8 +141,8 @@ def fetch_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples fetch complete. Output: %s", fetched_path)
 
 
-def ingest_biosamples(config: BiosamplesConfig):
-    logger.info("Starting biosamples ingest")
+def load_biosamples(config: BiosamplesConfig):
+    logger.info("Starting biosamples load")
 
     fetched_path = config.output.input
     ldjson_files = list(fetched_path.glob("*.ldjson"))
@@ -151,7 +151,7 @@ def ingest_biosamples(config: BiosamplesConfig):
 
     failures = 0
     for ldjson_path in tqdm(
-        ldjson_files, desc="Ingesting biosamples", unit="sample", file=sys.stdout
+        ldjson_files, desc="Loading biosamples", unit="sample", file=sys.stdout
     ):
         sample_id = ldjson_path.stem
         json_path = fetched_path / f"{sample_id}.json"
@@ -168,7 +168,7 @@ def ingest_biosamples(config: BiosamplesConfig):
             fused = fuse_metadata(structured, unstructured)
             fused = modify_context(fused, sample_id)
         except Exception as e:
-            logger.error("Failed to ingest %s: %s", sample_id, e)
+            logger.error("Failed to load %s: %s", sample_id, e)
             failures += 1
             continue
 
@@ -176,17 +176,17 @@ def ingest_biosamples(config: BiosamplesConfig):
 
     if failures:
         raise RuntimeError(
-            f"{failures} of {len(ldjson_files)} sample(s) failed to ingest — "
+            f"{failures} of {len(ldjson_files)} sample(s) failed to load — "
             "check the log for details"
         )
-    logger.info("Biosamples ingest complete. Output: %s", config.output.loaded_base)
+    logger.info("Biosamples load complete. Output: %s", config.output.loaded_base)
 
 
 def uplift_biosamples(config: SourcePaths):
     logger.info("Starting biosamples uplift")
 
     files = list(config.input_dir.glob("**/*.jsonld"))
-    logger.info("Found %d ingested file(s) in %s", len(files), config.input_dir)
+    logger.info("Found %d loaded file(s) in %s", len(files), config.input_dir)
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
     failures = 0

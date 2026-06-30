@@ -42,7 +42,7 @@ python -m pytest "tests/biosamples/test_biosamples.py::test_extract_action[SAMEA
 # Lint
 ruff check src/
 
-# Run the CLI (phase is: fetch | ingest | uplift)
+# Run the CLI (phase is: fetch | load | uplift)
 converter <phase> <config.toml>
 ```
 
@@ -168,7 +168,7 @@ Rules of thumb when writing or refactoring tests:
 ## Architecture
 
 The tool converts metadata from various sources into JSON-LD files conforming to schema.org. Each source has a
-`source_type` in its TOML config, and the CLI phase (`fetch`, `ingest`, `uplift`) selects the step to execute.
+`source_type` in its TOML config, and the CLI phase (`fetch`, `load`, `uplift`) selects the step to execute.
 There are three source types plus a separate uplift config:
 
 - **`flat_data`** — reads tabular data from Excel, cleans it, and maps columns to schema.org types via a `mapping` dict
@@ -177,7 +177,7 @@ There are three source types plus a separate uplift config:
   to add units, then optionally "uplifts" the raw records into `Product` + `Action` JSON-LD pairs.
 - **`api`** — queries external APIs (currently Zenodo) and fetches JSON-LD records via either an export
   endpoint or HTML scraping.
-- **uplift config** — no `source_type`; used with `converter uplift` to post-process already-ingested JSON-LD via
+- **uplift config** — no `source_type`; used with `converter uplift` to post-process already-loaded JSON-LD via
   declarative rules. Operations: **link** (resolve cross-references), **enrich** (wrap a scalar in a custom
   PropertyValue subclass), **remove** (filter scaffolding items out of a list), and **add** (set a fixed value). See
   the flat-data uplift subsection below.
@@ -187,7 +187,7 @@ There are three source types plus a separate uplift config:
 The converter produces JSON-LD *files*; it does not build or query a graph. Decide where a transformation lives by its
 nature:
 
-- **Ingest (table space)** — shape source data into well-formed entities, including data-structure *repair* via plugins
+- **Load (table space)** — shape source data into well-formed entities, including data-structure *repair* via plugins
   (e.g. materialising a join the source only expressed implicitly across sheets).
 - **Uplift (entity space)** — declarative post-processing that must be written into the artifact: resolving
   cross-references by naming convention (relative-IRI assignment), enriching scalars, scrubbing scaffolding.
@@ -264,7 +264,7 @@ the built-in cleaning steps. They are discovered dynamically from a `plugin_dir`
 
 ### Flat-data uplift (`src/metadata_converter/flat_data/uplift/`)
 
-A **project-agnostic** post-processing stage over already-ingested JSON-LD — it knows nothing about specific @types or
+A **project-agnostic** post-processing stage over already-loaded JSON-LD — it knows nothing about specific @types or
 properties; the rules in `FlatDataUpliftConfig` drive everything. Nothing here is flat-data-specific: only the config
 class name and the package location tie it to `flat_data`, and it is **slated to move to its own top-level package**.
 (The one remaining coupling is `link.py` importing `to_lookup_key` from `flat_data.transform`, to be relocated on

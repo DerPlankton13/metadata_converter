@@ -19,7 +19,7 @@ from metadata_converter.utils.provenance_writer import write_provenance_file
 logger = logging.getLogger(__name__)
 
 
-def flat_data_etl(config: FlatDataConfig) -> None:
+def load_flat_data(config: FlatDataConfig) -> None:
     """Entry point: dispatch single file vs directory of Excel files."""
     logger.info("Starting flat-data workflow")
     extract_inline_id_ref_broadcasts(config)
@@ -31,14 +31,14 @@ def flat_data_etl(config: FlatDataConfig) -> None:
             raise SystemExit(1)
         logger.info("Found %d file(s) in %s", len(files), input)
         for excel_file in files:
-            single_etl(config, excel_file)
+            load_single(config, excel_file)
     else:
-        single_etl(config, input)
+        load_single(config, input)
 
 
-def single_etl(config: FlatDataConfig, input: Path) -> None:
-    """Run the ingest pipeline for a single input file."""
-    logger.info("Ingesting %s", input.name)
+def load_single(config: FlatDataConfig, input: Path) -> None:
+    """Run the load pipeline for a single input file."""
+    logger.info("Loading %s", input.name)
     data = extract_data(config, input=input)
     data = clean(data, config)
     data = add_columns(data, config)

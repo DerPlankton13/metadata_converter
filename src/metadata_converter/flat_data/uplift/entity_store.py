@@ -35,7 +35,7 @@ class EntityStore:
         """Read every ``*.jsonld`` file from one or more directories, grouping by ``@type``.
 
         A single ``Path`` or a list of them may be given; the latter merges several
-        ingested sources into one store. Files that fail to load or validate are
+        loaded sources into one store. Files that fail to load or validate are
         logged and skipped, and a warning is logged for any empty directory.
 
         Raises

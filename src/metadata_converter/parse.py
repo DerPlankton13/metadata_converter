@@ -16,7 +16,7 @@ def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingCon
     parser = argparse.ArgumentParser(description="Metadata Converter")
     parser.add_argument(
         "phase",
-        choices=["fetch", "ingest", "uplift"],
+        choices=["fetch", "load", "uplift"],
         help="Pipeline phase to execute",
     )
     parser.add_argument("config", type=Path, help="Path to TOML config file")
