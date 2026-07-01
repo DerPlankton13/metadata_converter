@@ -381,6 +381,7 @@ class SourcePaths(BaseModel):
     model_config = ConfigDict(extra="forbid")
     input_dir: Path
     output_dir: Path
+    provenance_dir: Path | None = None
 
 
 # ---------------------------------------------------------------------------

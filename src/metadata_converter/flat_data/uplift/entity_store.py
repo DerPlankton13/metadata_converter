@@ -29,6 +29,8 @@ class EntityStore:
     def __init__(self) -> None:
         # @type name → list of models of that @type
         self.by_type: dict[str, list[SchemaOrgBase]] = {}
+        # @id → the source file the entity was loaded from
+        self.source_paths: dict[str, Path] = {}
 
     @classmethod
     def load(cls, input_dir: Path | list[Path]) -> "EntityStore":
@@ -66,6 +68,7 @@ class EntityStore:
                     )
                 seen_ids[model.id] = path
                 store.by_type.setdefault(model.type, []).append(model)
+                store.source_paths[model.id] = path
         total = sum(len(models) for models in store.by_type.values())
         logger.info("Loaded %d entity file(s)", total)
         return store

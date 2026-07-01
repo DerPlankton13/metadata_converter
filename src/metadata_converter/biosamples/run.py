@@ -216,6 +216,10 @@ def uplift_biosamples(config: SourcePaths):
         try:
             product = Product(**product_dict)
             load_to_jsonld(product, output_dir=config.output_dir)
+            if config.provenance_dir is not None:
+                write_provenance_file(
+                    product.id, config.provenance_dir, data["@id"], "uplift"
+                )
             try:
                 validate_strict(product)
             except ValueError as e:
@@ -229,6 +233,10 @@ def uplift_biosamples(config: SourcePaths):
         try:
             action = Action(**action_dict)
             load_to_jsonld(action, output_dir=config.output_dir)
+            if config.provenance_dir is not None:
+                write_provenance_file(
+                    action.id, config.provenance_dir, data["@id"], "uplift"
+                )
             try:
                 validate_strict(action)
             except ValueError as e:

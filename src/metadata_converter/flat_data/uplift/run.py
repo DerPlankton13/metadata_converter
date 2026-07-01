@@ -12,6 +12,7 @@ from metadata_converter.flat_data.uplift.enrichment import EnrichmentApplier
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.flat_data.uplift.link import LinkApplier
 from metadata_converter.flat_data.uplift.remove import RemoveApplier
+from metadata_converter.utils.provenance_writer import write_provenance_file
 
 logger = logging.getLogger(__name__)
 
@@ -37,4 +38,13 @@ def run_uplift(config: FlatDataUpliftConfig) -> None:
     AddApplier(store).apply_all(config.additions)
     RemoveApplier(store).apply_all(config.removals)
     store.write(config.output_dir)
+    if config.provenance_dir is not None:
+        for models in store.by_type.values():
+            for model in models:
+                write_provenance_file(
+                    model.id,
+                    config.provenance_dir,
+                    str(store.source_paths[model.id]),
+                    "uplift",
+                )
     logger.info("Flat-data uplift complete. Output: %s", config.output_dir)
