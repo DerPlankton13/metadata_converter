@@ -6,7 +6,7 @@ provenance_dir = "provenance"
 # ===================================================================
 # Links properties
 # ===================================================================
-# Action.agent → Person  (forward via stub identifier)
+# Action.agent → Person
 [[flat_data.links]]
 on_type = "Action"
 target_property = "agent"
@@ -14,7 +14,7 @@ match_value = "agent.identifier"
 in_type = "Person"
 in_property = "identifier"
 
-# Action.object ← Product  (reverse via sample:analysis-pid marker; @id constructed from sample:pid)
+# Action.object → Product
 [[flat_data.links]]
 on_type = "Action"
 target_property = "object"
@@ -23,7 +23,7 @@ in_type = "Product"
 in_property = "identifier"
 ref_id_template = "Product_{identifier}.jsonld"
 
-# Action.result ← Dataset(file)  (reverse via file:analysis marker)
+# Action.result → Dataset
 [[flat_data.links]]
 on_type = "Action"
 target_property = "result"
@@ -31,7 +31,7 @@ match_value = "identifier"
 in_type = "Dataset"
 in_additional_property = "file:analysis"
 
-# Dataset(file).about → Product
+# Dataset.about → Product
 [[flat_data.links]]
 on_type = "Dataset"
 target_property = "about"
