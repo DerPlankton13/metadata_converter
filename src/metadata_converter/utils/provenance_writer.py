@@ -22,9 +22,10 @@ def write_provenance_file(
     node references so they serialize as ``@id`` IRIs rather than literal strings.
     A file merged from several sources (e.g. a biosample fused from two endpoints)
     records all of them; a single source collapses to one node. ``stage`` records
-    which pipeline step produced the file.
+    which pipeline step produced the file and is part of the sidecar name, so one
+    entity's load- and uplift-stage sidecars can coexist in a shared folder.
     """
-    provenance_id = "Provenance_" + about_file_id.split("/")[-1]
+    provenance_id = f"Provenance_{stage}_" + about_file_id.split("/")[-1]
     sources = [based_on] if isinstance(based_on, str) else based_on
     refs = [CreativeWork(id=source) for source in sources]
     provenance = DigitalDocument(
