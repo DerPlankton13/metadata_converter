@@ -41,10 +41,9 @@ def run_uplift(config: FlatDataUpliftConfig) -> None:
     if config.provenance_dir is not None:
         for models in store.by_type.values():
             for model in models:
+                # uplift refines an entity in place, so it is based on the loaded
+                # entity of the same @id; the stage in the filename distinguishes them.
                 write_provenance_file(
-                    model.id,
-                    config.provenance_dir,
-                    str(store.source_paths[model.id]),
-                    "uplift",
+                    model.id, config.provenance_dir, model.id, "uplift"
                 )
     logger.info("Flat-data uplift complete. Output: %s", config.output_dir)
