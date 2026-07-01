@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 def fetch_api_data(config: ApiFetchingConfig) -> None:
     logger.info("Starting API fetch from %s", config.extractor.api_url)
 
-    fetched_path = config.output.input
+    fetched_path = config.fetched_dir
     fetched_path.mkdir(parents=True, exist_ok=True)
 
     records = query_source(config.extractor)
@@ -50,11 +50,11 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
 def load_api_data(config: ApiFetchingConfig) -> None:
     logger.info("Starting API load")
 
-    fetched_path = config.output.input
+    fetched_path = config.fetched_dir
     fetched_files = list(fetched_path.glob("*.jsonld"))
     logger.info("Found %d fetched record(s) in %s", len(fetched_files), fetched_path)
 
-    config.output.loaded_base.mkdir(parents=True, exist_ok=True)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
 
     failures = 0
     for fetched_file in tqdm(
@@ -65,7 +65,7 @@ def load_api_data(config: ApiFetchingConfig) -> None:
                 jsonld = json.load(f)
             schema_type = jsonld["@type"].split("/")[-1]
             schema = get_schema(schema_type)(**jsonld)
-            load_to_jsonld(schema, output_dir=config.output.loaded_base)
+            load_to_jsonld(schema, output_dir=config.output_dir)
         except Exception as e:
             logger.error("Failed to load %s", fetched_file.name)
             log_validation_error(e, logger)
@@ -76,4 +76,4 @@ def load_api_data(config: ApiFetchingConfig) -> None:
             f"{failures} of {len(fetched_files)} record(s) failed to load — "
             "check the log for details"
         )
-    logger.info("API load complete. Output: %s", config.output.loaded_base)
+    logger.info("API load complete. Output: %s", config.output_dir)

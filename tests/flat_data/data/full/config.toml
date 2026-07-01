@@ -1,4 +1,5 @@
 source_type = "flat_data"
+output_dir = "loaded_base"
 provenance_dir = "provenance"
 
 # Update input to the actual Excel filename placed in data/raw/datahub/
@@ -14,9 +15,6 @@ sentinels_to_na = false
 placeholders_to_na = false
 plugin_dir = "plugins"
 plugin_name = "attach_samples_to_analyses.py"
-
-[output]
-loaded_base = "loaded_base"
 
 # Columns to create by concatenating existing columns with a space.
 [combined_columns.author]

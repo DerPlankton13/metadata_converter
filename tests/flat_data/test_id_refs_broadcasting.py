@@ -17,7 +17,6 @@ from metadata_converter.config import (
     BroadcastIdRef,
     ExcelExtractorConfig,
     FlatDataConfig,
-    OutputConfig,
 )
 from metadata_converter.flat_data.transform.id_refs_broadcasting import (
     prepare_id_ref_broadcast,
@@ -61,7 +60,7 @@ def make_config(tmp_path, refs: list[BroadcastIdRef]) -> FlatDataConfig:
             sheet_name=["author", "dataset"],
         ),
         cleaning=CleaningConfig(),
-        output=OutputConfig(loaded_base=tmp_path / "out"),
+        output_dir=tmp_path / "out",
         mapping={
             "author": {"type": "Person"},
             "dataset": {"type": "DataCatalog"},
@@ -214,7 +213,7 @@ def make_config_with_mapping(tmp_path, mapping: dict) -> FlatDataConfig:
             sheet_name=list(mapping.keys()),
         ),
         cleaning=CleaningConfig(),
-        output=OutputConfig(loaded_base=tmp_path / "out"),
+        output_dir=tmp_path / "out",
         mapping=mapping,
     )
 
@@ -321,7 +320,7 @@ def test_inline_broadcast_id_refs_appended_to_existing_broadcast_id_refs(tmp_pat
             input=tmp_path / "dummy.xlsx", sheet_name=["author", "file", "dataset"]
         ),
         cleaning=CleaningConfig(),
-        output=OutputConfig(loaded_base=tmp_path / "out"),
+        output_dir=tmp_path / "out",
         mapping={
             "author": {"type": "Person"},
             "file": {"type": "Dataset"},

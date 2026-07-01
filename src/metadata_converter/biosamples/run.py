@@ -14,7 +14,11 @@ from metadata_converter.biosamples.fetch import (
     sample_source_urls,
 )
 from metadata_converter.biosamples.uplifting import SampleUplifter
-from metadata_converter.config import BiosamplesConfig, BiosamplesInput, SourcePaths
+from metadata_converter.config import (
+    BiosamplesConfig,
+    BiosamplesExtractorConfig,
+    SourcePaths,
+)
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
@@ -29,7 +33,9 @@ from metadata_converter.utils.provenance_writer import write_provenance_file
 logger = logging.getLogger(__name__)
 
 
-def get_sample_ids(excel_file: Path, config: BiosamplesInput) -> set[str] | None:
+def get_sample_ids(
+    excel_file: Path, config: BiosamplesExtractorConfig
+) -> set[str] | None:
     df = pd.read_excel(
         excel_file,
         sheet_name=config.sheet_name,
@@ -38,13 +44,13 @@ def get_sample_ids(excel_file: Path, config: BiosamplesInput) -> set[str] | None
     )
     df = df.dropna(how="all")
 
-    if config.header_name not in df.columns:
+    if config.sample_id_column not in df.columns:
         logger.error(
-            f"Column '{config.header_name}' not found in sheet '{config.sheet_name}' of '{excel_file.name}'. Skipping this file now."
+            f"Column '{config.sample_id_column}' not found in sheet '{config.sheet_name}' of '{excel_file.name}'. Skipping this file now."
         )
         return None
 
-    return set(df[config.header_name].dropna().tolist())
+    return set(df[config.sample_id_column].dropna().tolist())
 
 
 def modify_context(metadata: dict, sample_id: str) -> dict:
@@ -75,14 +81,14 @@ def fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) -
 def fetch_biosamples(config: BiosamplesConfig):
     logger.info("Starting biosamples fetch")
 
-    input_cfg = config.input
-    excel_files = sorted(input_cfg.input_dir.glob("*.xlsx")) + sorted(
-        input_cfg.input_dir.glob("*.xls")
+    input_cfg = config.extractor
+    excel_files = sorted(input_cfg.input.glob("*.xlsx")) + sorted(
+        input_cfg.input.glob("*.xls")
     )
     if not excel_files:
-        logger.error("No Excel files found in %s", input_cfg.input_dir)
+        logger.error("No Excel files found in %s", input_cfg.input)
         return
-    logger.info("Found %d Excel file(s) in %s", len(excel_files), input_cfg.input_dir)
+    logger.info("Found %d Excel file(s) in %s", len(excel_files), input_cfg.input)
 
     all_sample_ids: set[str] = set()
     for excel_file in excel_files:
@@ -97,7 +103,7 @@ def fetch_biosamples(config: BiosamplesConfig):
         logger.warning("No sample IDs found across all files")
         return
 
-    fetched_path = config.output.input
+    fetched_path = config.fetched_dir
     fetched_path.mkdir(parents=True, exist_ok=True)
 
     if config.provenance_dir is not None:
@@ -155,10 +161,10 @@ def fetch_biosamples(config: BiosamplesConfig):
 def load_biosamples(config: BiosamplesConfig):
     logger.info("Starting biosamples load")
 
-    fetched_path = config.output.input
+    fetched_path = config.fetched_dir
     ldjson_files = list(fetched_path.glob("*.ldjson"))
     logger.info("Found %d fetched sample(s) in %s", len(ldjson_files), fetched_path)
-    config.output.loaded_base.mkdir(parents=True, exist_ok=True)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
 
     failures = 0
     for ldjson_path in tqdm(
@@ -183,14 +189,14 @@ def load_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
-        write_json(fused, config.output.loaded_base / f"{sample_id}.jsonld")
+        write_json(fused, config.output_dir / f"{sample_id}.jsonld")
 
     if failures:
         raise RuntimeError(
             f"{failures} of {len(ldjson_files)} sample(s) failed to load — "
             "check the log for details"
         )
-    logger.info("Biosamples load complete. Output: %s", config.output.loaded_base)
+    logger.info("Biosamples load complete. Output: %s", config.output_dir)
 
 
 def uplift_biosamples(config: SourcePaths):

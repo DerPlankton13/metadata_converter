@@ -9,7 +9,6 @@ from metadata_converter.api_fetching.run import fetch_api_data
 from metadata_converter.config import (
     ApiExtractorConfig,
     ApiFetchingConfig,
-    FetchedOutputConfig,
 )
 
 
@@ -22,7 +21,8 @@ def api_config(fetched, loaded_base, provenance_dir, fetch_strategy="export_endp
             fetch_strategy=fetch_strategy,
             export_url_template="https://zenodo.org/records/{record_id}/export/json-ld",
         ),
-        output=FetchedOutputConfig(input=fetched, loaded_base=loaded_base),
+        fetched_dir=fetched,
+        output_dir=loaded_base,
         provenance_dir=provenance_dir,
     )
 

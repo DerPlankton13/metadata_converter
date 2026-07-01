@@ -52,7 +52,7 @@ def load_single(config: FlatDataConfig, input: Path) -> None:
                 write_provenance_file(
                     schema.id, config.provenance_dir, str(input), "load"
                 )
-    write_schemas(schemas, config.output.loaded_base)
+    write_schemas(schemas, config.output_dir)
 
 
 def write_schemas(

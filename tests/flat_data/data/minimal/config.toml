@@ -1,6 +1,7 @@
 # Load config for the minimal flat_data integration-test scenario.
 # Paths below are placeholders — the test overrides them with tmp_path locations.
 source_type = "flat_data"
+output_dir = "loaded_base"
 
 [extractor]
 input = "input.xlsx"
@@ -8,9 +9,6 @@ sheet_name = ["author", "dataset"]
 header = 0
 
 [cleaning]
-
-[output]
-loaded_base = "loaded_base"
 
 [mapping.author]
 type = "Person"

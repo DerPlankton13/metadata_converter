@@ -29,10 +29,10 @@ from metadata_converter.flat_data.transform.cleaning_plugin import (
 class FlatDataConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["flat_data"] = "flat_data"
-    provenance_dir: Path | None = None
     extractor: ExcelExtractorConfig
     cleaning: CleaningConfig
-    output: OutputConfig
+    output_dir: Path
+    provenance_dir: Path | None = None
     sheet_type_mapping: dict[str, str] | None = None
     mapping: dict[str, dict[str, Any]]
     combined_columns: dict[str, dict[str, list[str]]] = Field(
@@ -93,8 +93,11 @@ class FlatDataUpliftConfig(BaseModel):
 
 
 class ExcelExtractorConfig(BaseModel):
+    # Also the shared base for BiosamplesExtractorConfig. If flat_data ever needs
+    # an extractor-only field, pull the shared fields into a dedicated
+    # ExcelReaderConfig base rather than adding it here (it would leak to biosamples).
     model_config = ConfigDict(extra="forbid")
-    input: Path
+    input: Path = Field(description="An .xlsx file, or a directory of them.")
     sheet_name: str | list[str]
     header: int | None = None
     skiprows: list[int] | None = None
@@ -269,20 +272,20 @@ class LinkRule(BaseModel):
 class BiosamplesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["biosamples"] = "biosamples"
-    input: BiosamplesInput
-    output: FetchedOutputConfig
+    extractor: BiosamplesExtractorConfig
+    fetched_dir: Path
+    output_dir: Path
     provenance_dir: Path | None = None
     max_workers: int = 10
     user_agent: str = "metadata-collector/1.0"
 
 
-class BiosamplesInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    input_dir: Path
+class BiosamplesExtractorConfig(ExcelExtractorConfig):
+    """The Excel reader that yields the sample IDs to fetch (a specialized
+    ExcelExtractorConfig: single sheet, plus the id-column name)."""
+
     sheet_name: str = "sample"
-    header: int | None = None
-    skiprows: list[int] | None = None
-    header_name: str = "sample:pid"
+    sample_id_column: str = "sample:pid"
 
 
 # ---------------------------------------------------------------------------
@@ -294,7 +297,8 @@ class ApiFetchingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["api"] = "api"
     extractor: ApiExtractorConfig
-    output: FetchedOutputConfig
+    fetched_dir: Path
+    output_dir: Path
     provenance_dir: Path | None = None
 
 
@@ -382,26 +386,6 @@ class SourcePaths(BaseModel):
     input_dir: Path
     output_dir: Path
     provenance_dir: Path | None = None
-
-
-# ---------------------------------------------------------------------------
-# Shared output models
-# ---------------------------------------------------------------------------
-
-
-class OutputConfig(BaseModel):
-    """Output config for sources with no fetch phase (flat_data)."""
-
-    model_config = ConfigDict(extra="forbid")
-    loaded_base: Path
-
-
-class FetchedOutputConfig(BaseModel):
-    """Output config for sources with a fetch phase (biosamples, api)."""
-
-    model_config = ConfigDict(extra="forbid")
-    input: Path
-    loaded_base: Path
 
 
 # ---------------------------------------------------------------------------

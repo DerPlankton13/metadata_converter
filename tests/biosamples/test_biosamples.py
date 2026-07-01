@@ -10,8 +10,7 @@ from metadata_converter.biosamples.fetch import fuse_metadata, sample_source_url
 from metadata_converter.biosamples.run import fetch_biosamples, uplift_biosamples
 from metadata_converter.config import (
     BiosamplesConfig,
-    BiosamplesInput,
-    FetchedOutputConfig,
+    BiosamplesExtractorConfig,
     SourcePaths,
 )
 from metadata_converter.biosamples.uplifting import (
@@ -434,10 +433,9 @@ def offline_biosamples_input(tmp_path, monkeypatch):
 
 def test_biosamples_fetch_writes_provenance(tmp_path, offline_biosamples_input):
     config = BiosamplesConfig(
-        input=BiosamplesInput(input_dir=offline_biosamples_input),
-        output=FetchedOutputConfig(
-            input=tmp_path / "fetched", loaded_base=tmp_path / "loaded_base"
-        ),
+        extractor=BiosamplesExtractorConfig(input=offline_biosamples_input),
+        fetched_dir=tmp_path / "fetched",
+        output_dir=tmp_path / "loaded_base",
         provenance_dir=tmp_path / "provenance",
     )
 
@@ -465,10 +463,9 @@ def test_biosamples_fetch_without_provenance_dir_writes_nothing(
     tmp_path, offline_biosamples_input
 ):
     config = BiosamplesConfig(
-        input=BiosamplesInput(input_dir=offline_biosamples_input),
-        output=FetchedOutputConfig(
-            input=tmp_path / "fetched", loaded_base=tmp_path / "loaded_base"
-        ),
+        extractor=BiosamplesExtractorConfig(input=offline_biosamples_input),
+        fetched_dir=tmp_path / "fetched",
+        output_dir=tmp_path / "loaded_base",
         provenance_dir=None,
     )
 

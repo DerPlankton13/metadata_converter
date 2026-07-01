@@ -77,6 +77,8 @@ and writes one JSON-LD file per entity.
 ```toml
 source_type = "flat_data"
 
+output_dir = "data/loaded_base/my_source"
+
 [extractor]
 input      = "data/raw/input.xlsx"   # an .xlsx file, or a directory of them
 sheet_name = ["author", "dataset"]
@@ -88,9 +90,6 @@ strip_header_whitespace = true
 strip_cell_whitespace   = true
 sentinels_to_na         = false
 placeholders_to_na      = false
-
-[output]
-loaded_base = "data/loaded_base/my_source"
 
 [mapping.author]
 type       = "Person"
@@ -219,15 +218,13 @@ JSON-LD pair (the `uplift` phase).
 
 ```toml
 source_type = "biosamples"
+fetched_dir = "data/fetched/biosamples"   # where `fetch` writes and `load` reads
+output_dir  = "data/loaded_base/biosamples"
 
-[input]
-input_dir   = "data/raw/biosamples/sample_list.xlsx"
-sheet_name  = "sample"
-header_name = "sample:pid"
-
-[output]
-input       = "data/fetched/biosamples"   # where `fetch` writes and `load` reads
-loaded_base = "data/loaded_base/biosamples"
+[extractor]
+input            = "data/raw/biosamples"
+sheet_name       = "sample"
+sample_id_column = "sample:pid"
 ```
 
 ---
@@ -238,6 +235,8 @@ Queries external repositories (currently Zenodo) and fetches JSON-LD records.
 
 ```toml
 source_type = "api"
+fetched_dir = "data/fetched/zenodo"     # where `fetch` writes and `load` reads
+output_dir  = "data/loaded_base/zenodo"
 
 [extractor]
 api_url             = "https://zenodo.org/api/records"
@@ -247,10 +246,6 @@ export_url_template = "https://zenodo.org/records/{record_id}/export/json-ld"
 [extractor.query]
 field = "communities"
 value = "biocean5d"
-
-[output]
-input       = "data/fetched/zenodo"     # where `fetch` writes and `load` reads
-loaded_base = "data/loaded_base/zenodo"
 ```
 
 ---
