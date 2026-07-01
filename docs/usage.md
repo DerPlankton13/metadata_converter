@@ -221,10 +221,14 @@ source_type = "biosamples"
 fetched_dir = "data/fetched/biosamples"   # where `fetch` writes and `load` reads
 output_dir  = "data/loaded_base/biosamples"
 
-[extractor]
+[extractor]                        # reads the sample-id list from Excel
 input            = "data/raw/biosamples"
 sheet_name       = "sample"
 sample_id_column = "sample:pid"
+
+[fetcher]                          # how the records are fetched from the API
+user_agent  = "metadata-collector/1.0"
+max_workers = 10
 ```
 
 ---
@@ -238,12 +242,12 @@ source_type = "api"
 fetched_dir = "data/fetched/zenodo"     # where `fetch` writes and `load` reads
 output_dir  = "data/loaded_base/zenodo"
 
-[extractor]
+[fetcher]
 api_url             = "https://zenodo.org/api/records"
 fetch_strategy      = "export_endpoint"
 export_url_template = "https://zenodo.org/records/{record_id}/export/json-ld"
 
-[extractor.query]
+[fetcher.query]
 field = "communities"
 value = "biocean5d"
 ```

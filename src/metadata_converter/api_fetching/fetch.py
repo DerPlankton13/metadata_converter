@@ -2,7 +2,7 @@
 Source-agnostic metadata collection library.
 
 Provides a unified interface for querying repository APIs and retrieving
-JSON-LD metadata records. All behaviour is controlled via `ApiExtractorConfig`
+JSON-LD metadata records. All behaviour is controlled via `ApiFetcherConfig`
 — no source-specific code paths are needed for supported repositories.
 
 Supported repositories (built-in query handlers):
@@ -30,19 +30,19 @@ Public API
 ----------
 ::
 
-    query_source(config: ApiExtractorConfig) -> list[Record]
-    fetch_jsonld(record: Record, config: ApiExtractorConfig) -> dict
+    query_source(config: ApiFetcherConfig) -> list[Record]
+    fetch_jsonld(record: Record, config: ApiFetcherConfig) -> dict
 
 Examples
 --------
 ::
 
     from metadata_collector import (
-        ApiExtractorConfig, QueryTerm, QueryGroup, query_source, fetch_jsonld,
+        ApiFetcherConfig, QueryTerm, QueryGroup, query_source, fetch_jsonld,
     )
 
     # Query the Zenodo BIOcean5D community
-    records = query_source(ApiExtractorConfig(
+    records = query_source(ApiFetcherConfig(
         api_url="https://zenodo.org/api/records",
         query=QueryTerm(field="communities", value="horizoneurope_biocean5d"),
         fetch_strategy="export_endpoint",
@@ -50,7 +50,7 @@ Examples
     ))
 
     # Query DataCite by award number or project name
-    records = query_source(ApiExtractorConfig(
+    records = query_source(ApiFetcherConfig(
         api_url="https://api.datacite.org/dois",
         query=QueryGroup(operator="OR", terms=[
             QueryTerm(field="fundingReferences.awardNumber", value="101059915"),
@@ -81,7 +81,7 @@ from bs4 import BeautifulSoup
 from pydantic import BaseModel
 
 from metadata_converter.api_fetching.query_models import Query, QueryGroup, QueryTerm
-from metadata_converter.config import ApiExtractorConfig
+from metadata_converter.config import ApiFetcherConfig
 from metadata_converter.utils.http import make_session
 
 logger = logging.getLogger(__name__)
@@ -152,7 +152,7 @@ def checked(fn):
 
 @checked
 def get(
-    session: requests.Session, url: str, config: ApiExtractorConfig, **kwargs
+    session: requests.Session, url: str, config: ApiFetcherConfig, **kwargs
 ) -> requests.Response:
     """Perform a GET request."""
     return session.get(url, **kwargs)
@@ -160,14 +160,14 @@ def get(
 
 @checked
 def post(
-    session: requests.Session, url: str, config: ApiExtractorConfig, **kwargs
+    session: requests.Session, url: str, config: ApiFetcherConfig, **kwargs
 ) -> requests.Response:
     """Perform a POST request."""
     return session.post(url, **kwargs)
 
 
 def check_response_size(
-    response: requests.Response, config: ApiExtractorConfig
+    response: requests.Response, config: ApiFetcherConfig
 ) -> None:
     """Raise `ValueError` if the response body exceeds ``max_response_mb``."""
     max_bytes = int(config.max_response_mb * 1024 * 1024)
@@ -220,7 +220,7 @@ def to_es_query(query: Query) -> str:
 
 
 def query_zenodo(
-    config: ApiExtractorConfig, session: requests.Session
+    config: ApiFetcherConfig, session: requests.Session
 ) -> list[Record]:
     """Query handler for the Zenodo REST API."""
     params: dict = {
@@ -262,7 +262,7 @@ def query_zenodo(
 
 
 def query_datacite(
-    config: ApiExtractorConfig, session: requests.Session
+    config: ApiFetcherConfig, session: requests.Session
 ) -> list[Record]:
     """Query handler for the DataCite REST API."""
     params: dict = {
@@ -303,7 +303,7 @@ def query_datacite(
 
 
 def query_seanoe(
-    config: ApiExtractorConfig, session: requests.Session
+    config: ApiFetcherConfig, session: requests.Session
 ) -> list[Record]:
     """
     Query handler for the SEANOE internal search API.
@@ -385,7 +385,7 @@ def query_seanoe(
 
 
 def query_figshare(
-    config: ApiExtractorConfig, session: requests.Session
+    config: ApiFetcherConfig, session: requests.Session
 ) -> list[Record]:
     """
     Query handler for Figshare and Figshare-based repositories
@@ -446,7 +446,7 @@ def query_figshare(
 # Query handler registry
 # ---------------------------------------------------------------------------
 
-type QueryHandler = Callable[[ApiExtractorConfig, requests.Session], list[Record]]
+type QueryHandler = Callable[[ApiFetcherConfig, requests.Session], list[Record]]
 
 #: Maps a substring of ``api_url`` to the appropriate query handler.
 #: To add support for a new repository, append a ``(pattern, handler)`` tuple.
@@ -476,7 +476,7 @@ def find_query_handler(api_url: str) -> QueryHandler:
 
 def fetch_export_endpoint(
     record: Record,
-    config: ApiExtractorConfig,
+    config: ApiFetcherConfig,
     session: requests.Session,
 ) -> dict:
     """Fetch JSON-LD from the URL produced by substituting ``record.source_id``
@@ -487,7 +487,7 @@ def fetch_export_endpoint(
 
 def fetch_html_jsonld(
     record: Record,
-    config: ApiExtractorConfig,
+    config: ApiFetcherConfig,
     session: requests.Session,
 ) -> dict:
     """Fetch the record's landing page and extract the first
@@ -504,7 +504,7 @@ def fetch_html_jsonld(
     return json.loads(tag.string)
 
 
-type FetchHandler = Callable[[Record, ApiExtractorConfig, requests.Session], dict]
+type FetchHandler = Callable[[Record, ApiFetcherConfig, requests.Session], dict]
 
 FETCH_HANDLERS: dict[str, FetchHandler] = {
     "export_endpoint": fetch_export_endpoint,
@@ -517,18 +517,18 @@ FETCH_HANDLERS: dict[str, FetchHandler] = {
 # ---------------------------------------------------------------------------
 
 
-def query_source(config: ApiExtractorConfig) -> list[Record]:
+def query_source(config: ApiFetcherConfig) -> list[Record]:
     """
     Query a repository API and return all matching records.
 
     Each call is independent — results are not merged or deduplicated.
     To query multiple sources or use multiple queries, call this function
-    once per `ApiExtractorConfig` and handle deduplication in the calling code.
+    once per `ApiFetcherConfig` and handle deduplication in the calling code.
 
     Parameters
     ----------
     config :
-        A `ApiExtractorConfig` specifying the API endpoint, query, and
+        A `ApiFetcherConfig` specifying the API endpoint, query, and
         request behaviour.
 
     Returns
@@ -551,12 +551,12 @@ def query_source(config: ApiExtractorConfig) -> list[Record]:
     return find_query_handler(config.api_url)(config, session)
 
 
-def fetch_jsonld(record: Record, config: ApiExtractorConfig) -> dict:
+def fetch_jsonld(record: Record, config: ApiFetcherConfig) -> dict:
     """
     Retrieve JSON-LD metadata for a single record.
 
     The fetch strategy is determined by ``config.fetch_strategy``. The same
-    `ApiExtractorConfig` used for discovery may be reused here, or a separate
+    `ApiFetcherConfig` used for discovery may be reused here, or a separate
     one may be passed if the fetch endpoint differs (e.g. when records were
     discovered via DataCite but JSON-LD is fetched from the originating
     repository).
@@ -566,7 +566,7 @@ def fetch_jsonld(record: Record, config: ApiExtractorConfig) -> dict:
     record :
         A `Record` instance returned by `query_source`.
     config :
-        A `ApiExtractorConfig` whose ``fetch_strategy`` field controls the
+        A `ApiFetcherConfig` whose ``fetch_strategy`` field controls the
         fetch strategy.
 
     Returns

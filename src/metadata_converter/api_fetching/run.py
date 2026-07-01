@@ -16,26 +16,26 @@ logger = logging.getLogger(__name__)
 
 
 def fetch_api_data(config: ApiFetchingConfig) -> None:
-    logger.info("Starting API fetch from %s", config.extractor.api_url)
+    logger.info("Starting API fetch from %s", config.fetcher.api_url)
 
     fetched_path = config.fetched_dir
     fetched_path.mkdir(parents=True, exist_ok=True)
 
-    records = query_source(config.extractor)
+    records = query_source(config.fetcher)
     logger.info(
         "Found %d record(s), fetching JSON-LD to %s", len(records), fetched_path
     )
 
     for record in tqdm(records, desc="Fetching records", unit="rec", file=sys.stdout):
         logger.debug("Fetching %s", record.doi)
-        jsonld = fetch_jsonld(record, config.extractor)
+        jsonld = fetch_jsonld(record, config.fetcher)
         fetched_file = fetched_path / f"{record.source_id}.jsonld"
         logger.debug("Writing fetched JSON-LD to %s", fetched_file)
         write_json(jsonld, fetched_file)
 
         if config.provenance_dir is not None:
-            if config.extractor.fetch_strategy == "export_endpoint":
-                source_url = config.extractor.export_url_template.format(
+            if config.fetcher.fetch_strategy == "export_endpoint":
+                source_url = config.fetcher.export_url_template.format(
                     record_id=record.source_id
                 )
             else:

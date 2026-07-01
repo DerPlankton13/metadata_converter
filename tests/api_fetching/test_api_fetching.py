@@ -7,7 +7,7 @@ from metadata_converter.api_fetching.fetch import Record
 from metadata_converter.api_fetching.query_models import QueryTerm
 from metadata_converter.api_fetching.run import fetch_api_data
 from metadata_converter.config import (
-    ApiExtractorConfig,
+    ApiFetcherConfig,
     ApiFetchingConfig,
 )
 
@@ -15,7 +15,7 @@ from metadata_converter.config import (
 def api_config(fetched, loaded_base, provenance_dir, fetch_strategy="export_endpoint"):
     """A minimal ApiFetchingConfig for the fetch step."""
     return ApiFetchingConfig(
-        extractor=ApiExtractorConfig(
+        fetcher=ApiFetcherConfig(
             api_url="https://example.org/api",
             query=QueryTerm(field="communities", value="x"),
             fetch_strategy=fetch_strategy,

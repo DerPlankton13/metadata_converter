@@ -273,11 +273,18 @@ class BiosamplesConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["biosamples"] = "biosamples"
     extractor: BiosamplesExtractorConfig
+    fetcher: BiosamplesFetcherConfig = Field(default_factory=lambda: BiosamplesFetcherConfig())
     fetched_dir: Path
     output_dir: Path
     provenance_dir: Path | None = None
-    max_workers: int = 10
+
+
+class BiosamplesFetcherConfig(BaseModel):
+    """How sample records are fetched from the EBI BioSamples API."""
+
+    model_config = ConfigDict(extra="forbid")
     user_agent: str = "metadata-collector/1.0"
+    max_workers: int = 10
 
 
 class BiosamplesExtractorConfig(ExcelExtractorConfig):
@@ -296,13 +303,13 @@ class BiosamplesExtractorConfig(ExcelExtractorConfig):
 class ApiFetchingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["api"] = "api"
-    extractor: ApiExtractorConfig
+    fetcher: ApiFetcherConfig
     fetched_dir: Path
     output_dir: Path
     provenance_dir: Path | None = None
 
 
-class ApiExtractorConfig(BaseModel):
+class ApiFetcherConfig(BaseModel):
     """Configuration for a single `query_source` or `fetch_jsonld` call."""
 
     model_config = ConfigDict(extra="forbid")
@@ -353,7 +360,7 @@ class ApiExtractorConfig(BaseModel):
         return v
 
     @model_validator(mode="after")
-    def _export_template_has_placeholder(self) -> ApiExtractorConfig:
+    def _export_template_has_placeholder(self) -> ApiFetcherConfig:
         if (
             self.fetch_strategy == "export_endpoint"
             and "{record_id}" not in self.export_url_template

@@ -69,7 +69,7 @@ def modify_context(metadata: dict, sample_id: str) -> dict:
 
 
 def fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) -> bool:
-    session = make_session(config.user_agent)
+    session = make_session(config.fetcher.user_agent)
     try:
         get_metadata(sample_id, session, fetched_path)
         return True
@@ -126,10 +126,10 @@ def fetch_biosamples(config: BiosamplesConfig):
         return
 
     logger.info(
-        "Fetching %d sample(s) with %d worker(s)", len(pending), config.max_workers
+        "Fetching %d sample(s) with %d worker(s)", len(pending), config.fetcher.max_workers
     )
 
-    with ThreadPoolExecutor(max_workers=config.max_workers) as executor:
+    with ThreadPoolExecutor(max_workers=config.fetcher.max_workers) as executor:
         submitted = [
             executor.submit(fetch_sample, sid, fetched_path, config) for sid in pending
         ]
