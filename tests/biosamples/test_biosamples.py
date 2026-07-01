@@ -444,12 +444,12 @@ def test_biosamples_fetch_writes_provenance(tmp_path, offline_biosamples_input):
     fetch_biosamples(config)
 
     doc = json.loads(
-        (tmp_path / "provenance" / "Provenance_SAMEA1.jsonld").read_text()
+        (tmp_path / "provenance" / "Provenance_load_SAMEA1.jsonld").read_text()
     )
     assert doc == {
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "DigitalDocument",
-        "@id": "Provenance_SAMEA1.jsonld",
+        "@id": "Provenance_load_SAMEA1.jsonld",
         "about": {"@type": "Thing", "@id": "SAMEA1.jsonld"},
         "isBasedOn": [
             {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.ldjson"},
@@ -498,7 +498,7 @@ def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
     uplift_biosamples(config)
 
     product_doc = json.loads(
-        (tmp_path / "provenance" / f"Provenance_Product_{sid}.jsonld").read_text()
+        (tmp_path / "provenance" / f"Provenance_uplift_Product_{sid}.jsonld").read_text()
     )
     assert product_doc["about"] == {"@type": "Thing", "@id": f"Product_{sid}.jsonld"}
     assert product_doc["isBasedOn"] == {
@@ -507,7 +507,7 @@ def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
     assert product_doc["description"] == "stage: uplift"
 
     action_doc = json.loads(
-        (tmp_path / "provenance" / f"Provenance_Action_{sid}.jsonld").read_text()
+        (tmp_path / "provenance" / f"Provenance_uplift_Action_{sid}.jsonld").read_text()
     )
     assert action_doc["about"] == {"@type": "Thing", "@id": f"Action_{sid}.jsonld"}
     assert action_doc["isBasedOn"] == {

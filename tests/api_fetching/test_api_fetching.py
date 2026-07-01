@@ -51,12 +51,12 @@ def test_api_fetch_export_endpoint_records_export_url(tmp_path, monkeypatch):
     fetch_api_data(config)
 
     doc = json.loads(
-        (tmp_path / "provenance" / "Provenance_Dataset_rec1.jsonld").read_text()
+        (tmp_path / "provenance" / "Provenance_load_Dataset_rec1.jsonld").read_text()
     )
     assert doc == {
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "DigitalDocument",
-        "@id": "Provenance_Dataset_rec1.jsonld",
+        "@id": "Provenance_load_Dataset_rec1.jsonld",
         "about": {"@type": "Thing", "@id": "Dataset_rec1.jsonld"},
         "isBasedOn": {
             "@type": "CreativeWork",
@@ -82,7 +82,7 @@ def test_api_fetch_html_jsonld_records_landing_url(tmp_path, monkeypatch):
     fetch_api_data(config)
 
     doc = json.loads(
-        (tmp_path / "provenance" / "Provenance_Dataset_rec1.jsonld").read_text()
+        (tmp_path / "provenance" / "Provenance_load_Dataset_rec1.jsonld").read_text()
     )
     assert doc["isBasedOn"] == {
         "@type": "CreativeWork",

@@ -15,10 +15,10 @@ def test_provenance_writes_document(tmp_path):
         "load",
     )
 
-    doc = json.loads((tmp_path / "Provenance_Dataset_abc.jsonld").read_text())
+    doc = json.loads((tmp_path / "Provenance_load_Dataset_abc.jsonld").read_text())
     assert doc["@context"] == {"@vocab": "https://schema.org/"}
     assert doc["@type"] == "DigitalDocument"
-    assert doc["@id"] == "Provenance_Dataset_abc.jsonld"
+    assert doc["@id"] == "Provenance_load_Dataset_abc.jsonld"
     assert doc["about"] == {"@type": "Thing", "@id": "Dataset_abc.jsonld"}
     assert doc["isBasedOn"] == {
         "@type": "CreativeWork",
@@ -39,7 +39,7 @@ def test_provenance_records_multiple_sources(tmp_path):
         "load",
     )
 
-    doc = json.loads((tmp_path / "Provenance_SAMEA1.jsonld").read_text())
+    doc = json.loads((tmp_path / "Provenance_load_SAMEA1.jsonld").read_text())
     assert doc["isBasedOn"] == [
         {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.ldjson"},
         {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.json"},
