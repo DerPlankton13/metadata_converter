@@ -401,7 +401,7 @@ def test_build_instrument_multi_value():
 
 
 # ---------------------------------------------------------------------------
-# Provenance: source URLs and per-record sidecars
+# Provenance: source URLs and per-record provenance files
 # ---------------------------------------------------------------------------
 
 

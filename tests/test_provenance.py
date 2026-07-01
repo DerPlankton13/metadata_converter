@@ -1,6 +1,6 @@
-"""Tests for ``write_provenance_file``: each metadata file gets a per-record sidecar
-recording what it is ``about``, what it ``isBasedOn`` (both as ``@id`` node refs),
-and which ``stage`` produced it."""
+"""Tests for ``write_provenance_file``: each metadata file gets a per-record
+provenance file recording what it is ``about``, what it ``isBasedOn`` (both as
+``@id`` node refs), and which ``stage`` produced it."""
 import json
 import re
 

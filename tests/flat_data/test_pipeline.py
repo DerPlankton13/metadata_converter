@@ -60,7 +60,7 @@ def comparable_provenance(provenance: dict) -> dict:
 
 
 def assert_provenance_matches(produced_dir: Path, golden_dir: Path, stage: str) -> None:
-    """Compare the ``stage`` sidecars a run wrote (``produced_dir``) against the
+    """Compare the ``stage`` provenance files a run wrote (``produced_dir``) against the
     committed golden corpus (``golden_dir``).
 
     ``dateCreated`` is only checked for ISO-8601 shape (its value is non-reproducible);

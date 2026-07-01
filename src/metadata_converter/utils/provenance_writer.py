@@ -15,15 +15,16 @@ def write_provenance_file(
     based_on: str | list[str],
     stage: str,
 ) -> None:
-    """Write a per-record provenance sidecar linking a metadata file to its source(s).
+    """Write a per-record provenance file linking a metadata file to its source(s).
 
     ``about`` (the described file) and ``isBasedOn`` (the source(s) it was produced
     from — an ``@id`` for an entity source, a URL for a fetched one) are built as
     node references so they serialize as ``@id`` IRIs rather than literal strings.
     A file merged from several sources (e.g. a biosample fused from two endpoints)
     records all of them; a single source collapses to one node. ``stage`` records
-    which pipeline step produced the file and is part of the sidecar name, so one
-    entity's load- and uplift-stage sidecars can coexist in a shared folder.
+    which pipeline step produced the file and is part of the provenance file's
+    name, so one entity's load- and uplift-stage provenance files can coexist in
+    a shared folder.
     """
     provenance_id = f"Provenance_{stage}_" + about_file_id.split("/")[-1]
     sources = [based_on] if isinstance(based_on, str) else based_on
