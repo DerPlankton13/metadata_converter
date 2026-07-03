@@ -20,8 +20,18 @@ def extract_data(
     path = input or extractor_cfg.input
 
     logger.info("Extracting data from %s", path)
-    input_data = pd.read_excel(path, **extractor_cfg.model_dump(exclude={"input"}))
-    # ensures that a dict is also returned, if only a single sheet was selected
-    if isinstance(input_data, pd.DataFrame):
-        input_data = {extractor_cfg.sheet_name: input_data}
+    if isinstance(extractor_cfg.header, dict):
+        # header/skiprows dict keys are validated to exactly match sheet_name,
+        # so header.items() alone tells us which sheets to read.
+        input_data = {
+            sheet: pd.read_excel(
+                path, sheet_name=sheet, header=header, skiprows=extractor_cfg.skiprows[sheet]
+            )
+            for sheet, header in extractor_cfg.header.items()
+        }
+    else:
+        input_data = pd.read_excel(path, **extractor_cfg.model_dump(exclude={"input"}))
+        # ensures that a dict is also returned, if only a single sheet was selected
+        if isinstance(input_data, pd.DataFrame):
+            input_data = {extractor_cfg.sheet_name: input_data}
     return input_data
