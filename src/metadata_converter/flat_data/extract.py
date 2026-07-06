@@ -34,4 +34,9 @@ def extract_data(
         # ensures that a dict is also returned, if only a single sheet was selected
         if isinstance(input_data, pd.DataFrame):
             input_data = {extractor_cfg.sheet_name: input_data}
+
+    # attach source file information for e.g. plugins
+    for df in input_data.values():
+        df.attrs["source_file"] = str(path)
+
     return input_data
