@@ -209,6 +209,27 @@ and be removed at uplift — never become first-class stub entities that merely 
   `UrlIdentifier`) with validation logic. Also exposes `get_schema(type_name)` for dynamic type lookup by string name.
 - **`schemaorg_models.py` (end)** — `make_strict()` creates a strict variant of any model; `rebuild_all_models()` forces
   Pydantic to resolve all forward references.
+- **Subtype discrimination** — a field typed as a bare schema.org class (e.g. `Action.instrument: Thing`) must accept
+  only dicts whose `@type` is that class or a registered subtype, not any dict shape. This is solved by two small,
+  independent mechanisms that only meet at validation time:
+  - **Self-registering type registry** — `_SCHEMA_TYPE_REGISTRY: dict[str, type]` starts empty. `SchemaOrgBase.__init_subclass__`
+    (a plain Python hook, not a Pydantic feature — see its docstring) fires once per subclass, right as its `class`
+    statement executes, and adds `{cls.__name__: cls}` to the registry. Since this runs for *every* subclass ever
+    defined, anywhere, it covers all generated classes as `schemaorg_models.py` executes, and any later subclass too —
+    e.g. `custom_models.py`'s `Orcid`/`DOI`, imported by a different module at a different time. No explicit
+    registration call, no cache-invalidation logic, no snapshot that can go stale.
+  - **Validation-time resolution** — `SchemaOrgBase.discriminate_typed_fields` (a `model_validator(mode="before")`)
+    intercepts the raw input dict before Pydantic's normal per-field parsing. For each field whose annotation
+    references a schema.org class (`_referenced_subtypes`, walking `Union`/`X | Y`/`list`/`set`/`tuple`), it looks the
+    value's `@type` up in the registry (`_discriminate_value`) and parses it as that concrete subtype instead of the
+    field's declared (often more generic) type — raising if `@type` is unregistered or not actually a subtype of what
+    the field declares.
+
+  This intentionally never touches a field's *type annotation* — the earlier design wrapped every non-primitive field
+  in `Annotated[X, BeforeValidator(...)]`, which added enough extra stack depth per level of schema.org's cyclic class
+  graph to exceed Python's default recursion limit while Pydantic built its schema. Resolving over already-built
+  `model_fields` at call time, after the schema build has already completed, sidesteps that entirely — the fix runs at
+  the default recursion limit, no `sys.setrecursionlimit` needed.
 
 ### BioSamples uplifting (`src/metadata_converter/biosamples/`)
 

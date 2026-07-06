@@ -1,10 +1,11 @@
 """Tests that the real, generated ``schemaorg_models.py`` actually discriminates subtypes.
 
-``tests/schema/test_polymorphic.py`` tests the ``polymorphic()`` wrapper itself, in
-isolation, via hand-built containers and registries. These tests instead exercise the
-already-generated production classes directly — proving ``resolve_type()`` actually
-wires ``polymorphic()`` into real fields (``Action.instrument``, ``CreativeWork.character``),
-not just that the wrapper works when called by hand.
+``tests/schema/test_discrimination_helpers.py`` tests ``_referenced_subtypes`` and
+``_discriminate_value`` in isolation, via hand-built classes and registries. These tests
+instead exercise the already-generated production classes directly — proving
+``SchemaOrgBase.discriminate_typed_fields`` actually fires on real fields
+(``Action.instrument``, ``CreativeWork.character``), not just that the helpers work when
+called by hand.
 """
 import pytest
 from pydantic import ValidationError

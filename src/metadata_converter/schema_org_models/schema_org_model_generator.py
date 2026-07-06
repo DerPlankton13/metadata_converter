@@ -27,6 +27,7 @@ Then in your application::
 from __future__ import annotations
 
 import argparse
+import functools
 import inspect
 import json
 import re
@@ -38,9 +39,9 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from keyword import iskeyword
 from pathlib import Path
-from typing import Any, TypedDict
+from typing import Any, TypedDict, Union, get_args, get_origin
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 from pydantic.fields import FieldInfo
 
 SCHEMA_URL = "https://schema.org/version/latest/schemaorg-current-https.jsonld"
@@ -95,6 +96,9 @@ class FieldDef(TypedDict):
     comment: str
 
 
+_SCHEMA_TYPE_REGISTRY: dict[str, type] = {}
+
+
 class SchemaOrgBase(BaseModel):
     """
     Base class for all schema.org Pydantic models.
@@ -125,6 +129,125 @@ class SchemaOrgBase(BaseModel):
         default=None
     )
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Register every subclass in ``_SCHEMA_TYPE_REGISTRY`` as it is defined.
+
+        This is a plain Python hook that is also used by Pydantic, so we do the
+        ``super()`` call to not interfere with pydantic. This covers subclasses
+        defined after this module too (e.g. ``custom_models.py``'s ``Orcid``/``DOI``).
+        """
+        super().__init_subclass__(**kwargs)
+        _SCHEMA_TYPE_REGISTRY[cls.__name__] = cls
+
+    @model_validator(mode="before")
+    @classmethod
+    def discriminate_typed_fields(cls, data: Any) -> Any:
+        """
+        Resolve ``@type``-tagged dict fields to their declared subtype before parsing.
+
+        A field typed as a bare schema.org class (e.g. ``Thing``) otherwise accepts
+        any dict regardless of its ``@type``. For each field whose annotation names a
+        schema.org class, looks the value's ``@type``/``type`` up in
+        ``_SCHEMA_TYPE_REGISTRY`` and parses it as that subtype instead; raises if
+        ``@type`` is unregistered or not actually a subtype of the field's declared
+        class.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for field_name, field_info in cls.model_fields.items():
+            if field_name in data:
+                key = field_name
+            elif field_info.alias in data:
+                key = field_info.alias
+            else:
+                continue
+            base_classes = _referenced_subtypes(field_info.annotation)
+            if base_classes:
+                data[key] = _discriminate_value(
+                    data[key], base_classes, _SCHEMA_TYPE_REGISTRY
+                )
+        return data
+
+
+@functools.lru_cache(maxsize=None)
+def _referenced_subtypes(annotation: Any) -> set[type]:
+    """
+    Return the ``SchemaOrgBase`` subclasses referenced in a field annotation.
+
+    Recurses through ``Union``/``X | Y`` and ``list``/``set``/``tuple`` wrappers.
+    Memoized: the same annotation object is checked once per validated instance of
+    every class carrying that field.
+
+    Parameters
+    ----------
+    annotation : Any
+        A resolved (non-string) field type annotation.
+
+    Returns
+    -------
+    set[type]
+        The schema.org classes referenced in ``annotation``, possibly empty.
+    """
+    origin = get_origin(annotation)
+    bases: set[type] = set()
+    if _is_union(origin) or origin in (list, set, tuple):
+        for arg in get_args(annotation):
+            bases |= _referenced_subtypes(arg)
+    elif isinstance(annotation, type) and issubclass(annotation, SchemaOrgBase):
+        bases.add(annotation)
+    return bases
+
+
+def _is_union(origin: Any) -> bool:
+    """Return whether a ``get_origin()`` result is a union — either ``Union[X, Y]`` or ``X | Y``.
+
+    The two spellings produce different origins (``typing.Union`` vs. ``types.UnionType``),
+    so both must be checked.
+    """
+    return origin is Union or getattr(origin, "__name__", "") == "UnionType"
+
+
+def _discriminate_value(
+    value: Any, base_classes: set[type], registry: dict[str, type]
+) -> Any:
+    """
+    Resolve a raw field value's ``@type``-tagged dict(s) to a registered subtype.
+
+    Parameters
+    ----------
+    value : Any
+        The raw value assigned to a field — a dict, a list, or anything else.
+    base_classes : set[type]
+        The schema.org classes declared for this field (from ``_referenced_subtypes``).
+    registry : dict[str, type]
+        Maps schema.org type names to their Pydantic model classes.
+
+    Returns
+    -------
+    Any
+        ``value`` with any resolvable dict(s) replaced by parsed subtype instances.
+        Non-dict values, and dicts with no ``@type``/``type`` key, pass through
+        unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``@type``/``type`` names something not in ``registry``, or a registered
+        type that is not a subtype of any of ``base_classes``.
+    """
+    if isinstance(value, list):
+        return [_discriminate_value(item, base_classes, registry) for item in value]
+    if isinstance(value, dict) and base_classes:
+        type_name = value.get("@type") or value.get("type")
+        if type_name is not None:
+            cls = registry.get(type_name)
+            if cls is None or not any(issubclass(cls, base) for base in base_classes):
+                declared = ", ".join(sorted(base.__name__ for base in base_classes))
+                raise ValueError(f"{type_name!r} is not a known subtype of {declared}")
+            return cls.model_validate(value)
+    return value
+
 
 def validate_strict(model) -> None:
     """Raise if a parsed model — or any nested model — has fields not in the schema.
@@ -146,39 +269,6 @@ def validate_strict(model) -> None:
         )
     for field_name in type(model).model_fields:
         validate_strict(getattr(model, field_name))
-
-
-# def get_schema(type_name: str) -> type[SchemaOrgBase]:
-#     """
-#     Return the Pydantic model class for a schema.org type name.
-#
-#     Parameters
-#     ----------
-#     type_name : str
-#         Schema.org class name (e.g. "Person").
-#
-#     Returns
-#     -------
-#     type[SchemaOrgBase]
-#
-#     Raises
-#     ------
-#     KeyError
-#         If the type_name is not available.
-#
-#     Examples
-#     --------
-#     ::
-#
-#         cls = get_schema("Person")
-#         instance = cls(**data)
-#     """
-#     cls = globals().get(type_name)
-#     if cls is None or not (isinstance(cls, type) and issubclass(cls, SchemaOrgBase)):
-#         raise KeyError(
-#             f"{type_name!r} is not a known schema.org type. Ensure that it is available in schema.org and update the Pydantic models if necessary."
-#         )
-#     return cls
 
 
 def local(iri: str) -> str:
@@ -371,8 +461,10 @@ def resolve_type(allowed_types: list[str], strict: bool) -> str:
     -------
     str
         A type annotation string for the generated module, e.g.
-        ``"str | list[str] | None"``. Falls back to ``"Any | None"``
-        when ``allowed_types`` is empty.
+        ``"str | list[str] | None"``. Non-primitive (schema.org class) types are
+        referenced directly by name — see ``SchemaOrgBase.discriminate_typed_fields``
+        for how those are then matched to the correct subtype. Falls back to
+        ``"Any | None"`` when ``allowed_types`` is empty.
     """
     if not allowed_types:
         # No rangeIncludes declared in schema.org — type is unknown.
@@ -490,15 +582,25 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         '"""',
         "from __future__ import annotations",
         "",
+        "import functools",
         "from datetime import date, datetime, time, timedelta",
-        "from typing import Any",
+        "from typing import Any, Union, get_args, get_origin",
         "",
-        "from pydantic import AnyUrl, BaseModel, ConfigDict, Field",
+        "from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator",
+        "",
+        "",
+        "_SCHEMA_TYPE_REGISTRY: dict[str, type] = {}",
         "",
         "",
         inspect.getsource(SchemaOrgBase),
         "",
         inspect.getsource(validate_strict),
+        "",
+        inspect.getsource(_is_union),
+        "",
+        inspect.getsource(_referenced_subtypes),
+        "",
+        inspect.getsource(_discriminate_value),
         "",
     ]
 
@@ -527,17 +629,6 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
             lines.append(f"    {render_field(field_name, type_str, field_info)}")
 
         lines.append("")
-
-    lines.append("")
-    lines.append(
-        "# ---------------------------------------------------------------------------"
-    )
-    lines.append("# Dynamic lookup")
-    lines.append(
-        "# ---------------------------------------------------------------------------"
-    )
-    lines.append("")
-    # lines.append(inspect.getsource(get_schema))
 
     return "\n".join(lines)
 
