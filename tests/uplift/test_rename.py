@@ -9,13 +9,13 @@ import logging
 
 import pytest
 
-from metadata_converter.flat_data.uplift.config import (
+from metadata_converter.uplift.config import (
     AdditionRule,
-    FlatDataUpliftConfig,
+    GenericUpliftConfig,
     RenameRule,
 )
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
-from metadata_converter.flat_data.uplift.rename import RenameApplier
+from metadata_converter.uplift.entity_store import EntityStore
+from metadata_converter.uplift.rename import RenameApplier
 from metadata_converter.schema_org_models.schemaorg_models import Person
 
 # ---------------------------------------------------------------------------
@@ -118,7 +118,7 @@ def test_rename_apply_all_applies_each_rule():
 
 
 def test_rename_and_addition_on_same_target_does_not_raise(tmp_path):
-    FlatDataUpliftConfig(
+    GenericUpliftConfig(
         input_dir=tmp_path / "in",
         output_dir=tmp_path / "out",
         additions=[

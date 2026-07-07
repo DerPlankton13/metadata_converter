@@ -1,4 +1,4 @@
-"""Entity load/write for the flat-data uplift stage.
+"""Entity load/write for the generic uplift stage.
 
 ``EntityStore`` is the single owner of loaded entities during an uplift run.
 It indexes by ``@type`` so appliers can iterate the relevant subset cheaply,

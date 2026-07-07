@@ -37,10 +37,17 @@ class BiosamplesConfig(BaseModel):
 
 
 class BiosamplesUpliftConfig(BaseModel):
-    """Uplift config for biosamples sources."""
+    """Uplift config for biosamples sources.
+
+    ``source_type`` has no default (unlike ``BiosamplesConfig``'s): it's the only
+    field distinguishing this model from ``GenericUpliftConfig``, which declares
+    no fields beyond ``input_dir``/``output_dir``/``provenance_dir`` either — a
+    default here would let a bare config validate as either model, depending on
+    union member order.
+    """
 
     model_config = ConfigDict(extra="forbid")
-    source_type: Literal["biosamples"] = "biosamples"
+    source_type: Literal["biosamples"]
     input_dir: Path
     output_dir: Path
     provenance_dir: Path | None = None

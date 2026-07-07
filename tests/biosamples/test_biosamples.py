@@ -487,6 +487,7 @@ def loaded_sample(tmp_path):
 def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
     input_dir, sid = loaded_sample
     config = BiosamplesUpliftConfig(
+        source_type="biosamples",
         input_dir=input_dir,
         output_dir=tmp_path / "uplifted",
         provenance_dir=tmp_path / "provenance",
@@ -518,6 +519,7 @@ def test_biosamples_uplift_without_provenance_dir_writes_nothing(
 ):
     input_dir, _ = loaded_sample
     config = BiosamplesUpliftConfig(
+        source_type="biosamples",
         input_dir=input_dir,
         output_dir=tmp_path / "uplifted",
         provenance_dir=None,

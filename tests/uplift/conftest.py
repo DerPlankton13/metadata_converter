@@ -1,7 +1,7 @@
-"""Shared fixtures for the flat_data uplift test suite.
+"""Shared fixtures for the generic uplift test suite.
 
 The ``loaded_base`` fixture writes a minimal datahub-shaped JSON-LD corpus into
-``tmp_path / "loaded_base"``. ``config_factory`` builds a ``FlatDataUpliftConfig``
+``tmp_path / "loaded_base"``. ``config_factory`` builds a ``GenericUpliftConfig``
 against it with optional rule/drop overrides. ``uplifted`` runs the engine and
 returns the loaded output files keyed by filename.
 """
@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from metadata_converter.flat_data.uplift import run_uplift
-from metadata_converter.flat_data.uplift.config import FlatDataUpliftConfig, LinkRule
+from metadata_converter.uplift import run_uplift
+from metadata_converter.uplift.config import GenericUpliftConfig, LinkRule
 
 
 # Module-level constant: the 5 datahub-style link rules used across many tests.
@@ -119,14 +119,14 @@ def loaded_base(tmp_path) -> Path:
 
 @pytest.fixture
 def config_factory(loaded_base, tmp_path):
-    """Returns a callable that builds a FlatDataUpliftConfig with optional overrides."""
+    """Returns a callable that builds a GenericUpliftConfig with optional overrides."""
     def make(
         *,
         rules: list[LinkRule] | None = None,
         out_name: str = "uplifted",
         provenance_dir: Path | None = None,
-    ) -> FlatDataUpliftConfig:
-        return FlatDataUpliftConfig(
+    ) -> GenericUpliftConfig:
+        return GenericUpliftConfig(
             input_dir=loaded_base,
             output_dir=tmp_path / out_name,
             links=rules if rules is not None else DATAHUB_RULES,

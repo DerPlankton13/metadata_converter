@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -101,7 +101,7 @@ class RenameRule(BaseModel):
 
 
 class LinkRule(BaseModel):
-    """Declarative cross-reference rule for the flat-data uplift engine."""
+    """Declarative cross-reference rule for the generic uplift engine."""
 
     model_config = ConfigDict(extra="forbid")
     on_type: str = Field(description="@type of entities to modify.")
@@ -141,11 +141,10 @@ class LinkRule(BaseModel):
         return self
 
 
-class FlatDataUpliftConfig(BaseModel):
-    """Uplift config for flat-data sources, driven by declarative rules."""
+class GenericUpliftConfig(BaseModel):
+    """Source-independent uplift config, driven entirely by declarative rules."""
 
     model_config = ConfigDict(extra="forbid")
-    source_type: Literal["flat_data"] = "flat_data"
     input_dir: Path | list[Path] = Field(
         description="One input directory, or several whose JSON-LD is merged into a "
         "single store (e.g. one per loaded source). A duplicate @id across "
@@ -160,7 +159,7 @@ class FlatDataUpliftConfig(BaseModel):
     removals: list[RemovalRule] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _no_target_overlap(self) -> FlatDataUpliftConfig:
+    def _no_target_overlap(self) -> GenericUpliftConfig:
         """Reject configs that have two rules targeting the same on_type.target_property.
 
         Each ``(on_type, target_property)`` may be touched by at most one rule across
@@ -188,4 +187,4 @@ class FlatDataUpliftConfig(BaseModel):
         return self
 
 
-FlatDataUpliftConfig.model_rebuild()
+GenericUpliftConfig.model_rebuild()

@@ -80,15 +80,4 @@ class ApiFetchingConfig(BaseModel):
     provenance_dir: Path | None = None
 
 
-class ApiFetchingUpliftConfig(BaseModel):
-    """Uplift config for api_fetching sources."""
-
-    model_config = ConfigDict(extra="forbid")
-    source_type: Literal["api_fetching"] = "api_fetching"
-    input_dir: Path
-    output_dir: Path
-    provenance_dir: Path | None = None
-
-
 ApiFetchingConfig.model_rebuild()
-ApiFetchingUpliftConfig.model_rebuild()

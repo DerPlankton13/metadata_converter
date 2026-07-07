@@ -1,10 +1,10 @@
 """Tests for the flat_data broadcast @id reference pipeline.
 
-Covers to_lookup_key (canonical-string normalisation), extract_inline_id_ref_broadcasts
-(facade that lifts inline mapping entries into config.broadcast_id_refs),
-prepare_id_ref_broadcast (wide-format DataFrame access), and broadcast_id_refs
-(schema object manipulation) in isolation so the full Excel-file pipeline is not
-needed.
+Covers extract_inline_id_ref_broadcasts (facade that lifts inline mapping entries
+into config.broadcast_id_refs), prepare_id_ref_broadcast (wide-format DataFrame
+access), and broadcast_id_refs (schema object manipulation) in isolation so the
+full Excel-file pipeline is not needed. to_lookup_key itself is tested in
+tests/utils/test_lookup_key.py.
 """
 
 import copy
@@ -22,29 +22,8 @@ from metadata_converter.flat_data.transform.id_refs_broadcasting import (
     prepare_id_ref_broadcast,
     extract_inline_id_ref_broadcasts,
     broadcast_id_refs,
-    to_lookup_key,
 )
 from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, Person
-
-# ---------------------------------------------------------------------------
-# to_lookup_key
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize(
-    "value, expected",
-    [
-        pytest.param(1, "1", id="int"),
-        pytest.param(" Hello ", "hello", id="strip-and-lowercase"),
-        pytest.param(True, "true", id="bool-true"),
-        pytest.param(False, "false", id="bool-false"),
-        pytest.param(None, None, id="none"),
-        pytest.param(1.0, "1", id="integer-valued-float-collapses"),
-        pytest.param(2.5, "2.5", id="non-integer-float"),
-    ],
-)
-def test_to_lookup_key_normalises_to_canonical_string(value, expected):
-    assert to_lookup_key(value) == expected
 
 
 # ---------------------------------------------------------------------------

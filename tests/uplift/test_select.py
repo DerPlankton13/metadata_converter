@@ -1,7 +1,7 @@
 """Tests for selector helpers in ``uplift/select.py``: select_values, unwrap_value, render_ref_id."""
 import pytest
 
-from metadata_converter.flat_data.uplift.select import (
+from metadata_converter.uplift.select import (
     render_ref_id,
     select_values,
     unwrap_value,
