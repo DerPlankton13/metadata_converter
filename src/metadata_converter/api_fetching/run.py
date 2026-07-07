@@ -7,6 +7,7 @@ from tqdm import tqdm
 from metadata_converter import get_schema
 from metadata_converter.api_fetching.config import ApiFetchingConfig
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
+from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.hashing import content_hash
 from metadata_converter.utils.io import write_json
@@ -74,6 +75,8 @@ def load_api_data(config: ApiFetchingConfig) -> None:
         try:
             with fetched_file.open() as f:
                 jsonld = json.load(f)
+            for fixer_name in config.fixers:
+                jsonld = FIXERS[fixer_name](jsonld)
             schema_type = jsonld["@type"].split("/")[-1]
             schema = get_schema(schema_type)(**jsonld)
             # loading to graph space means, that we ensure proper @id's.

@@ -75,9 +75,28 @@ class ApiFetchingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
     source_type: Literal["api"] = "api"
     fetcher: ApiFetcherConfig
+    fixers: list[str] = Field(
+        default_factory=list,
+        description="List of fixers to apply in order to be able to load the fetched data.",
+    )
     fetched_dir: Path
     output_dir: Path
     provenance_dir: Path | None = None
+
+    @field_validator("fixers", mode="before")
+    @classmethod
+    def _fixers_as_list(cls, v: str | list[str]) -> list[str]:
+        return [v] if isinstance(v, str) else v
+
+    @field_validator("fixers")
+    @classmethod
+    def _fixers_exist(cls, v: list[str]) -> list[str]:
+        from metadata_converter.api_fetching.fixers import FIXERS
+
+        unknown_fixers = set(v) - FIXERS.keys()
+        if unknown_fixers:
+            raise ValueError(f"Unknown fixer(s) specified: {unknown_fixers}")
+        return v
 
 
 ApiFetchingConfig.model_rebuild()
