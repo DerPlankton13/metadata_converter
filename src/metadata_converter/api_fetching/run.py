@@ -5,8 +5,8 @@ import sys
 from tqdm import tqdm
 
 from metadata_converter import get_schema
+from metadata_converter.api_fetching.config import ApiFetchingConfig
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
-from metadata_converter.config import ApiFetchingConfig
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.hashing import content_hash
 from metadata_converter.utils.io import write_json

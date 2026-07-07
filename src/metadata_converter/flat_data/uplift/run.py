@@ -6,8 +6,8 @@ order, write entities.
 
 import logging
 
-from metadata_converter.config import FlatDataUpliftConfig
 from metadata_converter.flat_data.uplift.add import AddApplier
+from metadata_converter.flat_data.uplift.config import FlatDataUpliftConfig
 from metadata_converter.flat_data.uplift.enrichment import EnrichmentApplier
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.flat_data.uplift.link import LinkApplier

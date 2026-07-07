@@ -8,17 +8,17 @@ import pandas as pd
 from pydantic import ValidationError
 from tqdm import tqdm
 
+from metadata_converter.biosamples.config import (
+    BiosamplesConfig,
+    BiosamplesExtractorConfig,
+    BiosamplesUpliftConfig,
+)
 from metadata_converter.biosamples.fetch import (
     fuse_metadata,
     get_metadata,
     sample_source_urls,
 )
 from metadata_converter.biosamples.uplifting import SampleUplifter
-from metadata_converter.config import (
-    BiosamplesConfig,
-    BiosamplesExtractorConfig,
-    SourcePaths,
-)
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
@@ -199,7 +199,7 @@ def load_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples load complete. Output: %s", config.output_dir)
 
 
-def uplift_biosamples(config: SourcePaths):
+def uplift_biosamples(config: BiosamplesUpliftConfig):
     logger.info("Starting biosamples uplift")
 
     files = list(config.input_dir.glob("**/*.jsonld"))

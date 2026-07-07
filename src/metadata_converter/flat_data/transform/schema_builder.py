@@ -41,7 +41,7 @@ from typing import Any
 import pandas as pd
 from pydantic import ValidationError
 
-from metadata_converter.config import FlatDataConfig
+from metadata_converter.flat_data.config import FlatDataConfig
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 

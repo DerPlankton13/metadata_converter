@@ -13,7 +13,7 @@ survivors are written back as a list.
 
 import logging
 
-from metadata_converter.config import RemovalRule, RemovalWhere
+from metadata_converter.flat_data.uplift.config import RemovalRule, RemovalWhere
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.flat_data.uplift.select import select_values
 

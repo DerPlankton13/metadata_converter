@@ -9,14 +9,14 @@ import logging
 
 from pydantic import ValidationError
 
-from metadata_converter.config import LinkRule
 from metadata_converter.flat_data.transform.id_refs_broadcasting import to_lookup_key
+from metadata_converter.flat_data.uplift.config import LinkRule
+from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.flat_data.uplift.select import (
     find_additional_property,
     render_ref_id,
     select_values,
 )
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 

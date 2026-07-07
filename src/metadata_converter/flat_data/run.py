@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from metadata_converter.config import FlatDataConfig
+from metadata_converter.flat_data.config import FlatDataConfig
 from metadata_converter.flat_data.extract import extract_data
 from metadata_converter.flat_data.transform.add_columns import add_columns
 from metadata_converter.flat_data.transform.clean import clean

@@ -80,8 +80,8 @@ import requests
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
 
+from metadata_converter.api_fetching.config import ApiFetcherConfig
 from metadata_converter.api_fetching.query_models import Query, QueryGroup, QueryTerm
-from metadata_converter.config import ApiFetcherConfig
 from metadata_converter.utils.http import make_session
 
 logger = logging.getLogger(__name__)
