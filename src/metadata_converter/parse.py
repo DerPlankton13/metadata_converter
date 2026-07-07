@@ -3,16 +3,20 @@ import logging
 from pathlib import Path
 
 from metadata_converter.config import (
-    BiosamplesConfig,
-    FlatDataConfig,
     ApiFetchingConfig,
-    UpliftingConfig,
+    ApiFetchingUpliftConfig,
+    BiosamplesConfig,
+    BiosamplesUpliftConfig,
+    FlatDataConfig,
+    FlatDataUpliftConfig,
     load_source_config,
     load_uplift_config,
 )
 
+UpliftConfig = BiosamplesUpliftConfig | ApiFetchingUpliftConfig | FlatDataUpliftConfig
 
-def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingConfig | UpliftingConfig, int]:
+
+def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingConfig | UpliftConfig, int]:
     parser = argparse.ArgumentParser(description="Metadata Converter")
     parser.add_argument(
         "phase",

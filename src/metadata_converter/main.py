@@ -8,9 +8,11 @@ from metadata_converter.biosamples.run import (
 )
 from metadata_converter.config import (
     ApiFetchingConfig,
+    ApiFetchingUpliftConfig,
     BiosamplesConfig,
+    BiosamplesUpliftConfig,
     FlatDataConfig,
-    UpliftingConfig,
+    FlatDataUpliftConfig,
 )
 from metadata_converter.flat_data.run import load_flat_data
 from metadata_converter.flat_data.uplift import run_uplift
@@ -35,11 +37,13 @@ def main():
             load_biosamples(config)
         case ("load", ApiFetchingConfig()):
             load_api_data(config)
-        case ("uplift", UpliftingConfig()):
-            if config.biosamples:
-                uplift_biosamples(config.biosamples)
-            if config.flat_data:
-                run_uplift(config.flat_data)
+        case ("uplift", BiosamplesUpliftConfig()):
+            uplift_biosamples(config)
+        case ("uplift", FlatDataUpliftConfig()):
+            run_uplift(config)
+        case ("uplift", ApiFetchingUpliftConfig()):
+            logger.error("Phase 'uplift' is not implemented yet for source_type 'api_fetching'")
+            raise SystemExit(1)
         case _:
             source = getattr(config, "source_type", "uplift")
             logger.error(

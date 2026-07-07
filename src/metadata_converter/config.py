@@ -50,6 +50,7 @@ class FlatDataUpliftConfig(BaseModel):
     """Uplift config for flat-data sources, driven by declarative rules."""
 
     model_config = ConfigDict(extra="forbid")
+    source_type: Literal["flat_data"] = "flat_data"
     input_dir: Path | list[Path] = Field(
         description="One input directory, or several whose JSON-LD is merged into a "
         "single store (e.g. one per loaded source). A duplicate @id across "
@@ -407,15 +408,6 @@ class ApiFetcherConfig(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class UpliftingConfig(BaseModel):
-    """Config for the uplift phase. Loaded separately from source configs — no source_type needed."""
-
-    model_config = ConfigDict(extra="forbid")
-    biosamples: SourcePaths | None = None
-    api_fetching: SourcePaths | None = None
-    flat_data: FlatDataUpliftConfig | None = None
-
-
 class SourcePaths(BaseModel):
     """Input/output paths for one source in the uplift config."""
 
@@ -423,6 +415,18 @@ class SourcePaths(BaseModel):
     input_dir: Path
     output_dir: Path
     provenance_dir: Path | None = None
+
+
+class BiosamplesUpliftConfig(SourcePaths):
+    """Uplift config for biosamples sources."""
+
+    source_type: Literal["biosamples"] = "biosamples"
+
+
+class ApiFetchingUpliftConfig(SourcePaths):
+    """Uplift config for api_fetching sources."""
+
+    source_type: Literal["api_fetching"] = "api_fetching"
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +441,15 @@ SourceConfig = Annotated[
 ]
 
 source_config_adapter: TypeAdapter[SourceConfig] = TypeAdapter(SourceConfig)
+
+# Discriminated union of the three uplift config types.
+# Used by load_uplift_config — exactly one source type per uplift run.
+UpliftConfig = Annotated[
+    Union[BiosamplesUpliftConfig, ApiFetchingUpliftConfig, FlatDataUpliftConfig],
+    Field(discriminator="source_type"),
+]
+
+uplift_config_adapter: TypeAdapter[UpliftConfig] = TypeAdapter(UpliftConfig)
 
 logger = logging.getLogger(__name__)
 
@@ -465,18 +478,20 @@ def load_source_config(
     path: str,
 ) -> FlatDataConfig | ApiFetchingConfig | BiosamplesConfig:
     """Load and validate a source config (flat_data, biosamples, or api) from a TOML file."""
-    raw = load_toml(path)
+    config = load_toml(path)
     try:
-        return source_config_adapter.validate_python(raw)
+        return source_config_adapter.validate_python(config)
     except ValidationError as e:
         handle_validation_error(e)
 
 
-def load_uplift_config(path: str) -> UpliftingConfig:
-    """Load and validate an uplift config from a TOML file."""
-    raw = load_toml(path)
+def load_uplift_config(
+    path: str,
+) -> BiosamplesUpliftConfig | ApiFetchingUpliftConfig | FlatDataUpliftConfig:
+    """Load and validate an uplift config (exactly one source type) from a TOML file."""
+    config = load_toml(path)
     try:
-        return UpliftingConfig.model_validate(raw)
+        return uplift_config_adapter.validate_python(config)
     except ValidationError as e:
         handle_validation_error(e)
 
@@ -486,4 +501,5 @@ FlatDataConfig.model_rebuild()
 FlatDataUpliftConfig.model_rebuild()
 BiosamplesConfig.model_rebuild()
 ApiFetchingConfig.model_rebuild()
-UpliftingConfig.model_rebuild()
+BiosamplesUpliftConfig.model_rebuild()
+ApiFetchingUpliftConfig.model_rebuild()
