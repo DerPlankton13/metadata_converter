@@ -10,7 +10,7 @@ Supported repositories (built-in query handlers):
 - Zenodo       (``zenodo.org/api``)
 - DataCite     (``api.datacite.org``)
 - SEANOE       (``seanoe.org/api``)
-- Figshare and Figshare-based repositories such as DTU Data (``api.figshare.com``)
+- Figshare and Figshare-based repositories (``api.figshare.com``)
 
 Supported fetch strategies:
 
@@ -396,8 +396,11 @@ def query_figshare(
     config: ApiFetcherConfig, session: requests.Session
 ) -> list[Record]:
     """
-    Query handler for Figshare and Figshare-based repositories
-    (e.g. DTU Data at ``data.dtu.dk``).
+    Query handler for Figshare and Figshare-based repositories.
+
+    Note: BIOcean5D's DTU-affiliated records are hosted on Figshare (DTU Data
+    is a Figshare instance), so they are found through this handler rather
+    than a DTU-specific one.
 
     Only `QueryTerm` is supported. Use ``field="search_for"`` for fulltext
     search across all metadata fields.
