@@ -61,6 +61,7 @@ class FlatDataUpliftConfig(BaseModel):
     links: list[LinkRule] = Field(default_factory=list)
     enrichments: list[EnrichmentRule] = Field(default_factory=list)
     additions: list[AdditionRule] = Field(default_factory=list)
+    renames: list[RenameRule] = Field(default_factory=list)
     removals: list[RemovalRule] = Field(default_factory=list)
 
     @model_validator(mode="after")
@@ -250,6 +251,20 @@ class AdditionRule(BaseModel):
     value: str | int | float | bool | list[Any] | dict[str, Any] = Field(
         description="The constant to set: a literal, a node (mapping with a 'type' key), or a list of these."
     )
+
+
+class RenameRule(BaseModel):
+    """Move a property's value to a different name at uplift time.
+
+    For each entity of ``on_type``, the value held at ``source_property`` is moved to
+    ``target_property`` (overwriting any existing value there) and ``source_property``
+    is cleared. Entities with no value at ``source_property`` are left untouched.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+    on_type: str = Field(description="@type of entities to modify.")
+    source_property: str = Field(description="Property to read and clear.")
+    target_property: str = Field(description="Property to move the value to.")
 
 
 class LinkRule(BaseModel):
