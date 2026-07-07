@@ -1,13 +1,11 @@
 """Derive new columns on wide-format DataFrames: combined columns and content-hash ``@id``."""
 
-import base64
-import hashlib
-import json
 import logging
 
 import pandas as pd
 
 from metadata_converter.config import FlatDataConfig
+from metadata_converter.utils.hashing import content_hash
 
 logger = logging.getLogger(__name__)
 
@@ -43,30 +41,24 @@ def add_combined_columns(
 
 
 def add_id(data: pd.DataFrame, schema_type: str) -> pd.DataFrame:
-    """Generate a content-hash-based ``@id`` for each row: ``<schema_type>_<hash>.jsonld``."""
-    data["@id"] = [
-        f"{schema_type}_{row_hash(row)}.jsonld" for _, row in data.iterrows()
-    ]
+    """Generate a content-hash-based ``@id`` for each row: ``<schema_type>_<hash>.jsonld``.
+
+    A content hash (rather than e.g. a random id) makes ``@id`` deterministic:
+    the same real-world entity always receives the same ``@id``, regardless
+    of how many input files it appears in or how many times the pipeline
+    runs. This is what prevents duplicate entities (e.g. the same author
+    appearing across several datasets) from being written as separate files
+    and subsequently linked as spurious duplicates during uplifting.
+    """
+    data["@id"] = [row_id(row, schema_type) for _, row in data.iterrows()]
     return data
 
 
-def row_hash(row: pd.Series) -> str:
-    """Return a 22-character URL-safe base64 hash of the row's content.
+def row_id(row: pd.Series, schema_type: str) -> str:
+    """Build the ``<schema_type>_<hash>.jsonld`` id for a single row.
 
-    The hash is derived from the row's non-null values serialised as canonical
-    JSON (keys sorted, non-standard types coerced to str). The first 22
-    characters of the base64url-encoded SHA-256 digest are returned, encoding
-    132 bits of entropy — negligible collision probability at any realistic
-    dataset size.
-
-    Using a content hash instead of a random ID makes ``@id`` deterministic:
-    the same real-world entity always receives the same ``@id``, regardless of
-    how many input files it appears in or how many times the pipeline runs.
-    This is the mechanism that prevents duplicate entities (e.g. the same
-    author appearing across several datasets) from being written as separate
-    files and subsequently linked as spurious duplicates during uplifting.
+    Drops NA values before hashing, since pandas represents missing values
+    as ``NaN``/``NaT`` rather than ``None``.
     """
-    row_dict = {k: v for k, v in row.items() if pd.notna(v)}
-    canonical = json.dumps(row_dict, sort_keys=True, default=str)
-    digest = hashlib.sha256(canonical.encode()).digest()
-    return base64.urlsafe_b64encode(digest)[:22].decode()
+    non_null_values = {k: v for k, v in row.items() if pd.notna(v)}
+    return f"{schema_type}_{content_hash(non_null_values)}.jsonld"
