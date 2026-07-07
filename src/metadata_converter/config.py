@@ -1,7 +1,8 @@
 """Loads a TOML config file and validates it as the right per-source config type.
 
-Composes the four source-specific ``config.py`` modules (and their two variants,
-source and uplift) into the discriminated unions used by the CLI (``parse.py``).
+Composes the three source-specific ``config.py`` modules (fetch/load) and the
+uplift package's config into the discriminated unions used by the CLI
+(``parse.py``).
 """
 from __future__ import annotations
 
@@ -11,13 +12,10 @@ from typing import Annotated, Union
 
 from pydantic import Field, TypeAdapter, ValidationError
 
-from metadata_converter.api_fetching.config import (
-    ApiFetchingConfig,
-    ApiFetchingUpliftConfig,
-)
+from metadata_converter.api_fetching.config import ApiFetchingConfig
 from metadata_converter.biosamples.config import BiosamplesConfig, BiosamplesUpliftConfig
 from metadata_converter.flat_data.config import FlatDataConfig
-from metadata_converter.flat_data.uplift.config import FlatDataUpliftConfig
+from metadata_converter.uplift.config import GenericUpliftConfig
 
 # Discriminated union of the three data-source config types.
 # Used by load_source_config for the fetch and load phases.
@@ -28,12 +26,11 @@ SourceConfig = Annotated[
 
 source_config_adapter: TypeAdapter[SourceConfig] = TypeAdapter(SourceConfig)
 
-# Discriminated union of the three uplift config types.
-# Used by load_uplift_config — exactly one source type per uplift run.
-UpliftConfig = Annotated[
-    Union[BiosamplesUpliftConfig, ApiFetchingUpliftConfig, FlatDataUpliftConfig],
-    Field(discriminator="source_type"),
-]
+# Union of the two uplift config types — no discriminator field needed:
+# BiosamplesUpliftConfig requires source_type (no default) and GenericUpliftConfig
+# forbids it, so at most one member ever validates a given input. Used by
+# load_uplift_config — exactly one uplift run per config.
+UpliftConfig = Union[BiosamplesUpliftConfig, GenericUpliftConfig]
 
 uplift_config_adapter: TypeAdapter[UpliftConfig] = TypeAdapter(UpliftConfig)
 
@@ -73,8 +70,8 @@ def load_source_config(
 
 def load_uplift_config(
     path: str,
-) -> BiosamplesUpliftConfig | ApiFetchingUpliftConfig | FlatDataUpliftConfig:
-    """Load and validate an uplift config (exactly one source type) from a TOML file."""
+) -> BiosamplesUpliftConfig | GenericUpliftConfig:
+    """Load and validate an uplift config (biosamples-specific or generic) from a TOML file."""
     config = load_toml(path)
     try:
         return uplift_config_adapter.validate_python(config)

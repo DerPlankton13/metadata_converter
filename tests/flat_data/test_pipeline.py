@@ -19,7 +19,7 @@ import pytest
 
 from metadata_converter.config import load_source_config, load_uplift_config
 from metadata_converter.flat_data.run import load_flat_data
-from metadata_converter.flat_data.uplift import run_uplift
+from metadata_converter.uplift import run_uplift
 
 DATA_DIR = Path(__file__).parent / "data"
 LOAD_SCENARIOS = sorted(p.parent for p in DATA_DIR.glob("*/config.toml"))

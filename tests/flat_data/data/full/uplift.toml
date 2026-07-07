@@ -1,4 +1,3 @@
-source_type = "flat_data"
 input_dir = ["loaded_base", "biosamples_loaded_uplifted"]
 output_dir = "loaded_uplifted"
 provenance_dir = "provenance"

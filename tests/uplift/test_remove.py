@@ -7,14 +7,14 @@ emptied list collapses to ``None``.
 """
 import pytest
 
-from metadata_converter.flat_data.uplift.config import (
+from metadata_converter.uplift.config import (
     EnrichmentRule,
-    FlatDataUpliftConfig,
+    GenericUpliftConfig,
     RemovalRule,
     RemovalWhere,
 )
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
-from metadata_converter.flat_data.uplift.remove import RemoveApplier
+from metadata_converter.uplift.entity_store import EntityStore
+from metadata_converter.uplift.remove import RemoveApplier
 from metadata_converter.schema_org_models.schemaorg_models import (
     Dataset,
     DefinedTerm,
@@ -367,7 +367,7 @@ def test_where_with_no_match_mode_raises():
 def test_removal_may_overlap_other_rules(tmp_path):
     # A removal targeting the same (on_type, target_property) as an enrichment
     # must NOT trip the overlap validator — removals legitimately undo/refine.
-    cfg = FlatDataUpliftConfig(
+    cfg = GenericUpliftConfig(
         input_dir=tmp_path / "in",
         output_dir=tmp_path / "out",
         enrichments=[

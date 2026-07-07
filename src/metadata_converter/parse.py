@@ -4,16 +4,15 @@ from pathlib import Path
 
 from metadata_converter.config import (
     ApiFetchingConfig,
-    ApiFetchingUpliftConfig,
     BiosamplesConfig,
     BiosamplesUpliftConfig,
     FlatDataConfig,
-    FlatDataUpliftConfig,
+    GenericUpliftConfig,
     load_source_config,
     load_uplift_config,
 )
 
-UpliftConfig = BiosamplesUpliftConfig | ApiFetchingUpliftConfig | FlatDataUpliftConfig
+UpliftConfig = BiosamplesUpliftConfig | GenericUpliftConfig
 
 
 def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingConfig | UpliftConfig, int]:

@@ -15,8 +15,8 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from metadata_converter.flat_data.uplift.config import EnrichmentRule
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
+from metadata_converter.uplift.config import EnrichmentRule
+from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import PropertyValue
 
