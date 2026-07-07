@@ -6,15 +6,15 @@ compares on string form, and is case-sensitive. Matching items are removed; an
 emptied list collapses to ``None``.
 """
 import pytest
-from metadata_converter.flat_data.uplift.remove import RemoveApplier
 
-from metadata_converter.config import (
+from metadata_converter.flat_data.uplift.config import (
     EnrichmentRule,
     FlatDataUpliftConfig,
     RemovalRule,
     RemovalWhere,
 )
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
+from metadata_converter.flat_data.uplift.remove import RemoveApplier
 from metadata_converter.schema_org_models.schemaorg_models import (
     Dataset,
     DefinedTerm,

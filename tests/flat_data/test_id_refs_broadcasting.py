@@ -12,10 +12,10 @@ import copy
 import pandas as pd
 import pytest
 
-from metadata_converter.config import (
-    CleaningConfig,
+from metadata_converter.config_shared import ExcelExtractorConfig
+from metadata_converter.flat_data.config import (
     BroadcastIdRef,
-    ExcelExtractorConfig,
+    CleaningConfig,
     FlatDataConfig,
 )
 from metadata_converter.flat_data.transform.id_refs_broadcasting import (

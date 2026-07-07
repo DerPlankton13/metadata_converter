@@ -11,12 +11,12 @@ import logging
 
 import pytest
 
-from metadata_converter.config import (
+from metadata_converter.flat_data.uplift.add import AddApplier
+from metadata_converter.flat_data.uplift.config import (
     AdditionRule,
     FlatDataUpliftConfig,
     LinkRule,
 )
-from metadata_converter.flat_data.uplift.add import AddApplier
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.schemaorg_models import Person, Project
 

@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from metadata_converter.config import FlatDataUpliftConfig, LinkRule
 from metadata_converter.flat_data.uplift import run_uplift
+from metadata_converter.flat_data.uplift.config import FlatDataUpliftConfig, LinkRule
 
 
 # Module-level constant: the 5 datahub-style link rules used across many tests.

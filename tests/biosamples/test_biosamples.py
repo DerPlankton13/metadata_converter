@@ -6,13 +6,13 @@ from pathlib import Path
 import pytest
 from deepdiff import DeepDiff
 
-from metadata_converter.biosamples.fetch import fuse_metadata, sample_source_urls
-from metadata_converter.biosamples.run import fetch_biosamples, uplift_biosamples
-from metadata_converter.config import (
+from metadata_converter.biosamples.config import (
     BiosamplesConfig,
     BiosamplesExtractorConfig,
-    SourcePaths,
+    BiosamplesUpliftConfig,
 )
+from metadata_converter.biosamples.fetch import fuse_metadata, sample_source_urls
+from metadata_converter.biosamples.run import fetch_biosamples, uplift_biosamples
 from metadata_converter.biosamples.uplifting import (
     ActionBuilder,
     SampleRecord,
@@ -486,7 +486,7 @@ def loaded_sample(tmp_path):
 
 def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
     input_dir, sid = loaded_sample
-    config = SourcePaths(
+    config = BiosamplesUpliftConfig(
         input_dir=input_dir,
         output_dir=tmp_path / "uplifted",
         provenance_dir=tmp_path / "provenance",
@@ -517,7 +517,7 @@ def test_biosamples_uplift_without_provenance_dir_writes_nothing(
     tmp_path, loaded_sample
 ):
     input_dir, _ = loaded_sample
-    config = SourcePaths(
+    config = BiosamplesUpliftConfig(
         input_dir=input_dir,
         output_dir=tmp_path / "uplifted",
         provenance_dir=None,

@@ -3,13 +3,13 @@ the exact source URL each record was pulled from is known."""
 import json
 import re
 
-from metadata_converter.api_fetching.fetch import Record
-from metadata_converter.api_fetching.query_models import QueryTerm
-from metadata_converter.api_fetching.run import fetch_api_data
-from metadata_converter.config import (
+from metadata_converter.api_fetching.config import (
     ApiFetcherConfig,
     ApiFetchingConfig,
 )
+from metadata_converter.api_fetching.fetch import Record
+from metadata_converter.api_fetching.query_models import QueryTerm
+from metadata_converter.api_fetching.run import fetch_api_data
 
 
 def api_config(fetched, loaded_base, provenance_dir, fetch_strategy="export_endpoint"):

@@ -3,8 +3,8 @@ import logging
 
 import pytest
 
-from metadata_converter.config import LinkRule
 from metadata_converter.flat_data.uplift import run_uplift
+from metadata_converter.flat_data.uplift.config import LinkRule
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.flat_data.uplift.link import LinkApplier
 from metadata_converter.schema_org_models.schemaorg_models import Action, Person, Product

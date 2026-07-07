@@ -6,9 +6,9 @@ metadata fields (url, name, propertyID, etc.).
 """
 
 import pytest
-from metadata_converter.flat_data.uplift.enrichment import EnrichmentApplier
 
-from metadata_converter.config import EnrichmentRule, FlatDataUpliftConfig, LinkRule
+from metadata_converter.flat_data.uplift.config import EnrichmentRule, FlatDataUpliftConfig, LinkRule
+from metadata_converter.flat_data.uplift.enrichment import EnrichmentApplier
 from metadata_converter.flat_data.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.custom_models import Orcid
 from metadata_converter.schema_org_models.schemaorg_models import Person
