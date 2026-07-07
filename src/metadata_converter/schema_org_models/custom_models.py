@@ -15,7 +15,7 @@ ISSN_PATTERN = re.compile(r"^(ISSN)?[ :]?\d{4}[ -]\d{3}[\dX]$")
 ISBN_PATTERN = re.compile(
     r"^(ISBN)?(-13|-10)?[ :]?(\d{2,3}[ -]?)?\d{1,5}[ -]?\d{1,7}[ -]?\d{1,6}[ -]?(\d|X)$"
 )
-DOI_PATTERN = re.compile(r"10\.\d+/.*$")
+DOI_PATTERN = re.compile(r"10\.\d+/\S+")
 
 
 def check_pattern(value: str, pattern: re.Pattern[str], type: str) -> str:
@@ -59,15 +59,13 @@ class ISSN(PropertyValue):
     alternateName: str = "ISSN"
     propertyID: AnyUrl = "https://registry.identifiers.org/registry/issn"
 
-    @field_validator("value")
+    @model_validator(mode="before")
     @classmethod
-    def check_issn(cls, v: str) -> str:
-        return check_pattern(v, ISSN_PATTERN, "ISSN")
-
-    @model_validator(mode="after")
-    def set_url(self):
-        self.url = f"https://portal.issn.org/resource/ISSN/{self.value}"
-        return self
+    def clean_issn(cls, data):
+        if "value" in data:
+            issn = check_pattern(str(data["value"]), ISSN_PATTERN, "ISSN")
+            data["url"] = f"https://portal.issn.org/resource/ISSN/{issn}"
+        return data
 
 
 class ISBN(PropertyValue):
@@ -75,15 +73,13 @@ class ISBN(PropertyValue):
     alternateName: str = "ISBN"
     propertyID: AnyUrl = "https://registry.identifiers.org/registry/isbn"
 
-    @field_validator("value")
+    @model_validator(mode="before")
     @classmethod
-    def check_isbn(cls, v: str) -> str:
-        return check_pattern(v, ISBN_PATTERN, "ISBN")
-
-    @model_validator(mode="after")
-    def set_url(self):
-        self.url = f"https://isbnsearch.org/isbn/{self.value}"
-        return self
+    def clean_isbn(cls, data):
+        if "value" in data:
+            isbn = check_pattern(str(data["value"]), ISBN_PATTERN, "ISBN")
+            data["url"] = f"https://isbnsearch.org/isbn/{isbn}"
+        return data
 
 
 class DOI(PropertyValue):
@@ -91,15 +87,14 @@ class DOI(PropertyValue):
     alternateName: str = "DOI"
     propertyID: AnyUrl = "https://registry.identifiers.org/registry/doi"
 
-    @field_validator("value")
+    @model_validator(mode="before")
     @classmethod
-    def check_doi(cls, v: str) -> str:
-        return check_pattern(v, DOI_PATTERN, "DOI")
-
-    @model_validator(mode="after")
-    def set_url(self):
-        self.url = f"https://doi.org/{self.value}"
-        return self
+    def clean_doi(cls, data):
+        if "value" in data:
+            doi = search_pattern(str(data["value"]), DOI_PATTERN, "DOI")
+            data["value"] = doi
+            data["url"] = f"https://doi.org/{doi}"
+        return data
 
 
 class UrlIdentifier(PropertyValue):

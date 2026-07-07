@@ -9,11 +9,13 @@ strict : False
 
 from __future__ import annotations
 
+import functools
 from datetime import date, datetime, time, timedelta
-from functools import cache
-from typing import Any
+from typing import Any, Union, get_args, get_origin
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field
+from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
+
+_SCHEMA_TYPE_REGISTRY: dict[str, type] = {}
 
 
 class SchemaOrgBase(BaseModel):
@@ -23,6 +25,9 @@ class SchemaOrgBase(BaseModel):
     Provides the two fields common to all JSON-LD nodes and configures
     Pydantic to accept both Python attribute names and JSON-LD @-prefixed
     aliases interchangeably.
+    Defers build until first model validation to massively reduce run
+    time as most models are not used and ensures that each new
+    assignment is also validated.
     """
 
     model_config = ConfigDict(
@@ -43,34 +48,175 @@ class SchemaOrgBase(BaseModel):
         default=None
     )
 
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        """Register every subclass in ``_SCHEMA_TYPE_REGISTRY`` as it is defined.
+
+        This is a plain Python hook that is also used by Pydantic, so we do the
+        ``super()`` call to not interfere with pydantic. This covers subclasses
+        defined after this module too (e.g. ``custom_models.py``'s ``Orcid``/``DOI``).
+        """
+        super().__init_subclass__(**kwargs)
+        _SCHEMA_TYPE_REGISTRY[cls.__name__] = cls
+
+    @model_validator(mode="before")
+    @classmethod
+    def discriminate_typed_fields(cls, data: Any) -> Any:
+        """
+        Resolve ``@type``-tagged dict fields to their declared subtype before parsing.
+
+        A field typed as a bare schema.org class (e.g. ``Thing``) otherwise accepts
+        any dict regardless of its ``@type``. For each field whose annotation names a
+        schema.org class, looks the value's ``@type``/``type`` up in
+        ``_SCHEMA_TYPE_REGISTRY`` and parses it as that subtype instead; raises if
+        ``@type`` is unregistered or not actually a subtype of the field's declared
+        class.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+        for field_name, field_info in cls.model_fields.items():
+            if field_name in data:
+                key = field_name
+            elif field_info.alias in data:
+                key = field_info.alias
+            else:
+                continue
+            base_classes = _referenced_subtypes(field_info.annotation)
+            if base_classes:
+                data[key] = _discriminate_value(
+                    data[key], base_classes, _SCHEMA_TYPE_REGISTRY
+                )
+        return data
+
+
+def validate_strict(model) -> None:
+    """Raise if a parsed model — or any nested model — has fields not in the schema.
+
+    Models parse with ``extra="allow"``, which keeps unknown fields in ``model_extra``
+    instead of rejecting them. This walks the parsed object and raises on the first
+    offender, at any depth.
+    """
+    if isinstance(model, list):
+        for item in model:
+            validate_strict(item)
+        return
+    if not isinstance(model, BaseModel):
+        return
+    if model.model_extra:
+        raise ValueError(
+            f"{type(model).__name__} has fields outside the schema.org model: "
+            f"{sorted(model.model_extra)}"
+        )
+    for field_name in type(model).model_fields:
+        validate_strict(getattr(model, field_name))
+
+
+def _is_union(origin: Any) -> bool:
+    """Return whether a ``get_origin()`` result is a union — either ``Union[X, Y]`` or ``X | Y``.
+
+    The two spellings produce different origins (``typing.Union`` vs. ``types.UnionType``),
+    so both must be checked.
+    """
+    return origin is Union or getattr(origin, "__name__", "") == "UnionType"
+
+
+@functools.lru_cache(maxsize=None)
+def _referenced_subtypes(annotation: Any) -> set[type]:
+    """
+    Return the ``SchemaOrgBase`` subclasses referenced in a field annotation.
+
+    Recurses through ``Union``/``X | Y`` and ``list``/``set``/``tuple`` wrappers.
+    Memoized: the same annotation object is checked once per validated instance of
+    every class carrying that field.
+
+    Parameters
+    ----------
+    annotation : Any
+        A resolved (non-string) field type annotation.
+
+    Returns
+    -------
+    set[type]
+        The schema.org classes referenced in ``annotation``, possibly empty.
+    """
+    origin = get_origin(annotation)
+    bases: set[type] = set()
+    if _is_union(origin) or origin in (list, set, tuple):
+        for arg in get_args(annotation):
+            bases |= _referenced_subtypes(arg)
+    elif isinstance(annotation, type) and issubclass(annotation, SchemaOrgBase):
+        bases.add(annotation)
+    return bases
+
+
+def _discriminate_value(
+    value: Any, base_classes: set[type], registry: dict[str, type]
+) -> Any:
+    """
+    Resolve a raw field value's ``@type``-tagged dict(s) to a registered subtype.
+
+    Parameters
+    ----------
+    value : Any
+        The raw value assigned to a field — a dict, a list, or anything else.
+    base_classes : set[type]
+        The schema.org classes declared for this field (from ``_referenced_subtypes``).
+    registry : dict[str, type]
+        Maps schema.org type names to their Pydantic model classes.
+
+    Returns
+    -------
+    Any
+        ``value`` with any resolvable dict(s) replaced by parsed subtype instances.
+        Non-dict values, and dicts with no ``@type``/``type`` key, pass through
+        unchanged.
+
+    Raises
+    ------
+    ValueError
+        If ``@type``/``type`` names something not in ``registry``, or a registered
+        type that is not a subtype of any of ``base_classes``.
+    """
+    if isinstance(value, list):
+        return [_discriminate_value(item, base_classes, registry) for item in value]
+    if isinstance(value, dict) and base_classes:
+        type_name = value.get("@type") or value.get("type")
+        if type_name is not None:
+            cls = registry.get(type_name)
+            if cls is None or not any(issubclass(cls, base) for base in base_classes):
+                declared = ", ".join(sorted(base.__name__ for base in base_classes))
+                raise ValueError(f"{type_name!r} is not a known subtype of {declared}")
+            return cls.model_validate(value)
+    return value
+
 
 class Thing(SchemaOrgBase):
     """The most generic type of item."""
 
     type: str = Field(default="Thing", alias="@type")
-    potentialAction: Action | str | list[Action | str] | None = Field(default=None)
-    image: AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None = Field(
+    additionalType: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    alternateName: str | list[str] | None = Field(default=None)
+    description: str | TextObject | list[str | TextObject] | None = Field(default=None)
+    disambiguatingDescription: str | list[str] | None = Field(default=None)
+    identifier: (
+        PropertyValue | str | AnyUrl | list[PropertyValue | str | AnyUrl] | None
+    ) = Field(default=None)
+    image: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
         default=None
     )
-    sameAs: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    owner: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    description: TextObject | str | list[TextObject | str] | None = Field(default=None)
-    subjectOf: Event | CreativeWork | str | list[Event | CreativeWork | str] | None = (
-        Field(default=None)
-    )
-    url: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    additionalType: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    disambiguatingDescription: str | list[str] | None = Field(default=None)
-    alternateName: str | list[str] | None = Field(default=None)
-    name: str | list[str] | None = Field(default=None)
-    identifier: (
-        str | AnyUrl | PropertyValue | list[str | AnyUrl | PropertyValue] | None
-    ) = Field(default=None)
     mainEntityOfPage: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
+    name: str | list[str] | None = Field(default=None)
+    owner: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    potentialAction: Action | str | list[Action | str] | None = Field(default=None)
+    sameAs: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    subjectOf: CreativeWork | Event | str | list[CreativeWork | Event | str] | None = (
+        Field(default=None)
+    )
+    url: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
 
 
 class Intangible(Thing):
@@ -85,21 +231,21 @@ class BroadcastChannel(Intangible):
 
     type: str = Field(default="BroadcastChannel", alias="@type")
     broadcastChannelId: str | list[str] | None = Field(default=None)
-    broadcastServiceTier: str | list[str] | None = Field(default=None)
     broadcastFrequency: (
-        str
-        | BroadcastFrequencySpecification
-        | list[str | BroadcastFrequencySpecification]
+        BroadcastFrequencySpecification
+        | str
+        | list[BroadcastFrequencySpecification | str]
         | None
     ) = Field(default=None)
-    providesBroadcastService: (
-        BroadcastService | str | list[BroadcastService | str] | None
-    ) = Field(default=None)
-    genre: str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None = Field(
+    broadcastServiceTier: str | list[str] | None = Field(default=None)
+    genre: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = Field(
         default=None
     )
     inBroadcastLineup: (
         CableOrSatelliteService | str | list[CableOrSatelliteService | str] | None
+    ) = Field(default=None)
+    providesBroadcastService: (
+        BroadcastService | str | list[BroadcastService | str] | None
     ) = Field(default=None)
 
 
@@ -120,144 +266,129 @@ class CreativeWork(Thing):
     software programs, etc."""
 
     type: str = Field(default="CreativeWork", alias="@type")
-    educationalUse: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+    about: Thing | str | list[Thing | str] | None = Field(default=None)
+    abstract: str | list[str] | None = Field(default=None)
+    accessMode: str | list[str] | None = Field(default=None)
+    accessModeSufficient: ItemList | str | list[ItemList | str] | None = Field(
         default=None
     )
-    sdPublisher: (
-        Organization | Person | str | list[Organization | Person | str] | None
+    accessibilityAPI: str | list[str] | None = Field(default=None)
+    accessibilityControl: str | list[str] | None = Field(default=None)
+    accessibilityFeature: str | list[str] | None = Field(default=None)
+    accessibilityHazard: str | list[str] | None = Field(default=None)
+    accessibilitySummary: str | list[str] | None = Field(default=None)
+    accountablePerson: Person | str | list[Person | str] | None = Field(default=None)
+    acquireLicensePage: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
-    text: str | list[str] | None = Field(default=None)
+    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
+        default=None
+    )
     alternativeHeadline: str | list[str] | None = Field(default=None)
-    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
+    archivedAt: AnyUrl | WebPage | str | list[AnyUrl | WebPage | str] | None = Field(
+        default=None
+    )
+    assesses: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    associatedMedia: MediaObject | str | list[MediaObject | str] | None = Field(
+        default=None
+    )
+    audience: Audience | str | list[Audience | str] | None = Field(default=None)
+    audio: (
+        AudioObject
+        | Clip
+        | MusicRecording
+        | str
+        | list[AudioObject | Clip | MusicRecording | str]
+        | None
+    ) = Field(default=None)
+    author: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
+    )
+    award: str | list[str] | None = Field(default=None)
+    awards: str | list[str] | None = Field(default=None)
+    character: Person | str | list[Person | str] | None = Field(default=None)
+    citation: CreativeWork | str | list[CreativeWork | str] | None = Field(default=None)
+    comment: Comment | str | list[Comment | str] | None = Field(default=None)
+    commentCount: int | str | list[int | str] | None = Field(default=None)
+    conditionsOfAccess: str | list[str] | None = Field(default=None)
+    contentLocation: Place | str | list[Place | str] | None = Field(default=None)
+    contentRating: Rating | str | list[Rating | str] | None = Field(default=None)
+    contentReferenceTime: datetime | str | list[datetime | str] | None = Field(
+        default=None
     )
     contributor: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    audio: (
-        Clip
-        | MusicRecording
-        | AudioObject
-        | str
-        | list[Clip | MusicRecording | AudioObject | str]
-        | None
+    copyrightHolder: (
+        Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    learningResourceType: str | DefinedTerm | list[str | DefinedTerm] | None = Field(
-        default=None
-    )
-    temporal: str | datetime | list[str | datetime] | None = Field(default=None)
-    dateCreated: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    discussionUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    typicalAgeRange: str | list[str] | None = Field(default=None)
-    contentRating: str | Rating | list[str | Rating] | None = Field(default=None)
-    funder: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    workExample: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    author: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    license: CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None = (
-        Field(default=None)
-    )
-    conditionsOfAccess: str | list[str] | None = Field(default=None)
-    timeRequired: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    dateModified: datetime | date | str | list[datetime | date | str] | None = Field(
+    copyrightNotice: str | list[str] | None = Field(default=None)
+    copyrightYear: float | str | list[float | str] | None = Field(default=None)
+    correction: (
+        CorrectionComment | str | AnyUrl | list[CorrectionComment | str | AnyUrl] | None
+    ) = Field(default=None)
+    countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
+    creativeWorkStatus: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
         default=None
     )
     creator: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    associatedMedia: MediaObject | str | list[MediaObject | str] | None = Field(
-        default=None
-    )
-    recordedAt: Event | str | list[Event | str] | None = Field(default=None)
-    educationalAlignment: AlignmentObject | str | list[AlignmentObject | str] | None = (
-        Field(default=None)
-    )
-    translationOfWork: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    isPartOf: CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None = (
-        Field(default=None)
-    )
-    mentions: Thing | str | list[Thing | str] | None = Field(default=None)
-    displayLocation: Place | str | list[Place | str] | None = Field(default=None)
-    expires: date | datetime | str | list[date | datetime | str] | None = Field(
-        default=None
-    )
-    countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
-    citation: CreativeWork | str | list[CreativeWork | str] | None = Field(default=None)
-    hasPart: CreativeWork | str | list[CreativeWork | str] | None = Field(default=None)
-    reviews: Review | str | list[Review | str] | None = Field(default=None)
-    spatial: Place | str | list[Place | str] | None = Field(default=None)
-    character: Person | str | list[Person | str] | None = Field(default=None)
-    materialExtent: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    wordCount: int | str | list[int | str] | None = Field(default=None)
-    assesses: str | DefinedTerm | list[str | DefinedTerm] | None = Field(default=None)
     creditText: str | list[str] | None = Field(default=None)
-    encodingFormat: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    size: (
-        DefinedTerm
-        | QuantitativeValue
-        | SizeSpecification
-        | str
-        | list[DefinedTerm | QuantitativeValue | SizeSpecification | str]
-        | None
-    ) = Field(default=None)
-    contentLocation: Place | str | list[Place | str] | None = Field(default=None)
-    interactivityType: str | list[str] | None = Field(default=None)
-    keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
-        Field(default=None)
+    dateCreated: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
     )
-    accessibilitySummary: str | list[str] | None = Field(default=None)
-    publishingPrinciples: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
-    ) = Field(default=None)
-    publisher: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
+    dateModified: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
     datePublished: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    interpretedAsClaim: Claim | str | list[Claim | str] | None = Field(default=None)
-    funding: Grant | str | list[Grant | str] | None = Field(default=None)
-    video: VideoObject | Clip | str | list[VideoObject | Clip | str] | None = Field(
-        default=None
-    )
-    accessibilityAPI: str | list[str] | None = Field(default=None)
-    comment: Comment | str | list[Comment | str] | None = Field(default=None)
-    copyrightNotice: str | list[str] | None = Field(default=None)
-    archivedAt: WebPage | AnyUrl | str | list[WebPage | AnyUrl | str] | None = Field(
-        default=None
-    )
-    sdDatePublished: date | str | list[date | str] | None = Field(default=None)
-    thumbnailUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    locationCreated: Place | str | list[Place | str] | None = Field(default=None)
-    acquireLicensePage: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    digitalSourceType: (
+        IPTCDigitalSourceEnumeration
+        | str
+        | list[IPTCDigitalSourceEnumeration | str]
+        | None
     ) = Field(default=None)
-    copyrightYear: float | str | list[float | str] | None = Field(default=None)
-    review: Review | str | list[Review | str] | None = Field(default=None)
-    publication: PublicationEvent | str | list[PublicationEvent | str] | None = Field(
-        default=None
-    )
-    isFamilyFriendly: bool | str | list[bool | str] | None = Field(default=None)
-    correction: (
-        CorrectionComment | str | AnyUrl | list[CorrectionComment | str | AnyUrl] | None
-    ) = Field(default=None)
-    producer: Organization | Person | str | list[Organization | Person | str] | None = (
+    discussionUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    displayLocation: Place | str | list[Place | str] | None = Field(default=None)
+    editEIDR: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    editor: Person | str | list[Person | str] | None = Field(default=None)
+    educationalAlignment: AlignmentObject | str | list[AlignmentObject | str] | None = (
         Field(default=None)
     )
-    maintainer: (
-        Organization | Person | str | list[Organization | Person | str] | None
+    educationalLevel: (
+        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
     ) = Field(default=None)
+    educationalUse: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
+    encoding: MediaObject | str | list[MediaObject | str] | None = Field(default=None)
+    encodingFormat: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    encodings: MediaObject | str | list[MediaObject | str] | None = Field(default=None)
+    exampleOfWork: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
+    expires: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    fileFormat: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    funder: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    funding: Grant | str | list[Grant | str] | None = Field(default=None)
+    genre: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = Field(
+        default=None
+    )
+    hasPart: CreativeWork | str | list[CreativeWork | str] | None = Field(default=None)
+    headline: str | list[str] | None = Field(default=None)
+    inLanguage: Language | str | list[Language | str] | None = Field(default=None)
+    interactionStatistic: (
+        InteractionCounter | str | list[InteractionCounter | str] | None
+    ) = Field(default=None)
+    interactivityType: str | list[str] | None = Field(default=None)
+    interpretedAsClaim: Claim | str | list[Claim | str] | None = Field(default=None)
+    isAccessibleForFree: bool | str | list[bool | str] | None = Field(default=None)
     isBasedOn: (
         CreativeWork
         | Product
@@ -274,99 +405,114 @@ class CreativeWork(Thing):
         | list[CreativeWork | Product | AnyUrl | str]
         | None
     ) = Field(default=None)
-    awards: str | list[str] | None = Field(default=None)
-    interactionStatistic: (
-        InteractionCounter | str | list[InteractionCounter | str] | None
-    ) = Field(default=None)
-    headline: str | list[str] | None = Field(default=None)
-    mainEntity: Thing | str | list[Thing | str] | None = Field(default=None)
-    copyrightHolder: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    digitalSourceType: (
-        IPTCDigitalSourceEnumeration
-        | str
-        | list[IPTCDigitalSourceEnumeration | str]
-        | None
-    ) = Field(default=None)
-    teaches: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
-    version: str | float | list[str | float] | None = Field(default=None)
-    temporalCoverage: str | AnyUrl | datetime | list[str | AnyUrl | datetime] | None = (
+    isFamilyFriendly: bool | str | list[bool | str] | None = Field(default=None)
+    isPartOf: CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None = (
         Field(default=None)
     )
-    accessModeSufficient: ItemList | str | list[ItemList | str] | None = Field(
+    keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
+        Field(default=None)
+    )
+    learningResourceType: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
         default=None
     )
-    accessibilityFeature: str | list[str] | None = Field(default=None)
-    offers: Offer | Demand | str | list[Offer | Demand | str] | None = Field(
+    license: CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None = (
+        Field(default=None)
+    )
+    locationCreated: Place | str | list[Place | str] | None = Field(default=None)
+    mainEntity: Thing | str | list[Thing | str] | None = Field(default=None)
+    maintainer: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    material: Product | str | AnyUrl | list[Product | str | AnyUrl] | None = Field(
         default=None
+    )
+    materialExtent: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    mentions: Thing | str | list[Thing | str] | None = Field(default=None)
+    offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
+        default=None
+    )
+    pattern: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    position: int | str | list[int | str] | None = Field(default=None)
+    producer: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
     )
     provider: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    spatialCoverage: Place | str | list[Place | str] | None = Field(default=None)
-    creativeWorkStatus: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+    publication: PublicationEvent | str | list[PublicationEvent | str] | None = Field(
         default=None
     )
-    accountablePerson: Person | str | list[Person | str] | None = Field(default=None)
-    releasedEvent: PublicationEvent | str | list[PublicationEvent | str] | None = Field(
-        default=None
-    )
-    about: Thing | str | list[Thing | str] | None = Field(default=None)
-    editEIDR: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    contentReferenceTime: datetime | str | list[datetime | str] | None = Field(
-        default=None
-    )
-    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
-        default=None
-    )
-    exampleOfWork: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    commentCount: int | str | list[int | str] | None = Field(default=None)
-    accessMode: str | list[str] | None = Field(default=None)
-    position: str | int | list[str | int] | None = Field(default=None)
+    publisher: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
     publisherImprint: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
-    audience: Audience | str | list[Audience | str] | None = Field(default=None)
-    material: str | Product | AnyUrl | list[str | Product | AnyUrl] | None = Field(
+    publishingPrinciples: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    ) = Field(default=None)
+    recordedAt: Event | str | list[Event | str] | None = Field(default=None)
+    releasedEvent: PublicationEvent | str | list[PublicationEvent | str] | None = Field(
         default=None
     )
-    pattern: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
-    editor: Person | str | list[Person | str] | None = Field(default=None)
-    thumbnail: ImageObject | str | list[ImageObject | str] | None = Field(default=None)
-    workTranslation: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    encodings: MediaObject | str | list[MediaObject | str] | None = Field(default=None)
-    encoding: MediaObject | str | list[MediaObject | str] | None = Field(default=None)
-    accessibilityHazard: str | list[str] | None = Field(default=None)
+    review: Review | str | list[Review | str] | None = Field(default=None)
+    reviews: Review | str | list[Review | str] | None = Field(default=None)
+    schemaVersion: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    sdDatePublished: date | str | list[date | str] | None = Field(default=None)
+    sdLicense: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    ) = Field(default=None)
+    sdPublisher: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    size: (
+        DefinedTerm
+        | QuantitativeValue
+        | SizeSpecification
+        | str
+        | list[DefinedTerm | QuantitativeValue | SizeSpecification | str]
+        | None
+    ) = Field(default=None)
     sourceOrganization: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
-    sdLicense: (
-        AnyUrl | CreativeWork | str | list[AnyUrl | CreativeWork | str] | None
-    ) = Field(default=None)
-    usageInfo: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
-    ) = Field(default=None)
-    award: str | list[str] | None = Field(default=None)
-    schemaVersion: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    isAccessibleForFree: bool | str | list[bool | str] | None = Field(default=None)
-    genre: str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None = Field(
+    spatial: Place | str | list[Place | str] | None = Field(default=None)
+    spatialCoverage: Place | str | list[Place | str] | None = Field(default=None)
+    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    teaches: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    temporal: datetime | str | list[datetime | str] | None = Field(default=None)
+    temporalCoverage: datetime | str | AnyUrl | list[datetime | str | AnyUrl] | None = (
+        Field(default=None)
+    )
+    text: str | list[str] | None = Field(default=None)
+    thumbnail: ImageObject | str | list[ImageObject | str] | None = Field(default=None)
+    thumbnailUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    timeRequired: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    translationOfWork: CreativeWork | str | list[CreativeWork | str] | None = Field(
         default=None
     )
-    fileFormat: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    inLanguage: str | Language | list[str | Language] | None = Field(default=None)
     translator: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    accessibilityControl: str | list[str] | None = Field(default=None)
-    abstract: str | list[str] | None = Field(default=None)
-    educationalLevel: (
-        str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None
+    typicalAgeRange: str | list[str] | None = Field(default=None)
+    usageInfo: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
+    version: float | str | list[float | str] | None = Field(default=None)
+    video: Clip | VideoObject | str | list[Clip | VideoObject | str] | None = Field(
+        default=None
+    )
+    wordCount: int | str | list[int | str] | None = Field(default=None)
+    workExample: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
+    workTranslation: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
 
 
 class Article(CreativeWork):
@@ -376,22 +522,22 @@ class Article(CreativeWork):
     for-bibliographic-relationships-and-periodicals/)."""
 
     type: str = Field(default="Article", alias="@type")
-    articleSection: str | list[str] | None = Field(default=None)
     articleBody: str | list[str] | None = Field(default=None)
+    articleSection: str | list[str] | None = Field(default=None)
     backstory: CreativeWork | str | list[CreativeWork | str] | None = Field(
         default=None
     )
-    wordCount: int | str | list[int | str] | None = Field(default=None)
-    speakable: (
-        AnyUrl
-        | SpeakableSpecification
-        | str
-        | list[AnyUrl | SpeakableSpecification | str]
-        | None
-    ) = Field(default=None)
-    pagination: str | list[str] | None = Field(default=None)
     pageEnd: int | str | list[int | str] | None = Field(default=None)
     pageStart: int | str | list[int | str] | None = Field(default=None)
+    pagination: str | list[str] | None = Field(default=None)
+    speakable: (
+        SpeakableSpecification
+        | AnyUrl
+        | str
+        | list[SpeakableSpecification | AnyUrl | str]
+        | None
+    ) = Field(default=None)
+    wordCount: int | str | list[int | str] | None = Field(default=None)
 
 
 class TechArticle(Article):
@@ -407,11 +553,11 @@ class APIReference(TechArticle):
     """Reference documentation for application programming interfaces (APIs)."""
 
     type: str = Field(default="APIReference", alias="@type")
+    assembly: str | list[str] | None = Field(default=None)
+    assemblyVersion: str | list[str] | None = Field(default=None)
+    executableLibraryName: str | list[str] | None = Field(default=None)
     programmingModel: str | list[str] | None = Field(default=None)
     targetPlatform: str | list[str] | None = Field(default=None)
-    assemblyVersion: str | list[str] | None = Field(default=None)
-    assembly: str | list[str] | None = Field(default=None)
-    executableLibraryName: str | list[str] | None = Field(default=None)
 
 
 class WebPage(CreativeWork):
@@ -422,30 +568,30 @@ class WebPage(CreativeWork):
     be assumed to be about the page."""
 
     type: str = Field(default="WebPage", alias="@type")
-    mainContentOfPage: WebPageElement | str | list[WebPageElement | str] | None = Field(
-        default=None
-    )
-    speakable: (
-        AnyUrl
-        | SpeakableSpecification
-        | str
-        | list[AnyUrl | SpeakableSpecification | str]
-        | None
-    ) = Field(default=None)
-    reviewedBy: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    breadcrumb: str | BreadcrumbList | list[str | BreadcrumbList] | None = Field(
-        default=None
-    )
-    significantLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    relatedLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    significantLinks: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    specialty: Specialty | str | list[Specialty | str] | None = Field(default=None)
-    primaryImageOfPage: ImageObject | str | list[ImageObject | str] | None = Field(
+    breadcrumb: BreadcrumbList | str | list[BreadcrumbList | str] | None = Field(
         default=None
     )
     lastReviewed: date | str | list[date | str] | None = Field(default=None)
+    mainContentOfPage: WebPageElement | str | list[WebPageElement | str] | None = Field(
+        default=None
+    )
+    primaryImageOfPage: ImageObject | str | list[ImageObject | str] | None = Field(
+        default=None
+    )
+    relatedLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    reviewedBy: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    significantLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    significantLinks: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    speakable: (
+        SpeakableSpecification
+        | AnyUrl
+        | str
+        | list[SpeakableSpecification | AnyUrl | str]
+        | None
+    ) = Field(default=None)
+    specialty: Specialty | str | list[Specialty | str] | None = Field(default=None)
 
 
 class AboutPage(WebPage):
@@ -463,40 +609,40 @@ class Action(Thing):
     [Actions overview document](https://schema.org/docs/actions.html)."""
 
     type: str = Field(default="Action", alias="@type")
-    target: AnyUrl | EntryPoint | str | list[AnyUrl | EntryPoint | str] | None = Field(
+    actionProcess: HowTo | str | list[HowTo | str] | None = Field(default=None)
+    actionStatus: ActionStatusType | str | list[ActionStatusType | str] | None = Field(
         default=None
+    )
+    agent: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
     )
     endTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
-    result: Thing | str | list[Thing | str] | None = Field(default=None)
     error: Thing | str | list[Thing | str] | None = Field(default=None)
     instrument: Thing | str | list[Thing | str] | None = Field(default=None)
     location: (
-        str
+        Place
         | PostalAddress
+        | str
         | VirtualLocation
-        | Place
-        | list[str | PostalAddress | VirtualLocation | Place]
+        | list[Place | PostalAddress | str | VirtualLocation]
         | None
     ) = Field(default=None)
-    actionProcess: HowTo | str | list[HowTo | str] | None = Field(default=None)
     object: Thing | str | list[Thing | str] | None = Field(default=None)
-    agent: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    provider: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    actionStatus: ActionStatusType | str | list[ActionStatusType | str] | None = Field(
-        default=None
-    )
-    startTime: datetime | time | str | list[datetime | time | str] | None = Field(
-        default=None
-    )
     participant: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
+    provider: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    result: Thing | str | list[Thing | str] | None = Field(default=None)
+    startTime: datetime | time | str | list[datetime | time | str] | None = Field(
+        default=None
+    )
+    target: EntryPoint | AnyUrl | str | list[EntryPoint | AnyUrl | str] | None = Field(
+        default=None
+    )
 
 
 class OrganizeAction(Action):
@@ -522,100 +668,100 @@ class Place(Thing):
     """Entities that have a somewhat fixed, physical extension."""
 
     type: str = Field(default="Place", alias="@type")
-    events: Event | str | list[Event | str] | None = Field(default=None)
-    containsPlace: Place | str | list[Place | str] | None = Field(default=None)
-    telephone: str | list[str] | None = Field(default=None)
-    geoIntersects: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
-    ) = Field(default=None)
-    publicAccess: bool | str | list[bool | str] | None = Field(default=None)
-    branchCode: str | list[str] | None = Field(default=None)
-    address: str | PostalAddress | list[str | PostalAddress] | None = Field(
-        default=None
-    )
-    logo: AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None = Field(
-        default=None
-    )
-    globalLocationNumber: str | list[str] | None = Field(default=None)
-    maximumAttendeeCapacity: int | str | list[int | str] | None = Field(default=None)
-    reviews: Review | str | list[Review | str] | None = Field(default=None)
     additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
     )
-    specialOpeningHoursSpecification: (
-        OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
-    ) = Field(default=None)
-    keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
-        Field(default=None)
-    )
-    map: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    photo: (
-        Photograph | ImageObject | str | list[Photograph | ImageObject | str] | None
-    ) = Field(default=None)
-    smokingAllowed: bool | str | list[bool | str] | None = Field(default=None)
-    longitude: str | float | list[str | float] | None = Field(default=None)
-    review: Review | str | list[Review | str] | None = Field(default=None)
-    containedIn: Place | str | list[Place | str] | None = Field(default=None)
-    tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    hasCertification: Certification | str | list[Certification | str] | None = Field(
+    address: PostalAddress | str | list[PostalAddress | str] | None = Field(
         default=None
     )
-    geoCoveredBy: (
-        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
-    ) = Field(default=None)
-    geo: (
-        GeoShape | GeoCoordinates | str | list[GeoShape | GeoCoordinates | str] | None
-    ) = Field(default=None)
-    geoTouches: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
-    ) = Field(default=None)
+    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
+        default=None
+    )
     amenityFeature: (
         LocationFeatureSpecification
         | str
         | list[LocationFeatureSpecification | str]
         | None
     ) = Field(default=None)
-    hasMap: AnyUrl | Map | str | list[AnyUrl | Map | str] | None = Field(default=None)
-    geoWithin: (
+    branchCode: str | list[str] | None = Field(default=None)
+    containedIn: Place | str | list[Place | str] | None = Field(default=None)
+    containedInPlace: Place | str | list[Place | str] | None = Field(default=None)
+    containsPlace: Place | str | list[Place | str] | None = Field(default=None)
+    event: Event | str | list[Event | str] | None = Field(default=None)
+    events: Event | str | list[Event | str] | None = Field(default=None)
+    faxNumber: str | list[str] | None = Field(default=None)
+    geo: (
+        GeoCoordinates | GeoShape | str | list[GeoCoordinates | GeoShape | str] | None
+    ) = Field(default=None)
+    geoContains: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
+    geoCoveredBy: (
         GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
     geoCovers: (
         GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
-    hasGS1DigitalLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    geoEquals: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
-    ) = Field(default=None)
-    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
-        default=None
-    )
-    photos: (
-        Photograph | ImageObject | str | list[Photograph | ImageObject | str] | None
-    ) = Field(default=None)
-    containedInPlace: Place | str | list[Place | str] | None = Field(default=None)
-    geoOverlaps: (
-        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
-    ) = Field(default=None)
-    slogan: str | list[str] | None = Field(default=None)
-    event: Event | str | list[Event | str] | None = Field(default=None)
-    geoDisjoint: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
-    ) = Field(default=None)
-    hasDriveThroughService: bool | str | list[bool | str] | None = Field(default=None)
     geoCrosses: (
         GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
-    latitude: str | float | list[str | float] | None = Field(default=None)
-    maps: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    geoContains: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
+    geoDisjoint: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
-    faxNumber: str | list[str] | None = Field(default=None)
+    geoEquals: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
+    geoIntersects: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
+    geoOverlaps: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
+    geoTouches: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
+    geoWithin: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
+    globalLocationNumber: str | list[str] | None = Field(default=None)
+    hasCertification: Certification | str | list[Certification | str] | None = Field(
+        default=None
+    )
+    hasDriveThroughService: bool | str | list[bool | str] | None = Field(default=None)
+    hasGS1DigitalLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    hasMap: Map | AnyUrl | str | list[Map | AnyUrl | str] | None = Field(default=None)
     isAccessibleForFree: bool | str | list[bool | str] | None = Field(default=None)
     isicV4: str | list[str] | None = Field(default=None)
+    keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
+        Field(default=None)
+    )
+    latitude: float | str | list[float | str] | None = Field(default=None)
+    logo: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
+        default=None
+    )
+    longitude: float | str | list[float | str] | None = Field(default=None)
+    map: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    maps: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    maximumAttendeeCapacity: int | str | list[int | str] | None = Field(default=None)
     openingHoursSpecification: (
         OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
     ) = Field(default=None)
+    photo: (
+        ImageObject | Photograph | str | list[ImageObject | Photograph | str] | None
+    ) = Field(default=None)
+    photos: (
+        ImageObject | Photograph | str | list[ImageObject | Photograph | str] | None
+    ) = Field(default=None)
+    publicAccess: bool | str | list[bool | str] | None = Field(default=None)
+    review: Review | str | list[Review | str] | None = Field(default=None)
+    reviews: Review | str | list[Review | str] | None = Field(default=None)
+    slogan: str | list[str] | None = Field(default=None)
+    smokingAllowed: bool | str | list[bool | str] | None = Field(default=None)
+    specialOpeningHoursSpecification: (
+        OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
+    ) = Field(default=None)
+    telephone: str | list[str] | None = Field(default=None)
+    tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
 
 
 class Accommodation(Place):
@@ -630,230 +776,198 @@ class Accommodation(Place):
     """
 
     type: str = Field(default="Accommodation", alias="@type")
-    yearBuilt: float | str | list[float | str] | None = Field(default=None)
+    accommodationCategory: str | list[str] | None = Field(default=None)
     accommodationFloorPlan: FloorPlan | str | list[FloorPlan | str] | None = Field(
         default=None
     )
-    permittedUsage: str | list[str] | None = Field(default=None)
-    numberOfRooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
-    bed: BedDetails | BedType | str | list[BedDetails | BedType | str] | None = Field(
-        default=None
-    )
-    numberOfPartialBathrooms: float | str | list[float | str] | None = Field(
-        default=None
-    )
-    numberOfFullBathrooms: float | str | list[float | str] | None = Field(default=None)
-    leaseLength: (
-        QuantitativeValue
-        | timedelta
-        | str
-        | list[QuantitativeValue | timedelta | str]
-        | None
-    ) = Field(default=None)
-    petsAllowed: str | bool | list[str | bool] | None = Field(default=None)
-    tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     amenityFeature: (
         LocationFeatureSpecification
         | str
         | list[LocationFeatureSpecification | str]
         | None
     ) = Field(default=None)
-    floorSize: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+    bed: BedDetails | BedType | str | list[BedDetails | BedType | str] | None = Field(
         default=None
     )
     floorLevel: str | list[str] | None = Field(default=None)
-    accommodationCategory: str | list[str] | None = Field(default=None)
+    floorSize: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
+    leaseLength: (
+        timedelta
+        | QuantitativeValue
+        | str
+        | list[timedelta | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
+    numberOfBathroomsTotal: int | str | list[int | str] | None = Field(default=None)
+    numberOfBedrooms: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    numberOfFullBathrooms: float | str | list[float | str] | None = Field(default=None)
+    numberOfPartialBathrooms: float | str | list[float | str] | None = Field(
+        default=None
+    )
+    numberOfRooms: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
     )
-    numberOfBathroomsTotal: int | str | list[int | str] | None = Field(default=None)
-    numberOfBedrooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
+    permittedUsage: str | list[str] | None = Field(default=None)
+    petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
+    tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    yearBuilt: float | str | list[float | str] | None = Field(default=None)
 
 
 class Organization(Thing):
     """An organization such as a school, NGO, corporation, club, etc."""
 
     type: str = Field(default="Organization", alias="@type")
-    companyRegistration: Certification | str | list[Certification | str] | None = Field(
-        default=None
-    )
-    events: Event | str | list[Event | str] | None = Field(default=None)
-    dissolutionDate: date | str | list[date | str] | None = Field(default=None)
-    telephone: str | list[str] | None = Field(default=None)
-    foundingDate: date | str | list[date | str] | None = Field(default=None)
-    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    duns: str | list[str] | None = Field(default=None)
-    knowsAbout: str | AnyUrl | Thing | list[str | AnyUrl | Thing] | None = Field(
-        default=None
-    )
-    contactPoints: ContactPoint | str | list[ContactPoint | str] | None = Field(
-        default=None
-    )
-    funder: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    hasShippingService: ShippingService | str | list[ShippingService | str] | None = (
-        Field(default=None)
-    )
-    naics: str | list[str] | None = Field(default=None)
-    iso6523Code: str | list[str] | None = Field(default=None)
-    address: str | PostalAddress | list[str | PostalAddress] | None = Field(
-        default=None
-    )
-    legalRepresentative: Person | str | list[Person | str] | None = Field(default=None)
-    logo: AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None = Field(
-        default=None
-    )
-    nonprofitStatus: NonprofitType | str | list[NonprofitType | str] | None = Field(
-        default=None
-    )
-    globalLocationNumber: str | list[str] | None = Field(default=None)
-    makesOffer: Offer | str | list[Offer | str] | None = Field(default=None)
-    members: Person | Organization | str | list[Person | Organization | str] | None = (
-        Field(default=None)
-    )
-    employee: Person | str | list[Person | str] | None = Field(default=None)
-    reviews: Review | str | list[Review | str] | None = Field(default=None)
-    parentOrganization: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
-    seeks: Demand | str | list[Demand | str] | None = Field(default=None)
-    alumni: Person | str | list[Person | str] | None = Field(default=None)
-    serviceArea: (
-        GeoShape
-        | AdministrativeArea
-        | Place
-        | str
-        | list[GeoShape | AdministrativeArea | Place | str]
-        | None
-    ) = Field(default=None)
-    keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
-        Field(default=None)
-    )
-    taxID: str | list[str] | None = Field(default=None)
-    publishingPrinciples: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
-    ) = Field(default=None)
-    correctionsPolicy: (
-        AnyUrl | CreativeWork | str | list[AnyUrl | CreativeWork | str] | None
-    ) = Field(default=None)
-    legalName: str | list[str] | None = Field(default=None)
-    member: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    unnamedSourcesPolicy: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
-    ) = Field(default=None)
-    hasOfferCatalog: OfferCatalog | str | list[OfferCatalog | str] | None = Field(
-        default=None
-    )
-    funding: Grant | str | list[Grant | str] | None = Field(default=None)
-    location: (
-        str
-        | PostalAddress
-        | VirtualLocation
-        | Place
-        | list[str | PostalAddress | VirtualLocation | Place]
-        | None
-    ) = Field(default=None)
-    email: str | list[str] | None = Field(default=None)
-    knowsLanguage: str | Language | list[str | Language] | None = Field(default=None)
-    hasCredential: Credential | str | list[Credential | str] | None = Field(
-        default=None
-    )
-    contactPoint: ContactPoint | str | list[ContactPoint | str] | None = Field(
-        default=None
-    )
-    review: Review | str | list[Review | str] | None = Field(default=None)
-    hasCertification: Certification | str | list[Certification | str] | None = Field(
-        default=None
-    )
-    vatID: str | list[str] | None = Field(default=None)
-    ethicsPolicy: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
-    ) = Field(default=None)
-    hasMerchantReturnPolicy: (
-        MerchantReturnPolicy | str | list[MerchantReturnPolicy | str] | None
-    ) = Field(default=None)
-    awards: str | list[str] | None = Field(default=None)
-    interactionStatistic: (
-        InteractionCounter | str | list[InteractionCounter | str] | None
-    ) = Field(default=None)
-    employees: Person | str | list[Person | str] | None = Field(default=None)
-    founder: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    department: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
-    foundingLocation: Place | str | list[Place | str] | None = Field(default=None)
-    legalAddress: PostalAddress | str | list[PostalAddress | str] | None = Field(
-        default=None
-    )
-    hasGS1DigitalLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    diversityStaffingReport: (
-        AnyUrl | Article | str | list[AnyUrl | Article | str] | None
-    ) = Field(default=None)
-    memberOf: (
-        ProgramMembership
-        | Organization
-        | MemberProgramTier
-        | str
-        | list[ProgramMembership | Organization | MemberProgramTier | str]
-        | None
-    ) = Field(default=None)
     acceptedPaymentMethod: (
-        PaymentMethod
-        | LoanOrCredit
+        LoanOrCredit
+        | PaymentMethod
         | str
-        | list[PaymentMethod | LoanOrCredit | str]
+        | list[LoanOrCredit | PaymentMethod | str]
         | None
     ) = Field(default=None)
     actionableFeedbackPolicy: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
-    founders: Person | str | list[Person | str] | None = Field(default=None)
-    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
+    address: PostalAddress | str | list[PostalAddress | str] | None = Field(
         default=None
     )
-    slogan: str | list[str] | None = Field(default=None)
-    event: Event | str | list[Event | str] | None = Field(default=None)
-    subOrganization: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
-    brand: Organization | Brand | str | list[Organization | Brand | str] | None = Field(
-        default=None
-    )
-    award: str | list[str] | None = Field(default=None)
-    skills: str | DefinedTerm | list[str | DefinedTerm] | None = Field(default=None)
-    leiCode: str | list[str] | None = Field(default=None)
-    faxNumber: str | list[str] | None = Field(default=None)
     agentInteractionStatistic: (
         InteractionCounter | str | list[InteractionCounter | str] | None
     ) = Field(default=None)
-    isicV4: str | list[str] | None = Field(default=None)
-    hasMemberProgram: MemberProgram | str | list[MemberProgram | str] | None = Field(
+    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
         default=None
     )
-    hasPOS: Place | str | list[Place | str] | None = Field(default=None)
+    alumni: Person | str | list[Person | str] | None = Field(default=None)
+    areaServed: (
+        AdministrativeArea
+        | GeoShape
+        | Place
+        | str
+        | list[AdministrativeArea | GeoShape | Place | str]
+        | None
+    ) = Field(default=None)
+    award: str | list[str] | None = Field(default=None)
+    awards: str | list[str] | None = Field(default=None)
+    brand: Brand | Organization | str | list[Brand | Organization | str] | None = Field(
+        default=None
+    )
+    companyRegistration: Certification | str | list[Certification | str] | None = Field(
+        default=None
+    )
+    contactPoint: ContactPoint | str | list[ContactPoint | str] | None = Field(
+        default=None
+    )
+    contactPoints: ContactPoint | str | list[ContactPoint | str] | None = Field(
+        default=None
+    )
+    correctionsPolicy: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    ) = Field(default=None)
+    department: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    dissolutionDate: date | str | list[date | str] | None = Field(default=None)
     diversityPolicy: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
-    areaServed: (
-        GeoShape
-        | AdministrativeArea
-        | Place
+    diversityStaffingReport: (
+        Article | AnyUrl | str | list[Article | AnyUrl | str] | None
+    ) = Field(default=None)
+    duns: str | list[str] | None = Field(default=None)
+    email: str | list[str] | None = Field(default=None)
+    employee: Person | str | list[Person | str] | None = Field(default=None)
+    employees: Person | str | list[Person | str] | None = Field(default=None)
+    ethicsPolicy: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    ) = Field(default=None)
+    event: Event | str | list[Event | str] | None = Field(default=None)
+    events: Event | str | list[Event | str] | None = Field(default=None)
+    faxNumber: str | list[str] | None = Field(default=None)
+    founder: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    founders: Person | str | list[Person | str] | None = Field(default=None)
+    foundingDate: date | str | list[date | str] | None = Field(default=None)
+    foundingLocation: Place | str | list[Place | str] | None = Field(default=None)
+    funder: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    funding: Grant | str | list[Grant | str] | None = Field(default=None)
+    globalLocationNumber: str | list[str] | None = Field(default=None)
+    hasCertification: Certification | str | list[Certification | str] | None = Field(
+        default=None
+    )
+    hasCredential: Credential | str | list[Credential | str] | None = Field(
+        default=None
+    )
+    hasGS1DigitalLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    hasMemberProgram: MemberProgram | str | list[MemberProgram | str] | None = Field(
+        default=None
+    )
+    hasMerchantReturnPolicy: (
+        MerchantReturnPolicy | str | list[MerchantReturnPolicy | str] | None
+    ) = Field(default=None)
+    hasOfferCatalog: OfferCatalog | str | list[OfferCatalog | str] | None = Field(
+        default=None
+    )
+    hasPOS: Place | str | list[Place | str] | None = Field(default=None)
+    hasShippingService: ShippingService | str | list[ShippingService | str] | None = (
+        Field(default=None)
+    )
+    interactionStatistic: (
+        InteractionCounter | str | list[InteractionCounter | str] | None
+    ) = Field(default=None)
+    isicV4: str | list[str] | None = Field(default=None)
+    iso6523Code: str | list[str] | None = Field(default=None)
+    keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
+        Field(default=None)
+    )
+    knowsAbout: str | Thing | AnyUrl | list[str | Thing | AnyUrl] | None = Field(
+        default=None
+    )
+    knowsLanguage: Language | str | list[Language | str] | None = Field(default=None)
+    legalAddress: PostalAddress | str | list[PostalAddress | str] | None = Field(
+        default=None
+    )
+    legalName: str | list[str] | None = Field(default=None)
+    legalRepresentative: Person | str | list[Person | str] | None = Field(default=None)
+    leiCode: str | list[str] | None = Field(default=None)
+    location: (
+        Place
+        | PostalAddress
         | str
-        | list[GeoShape | AdministrativeArea | Place | str]
+        | VirtualLocation
+        | list[Place | PostalAddress | str | VirtualLocation]
         | None
     ) = Field(default=None)
-    owns: Thing | str | list[Thing | str] | None = Field(default=None)
+    logo: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
+        default=None
+    )
+    makesOffer: Offer | str | list[Offer | str] | None = Field(default=None)
+    member: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    memberOf: (
+        MemberProgramTier
+        | Organization
+        | ProgramMembership
+        | str
+        | list[MemberProgramTier | Organization | ProgramMembership | str]
+        | None
+    ) = Field(default=None)
+    members: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    naics: str | list[str] | None = Field(default=None)
+    nonprofitStatus: NonprofitType | str | list[NonprofitType | str] | None = Field(
+        default=None
+    )
     numberOfEmployees: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
@@ -865,6 +979,38 @@ class Organization(Thing):
         | list[AboutPage | CreativeWork | str | AnyUrl]
         | None
     ) = Field(default=None)
+    owns: Thing | str | list[Thing | str] | None = Field(default=None)
+    parentOrganization: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    publishingPrinciples: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    ) = Field(default=None)
+    review: Review | str | list[Review | str] | None = Field(default=None)
+    reviews: Review | str | list[Review | str] | None = Field(default=None)
+    seeks: Demand | str | list[Demand | str] | None = Field(default=None)
+    serviceArea: (
+        AdministrativeArea
+        | GeoShape
+        | Place
+        | str
+        | list[AdministrativeArea | GeoShape | Place | str]
+        | None
+    ) = Field(default=None)
+    skills: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    slogan: str | list[str] | None = Field(default=None)
+    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    subOrganization: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    taxID: str | list[str] | None = Field(default=None)
+    telephone: str | list[str] | None = Field(default=None)
+    unnamedSourcesPolicy: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    ) = Field(default=None)
+    vatID: str | list[str] | None = Field(default=None)
 
 
 class LocalBusiness(Organization, Place):
@@ -875,10 +1021,10 @@ class LocalBusiness(Organization, Place):
     type: str = Field(default="LocalBusiness", alias="@type")
     branchOf: Organization | str | list[Organization | str] | None = Field(default=None)
     currenciesAccepted: str | list[str] | None = Field(default=None)
-    paymentAccepted: str | list[str] | None = Field(default=None)
     floorLevel: str | list[str] | None = Field(default=None)
-    priceRange: str | list[str] | None = Field(default=None)
     openingHours: str | list[str] | None = Field(default=None)
+    paymentAccepted: str | list[str] | None = Field(default=None)
+    priceRange: str | list[str] | None = Field(default=None)
 
 
 class FinancialService(LocalBusiness):
@@ -909,31 +1055,31 @@ class ActionAccessSpecification(Intangible):
     """A set of requirements that must be fulfilled in order to perform an Action."""
 
     type: str = Field(default="ActionAccessSpecification", alias="@type")
-    expectsAcceptanceOf: Offer | str | list[Offer | str] | None = Field(default=None)
-    category: (
-        str
-        | AnyUrl
-        | Thing
-        | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
-        | None
+    availabilityEnds: (
+        date | datetime | time | str | list[date | datetime | time | str] | None
     ) = Field(default=None)
-    eligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
-        Field(default=None)
-    )
     availabilityStarts: (
         date | datetime | time | str | list[date | datetime | time | str] | None
     ) = Field(default=None)
-    requiresSubscription: (
-        MediaSubscription | bool | str | list[MediaSubscription | bool | str] | None
+    category: (
+        CategoryCode
+        | PhysicalActivityCategory
+        | str
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
+        | None
     ) = Field(default=None)
-    availabilityEnds: (
-        datetime | time | date | str | list[datetime | time | date | str] | None
-    ) = Field(default=None)
-    ineligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
+    eligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
         Field(default=None)
     )
+    expectsAcceptanceOf: Offer | str | list[Offer | str] | None = Field(default=None)
+    ineligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
+        Field(default=None)
+    )
+    requiresSubscription: (
+        bool | MediaSubscription | str | list[bool | MediaSubscription | str] | None
+    ) = Field(default=None)
 
 
 class Enumeration(Intangible):
@@ -941,11 +1087,11 @@ class Enumeration(Intangible):
 
     type: str = Field(default="Enumeration", alias="@type")
     supersededBy: (
-        Enumeration
+        Class
+        | Enumeration
         | Property
-        | Class
         | str
-        | list[Enumeration | Property | Class | str]
+        | list[Class | Enumeration | Property | str]
         | None
     ) = Field(default=None)
 
@@ -979,8 +1125,8 @@ class UpdateAction(Action):
     """The act of managing by changing/editing the state of the object."""
 
     type: str = Field(default="UpdateAction", alias="@type")
-    targetCollection: Thing | str | list[Thing | str] | None = Field(default=None)
     collection: Thing | str | list[Thing | str] | None = Field(default=None)
+    targetCollection: Thing | str | list[Thing | str] | None = Field(default=None)
 
 
 class AddAction(UpdateAction):
@@ -1035,165 +1181,165 @@ class Offer(Intangible):
     from [GS1](http://www.gs1.org/)."""
 
     type: str = Field(default="Offer", alias="@type")
-    offeredBy: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    validForMemberTier: (
-        MemberProgramTier | str | list[MemberProgramTier | str] | None
-    ) = Field(default=None)
-    shippingDetails: (
-        OfferShippingDetails | str | list[OfferShippingDetails | str] | None
-    ) = Field(default=None)
-    addOn: Offer | str | list[Offer | str] | None = Field(default=None)
-    eligibleDuration: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    category: (
-        str
-        | AnyUrl
-        | Thing
-        | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
+    acceptedPaymentMethod: (
+        LoanOrCredit
+        | PaymentMethod
+        | str
+        | list[LoanOrCredit | PaymentMethod | str]
         | None
     ) = Field(default=None)
-    mpn: str | list[str] | None = Field(default=None)
-    priceSpecification: (
-        PriceSpecification | str | list[PriceSpecification | str] | None
-    ) = Field(default=None)
-    validThrough: datetime | date | str | list[datetime | date | str] | None = Field(
+    addOn: Offer | str | list[Offer | str] | None = Field(default=None)
+    additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
-    )
-    gtin12: str | list[str] | None = Field(default=None)
-    gtin8: str | list[str] | None = Field(default=None)
-    checkoutPageURLTemplate: str | list[str] | None = Field(default=None)
-    inventoryLevel: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    reviews: Review | str | list[Review | str] | None = Field(default=None)
-    eligibleCustomerType: (
-        BusinessEntityType | str | list[BusinessEntityType | str] | None
-    ) = Field(default=None)
-    serialNumber: str | list[str] | None = Field(default=None)
-    deliveryLeadTime: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
     )
     advanceBookingRequirement: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
-    additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
+    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
         default=None
     )
-    itemCondition: OfferItemCondition | str | list[OfferItemCondition | str] | None = (
-        Field(default=None)
-    )
-    leaseLength: (
-        QuantitativeValue
-        | timedelta
+    areaServed: (
+        AdministrativeArea
+        | GeoShape
+        | Place
         | str
-        | list[QuantitativeValue | timedelta | str]
+        | list[AdministrativeArea | GeoShape | Place | str]
         | None
+    ) = Field(default=None)
+    asin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    availability: ItemAvailability | str | list[ItemAvailability | str] | None = Field(
+        default=None
+    )
+    availabilityEnds: (
+        date | datetime | time | str | list[date | datetime | time | str] | None
+    ) = Field(default=None)
+    availabilityStarts: (
+        date | datetime | time | str | list[date | datetime | time | str] | None
+    ) = Field(default=None)
+    availableAtOrFrom: Place | str | list[Place | str] | None = Field(default=None)
+    availableDeliveryMethod: (
+        DeliveryMethod | str | list[DeliveryMethod | str] | None
     ) = Field(default=None)
     businessFunction: BusinessFunction | str | list[BusinessFunction | str] | None = (
         Field(default=None)
     )
-    availability: ItemAvailability | str | list[ItemAvailability | str] | None = Field(
-        default=None
-    )
-    sku: str | list[str] | None = Field(default=None)
-    availableAtOrFrom: Place | str | list[Place | str] | None = Field(default=None)
-    warranty: WarrantyPromise | str | list[WarrantyPromise | str] | None = Field(
-        default=None
-    )
-    asin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    review: Review | str | list[Review | str] | None = Field(default=None)
-    isFamilyFriendly: bool | str | list[bool | str] | None = Field(default=None)
-    gtin13: str | list[str] | None = Field(default=None)
-    hasMerchantReturnPolicy: (
-        MerchantReturnPolicy | str | list[MerchantReturnPolicy | str] | None
+    category: (
+        CategoryCode
+        | PhysicalActivityCategory
+        | str
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
+        | None
     ) = Field(default=None)
-    priceCurrency: str | list[str] | None = Field(default=None)
-    eligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
+    checkoutPageURLTemplate: str | list[str] | None = Field(default=None)
+    deliveryLeadTime: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    eligibleCustomerType: (
+        BusinessEntityType | str | list[BusinessEntityType | str] | None
+    ) = Field(default=None)
+    eligibleDuration: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    eligibleQuantity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    eligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
         Field(default=None)
     )
     eligibleTransactionVolume: (
         PriceSpecification | str | list[PriceSpecification | str] | None
     ) = Field(default=None)
-    hasGS1DigitalLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    acceptedPaymentMethod: (
-        PaymentMethod
-        | LoanOrCredit
-        | str
-        | list[PaymentMethod | LoanOrCredit | str]
-        | None
-    ) = Field(default=None)
-    gtin14: str | list[str] | None = Field(default=None)
-    mobileUrl: str | list[str] | None = Field(default=None)
-    itemOffered: (
-        MenuItem
-        | Trip
-        | Event
-        | CreativeWork
-        | Product
-        | Service
-        | AggregateOffer
-        | str
-        | list[
-            MenuItem
-            | Trip
-            | Event
-            | CreativeWork
-            | Product
-            | Service
-            | AggregateOffer
-            | str
-        ]
-        | None
-    ) = Field(default=None)
-    priceValidUntil: date | str | list[date | str] | None = Field(default=None)
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
-        default=None
-    )
-    availabilityStarts: (
-        date | datetime | time | str | list[date | datetime | time | str] | None
-    ) = Field(default=None)
-    price: str | float | list[str | float] | None = Field(default=None)
-    availableDeliveryMethod: (
-        DeliveryMethod | str | list[DeliveryMethod | str] | None
-    ) = Field(default=None)
-    eligibleQuantity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
     gtin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    seller: Person | Organization | str | list[Person | Organization | str] | None = (
-        Field(default=None)
-    )
-    availabilityEnds: (
-        datetime | time | date | str | list[datetime | time | date | str] | None
-    ) = Field(default=None)
-    ineligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
-        Field(default=None)
-    )
+    gtin12: str | list[str] | None = Field(default=None)
+    gtin13: str | list[str] | None = Field(default=None)
+    gtin14: str | list[str] | None = Field(default=None)
+    gtin8: str | list[str] | None = Field(default=None)
     hasAdultConsideration: (
         AdultOrientedEnumeration | str | list[AdultOrientedEnumeration | str] | None
     ) = Field(default=None)
+    hasGS1DigitalLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     hasMeasurement: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
-    areaServed: (
-        GeoShape
-        | AdministrativeArea
-        | Place
-        | str
-        | list[GeoShape | AdministrativeArea | Place | str]
-        | None
+    hasMerchantReturnPolicy: (
+        MerchantReturnPolicy | str | list[MerchantReturnPolicy | str] | None
     ) = Field(default=None)
     includesObject: (
         TypeAndQuantityNode | str | list[TypeAndQuantityNode | str] | None
     ) = Field(default=None)
+    ineligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
+        Field(default=None)
+    )
+    inventoryLevel: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    isFamilyFriendly: bool | str | list[bool | str] | None = Field(default=None)
+    itemCondition: OfferItemCondition | str | list[OfferItemCondition | str] | None = (
+        Field(default=None)
+    )
+    itemOffered: (
+        AggregateOffer
+        | CreativeWork
+        | Event
+        | MenuItem
+        | Product
+        | Service
+        | Trip
+        | str
+        | list[
+            AggregateOffer
+            | CreativeWork
+            | Event
+            | MenuItem
+            | Product
+            | Service
+            | Trip
+            | str
+        ]
+        | None
+    ) = Field(default=None)
+    leaseLength: (
+        timedelta
+        | QuantitativeValue
+        | str
+        | list[timedelta | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
+    mobileUrl: str | list[str] | None = Field(default=None)
+    mpn: str | list[str] | None = Field(default=None)
+    offeredBy: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    price: float | str | list[float | str] | None = Field(default=None)
+    priceCurrency: str | list[str] | None = Field(default=None)
+    priceSpecification: (
+        PriceSpecification | str | list[PriceSpecification | str] | None
+    ) = Field(default=None)
+    priceValidUntil: date | str | list[date | str] | None = Field(default=None)
+    review: Review | str | list[Review | str] | None = Field(default=None)
+    reviews: Review | str | list[Review | str] | None = Field(default=None)
+    seller: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    serialNumber: str | list[str] | None = Field(default=None)
+    shippingDetails: (
+        OfferShippingDetails | str | list[OfferShippingDetails | str] | None
+    ) = Field(default=None)
+    sku: str | list[str] | None = Field(default=None)
+    validForMemberTier: (
+        MemberProgramTier | str | list[MemberProgramTier | str] | None
+    ) = Field(default=None)
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    validThrough: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    warranty: WarrantyPromise | str | list[WarrantyPromise | str] | None = Field(
+        default=None
+    )
 
 
 class AggregateOffer(Offer):
@@ -1204,36 +1350,36 @@ class AggregateOffer(Offer):
     http://purl.org/goodrelations/v1#Sell if businessFunction is not explicitly defined."""
 
     type: str = Field(default="AggregateOffer", alias="@type")
+    highPrice: float | str | list[float | str] | None = Field(default=None)
+    lowPrice: float | str | list[float | str] | None = Field(default=None)
     offerCount: int | str | list[int | str] | None = Field(default=None)
-    lowPrice: str | float | list[str | float] | None = Field(default=None)
-    offers: Offer | Demand | str | list[Offer | Demand | str] | None = Field(
+    offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
         default=None
     )
-    highPrice: str | float | list[str | float] | None = Field(default=None)
 
 
 class Rating(Intangible):
     """A rating is an evaluation on a numeric scale, such as 1 to 5 stars."""
 
     type: str = Field(default="Rating", alias="@type")
-    worstRating: str | float | list[str | float] | None = Field(default=None)
     author: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
+    bestRating: float | str | list[float | str] | None = Field(default=None)
+    ratingExplanation: str | list[str] | None = Field(default=None)
+    ratingValue: float | str | list[float | str] | None = Field(default=None)
     reviewAspect: StructuredValue | str | list[StructuredValue | str] | None = Field(
         default=None
     )
-    bestRating: str | float | list[str | float] | None = Field(default=None)
-    ratingExplanation: str | list[str] | None = Field(default=None)
-    ratingValue: str | float | list[str | float] | None = Field(default=None)
+    worstRating: float | str | list[float | str] | None = Field(default=None)
 
 
 class AggregateRating(Rating):
     """The average rating based on multiple ratings or reviews."""
 
     type: str = Field(default="AggregateRating", alias="@type")
-    ratingCount: int | str | list[int | str] | None = Field(default=None)
     itemReviewed: Thing | str | list[Thing | str] | None = Field(default=None)
+    ratingCount: int | str | list[int | str] | None = Field(default=None)
     reviewCount: int | str | list[int | str] | None = Field(default=None)
 
 
@@ -1278,8 +1424,8 @@ class Airport(CivicStructure):
     """An airport."""
 
     type: str = Field(default="Airport", alias="@type")
-    icaoCode: str | list[str] | None = Field(default=None)
     iataCode: str | list[str] | None = Field(default=None)
+    icaoCode: str | list[str] | None = Field(default=None)
 
 
 class AlignmentObject(Intangible):
@@ -1289,10 +1435,10 @@ class AlignmentObject(Intangible):
     property, for example to express that a resource teaches or assesses a competency."""
 
     type: str = Field(default="AlignmentObject", alias="@type")
-    targetName: str | list[str] | None = Field(default=None)
-    educationalFramework: str | list[str] | None = Field(default=None)
     alignmentType: str | list[str] | None = Field(default=None)
+    educationalFramework: str | list[str] | None = Field(default=None)
     targetDescription: str | list[str] | None = Field(default=None)
+    targetName: str | list[str] | None = Field(default=None)
     targetUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
 
 
@@ -1304,40 +1450,12 @@ class MediaObject(CreativeWork):
     high and low bandwidth audio stream (2 AudioObject's)."""
 
     type: str = Field(default="MediaObject", alias="@type")
-    regionsAllowed: Place | str | list[Place | str] | None = Field(default=None)
     associatedArticle: NewsArticle | str | list[NewsArticle | str] | None = Field(
         default=None
     )
-    encodesCreativeWork: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    contentSize: str | list[str] | None = Field(default=None)
-    uploadDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    endTime: datetime | time | str | list[datetime | time | str] | None = Field(
-        default=None
-    )
     bitrate: str | list[str] | None = Field(default=None)
-    encodingFormat: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    width: (
-        QuantitativeValue
-        | Distance
-        | str
-        | list[QuantitativeValue | Distance | str]
-        | None
-    ) = Field(default=None)
-    sha256: str | list[str] | None = Field(default=None)
-    interpretedAsClaim: Claim | str | list[Claim | str] | None = Field(default=None)
+    contentSize: str | list[str] | None = Field(default=None)
     contentUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    productionCompany: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
-    embedUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    playerType: str | list[str] | None = Field(default=None)
-    requiresSubscription: (
-        MediaSubscription | bool | str | list[MediaSubscription | bool | str] | None
-    ) = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -1345,19 +1463,47 @@ class MediaObject(CreativeWork):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
+    embedUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    encodesCreativeWork: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
+    encodingFormat: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    endTime: datetime | time | str | list[datetime | time | str] | None = Field(
+        default=None
+    )
     height: (
-        QuantitativeValue
-        | Distance
+        Distance
+        | QuantitativeValue
         | str
-        | list[QuantitativeValue | Distance | str]
+        | list[Distance | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    ineligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
+    ineligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
         Field(default=None)
     )
+    interpretedAsClaim: Claim | str | list[Claim | str] | None = Field(default=None)
+    playerType: str | list[str] | None = Field(default=None)
+    productionCompany: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    regionsAllowed: Place | str | list[Place | str] | None = Field(default=None)
+    requiresSubscription: (
+        bool | MediaSubscription | str | list[bool | MediaSubscription | str] | None
+    ) = Field(default=None)
+    sha256: str | list[str] | None = Field(default=None)
     startTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
+    uploadDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    width: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
 
 
 class AmpStory(MediaObject, CreativeWork):
@@ -1382,10 +1528,10 @@ class NewsArticle(Article):
     """
 
     type: str = Field(default="NewsArticle", alias="@type")
+    dateline: str | list[str] | None = Field(default=None)
     printColumn: str | list[str] | None = Field(default=None)
     printEdition: str | list[str] | None = Field(default=None)
     printPage: str | list[str] | None = Field(default=None)
-    dateline: str | list[str] | None = Field(default=None)
     printSection: str | list[str] | None = Field(default=None)
 
 
@@ -1401,14 +1547,9 @@ class MedicalEntity(Thing):
     """The most generic type of entity related to health and the practice of medicine."""
 
     type: str = Field(default="MedicalEntity", alias="@type")
-    medicineSystem: MedicineSystem | str | list[MedicineSystem | str] | None = Field(
-        default=None
-    )
-    relevantSpecialty: MedicalSpecialty | str | list[MedicalSpecialty | str] | None = (
-        Field(default=None)
-    )
+    code: MedicalCode | str | list[MedicalCode | str] | None = Field(default=None)
     funding: Grant | str | list[Grant | str] | None = Field(default=None)
-    recognizingAuthority: Organization | str | list[Organization | str] | None = Field(
+    guideline: MedicalGuideline | str | list[MedicalGuideline | str] | None = Field(
         default=None
     )
     legalStatus: (
@@ -1418,11 +1559,16 @@ class MedicalEntity(Thing):
         | list[DrugLegalStatus | MedicalEnumeration | str]
         | None
     ) = Field(default=None)
-    study: MedicalStudy | str | list[MedicalStudy | str] | None = Field(default=None)
-    code: MedicalCode | str | list[MedicalCode | str] | None = Field(default=None)
-    guideline: MedicalGuideline | str | list[MedicalGuideline | str] | None = Field(
+    medicineSystem: MedicineSystem | str | list[MedicineSystem | str] | None = Field(
         default=None
     )
+    recognizingAuthority: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    relevantSpecialty: MedicalSpecialty | str | list[MedicalSpecialty | str] | None = (
+        Field(default=None)
+    )
+    study: MedicalStudy | str | list[MedicalStudy | str] | None = Field(default=None)
 
 
 class AnatomicalStructure(MedicalEntity):
@@ -1430,23 +1576,23 @@ class AnatomicalStructure(MedicalEntity):
     tissues, and cells are all anatomical structures."""
 
     type: str = Field(default="AnatomicalStructure", alias="@type")
-    subStructure: AnatomicalStructure | str | list[AnatomicalStructure | str] | None = (
-        Field(default=None)
-    )
+    associatedPathophysiology: str | list[str] | None = Field(default=None)
+    bodyLocation: str | list[str] | None = Field(default=None)
     connectedTo: AnatomicalStructure | str | list[AnatomicalStructure | str] | None = (
         Field(default=None)
     )
-    bodyLocation: str | list[str] | None = Field(default=None)
-    associatedPathophysiology: str | list[str] | None = Field(default=None)
-    relatedTherapy: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
+    diagram: ImageObject | str | list[ImageObject | str] | None = Field(default=None)
+    partOfSystem: AnatomicalSystem | str | list[AnatomicalSystem | str] | None = Field(
         default=None
     )
-    diagram: ImageObject | str | list[ImageObject | str] | None = Field(default=None)
     relatedCondition: MedicalCondition | str | list[MedicalCondition | str] | None = (
         Field(default=None)
     )
-    partOfSystem: AnatomicalSystem | str | list[AnatomicalSystem | str] | None = Field(
+    relatedTherapy: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
         default=None
+    )
+    subStructure: AnatomicalStructure | str | list[AnatomicalStructure | str] | None = (
+        Field(default=None)
     )
 
 
@@ -1459,12 +1605,6 @@ class AnatomicalSystem(MedicalEntity):
 
     type: str = Field(default="AnatomicalSystem", alias="@type")
     associatedPathophysiology: str | list[str] | None = Field(default=None)
-    relatedStructure: (
-        AnatomicalStructure | str | list[AnatomicalStructure | str] | None
-    ) = Field(default=None)
-    relatedTherapy: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
-        default=None
-    )
     comprisedOf: (
         AnatomicalStructure
         | AnatomicalSystem
@@ -1474,6 +1614,12 @@ class AnatomicalSystem(MedicalEntity):
     ) = Field(default=None)
     relatedCondition: MedicalCondition | str | list[MedicalCondition | str] | None = (
         Field(default=None)
+    )
+    relatedStructure: (
+        AnatomicalStructure | str | list[AnatomicalStructure | str] | None
+    ) = Field(default=None)
+    relatedTherapy: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
+        default=None
     )
 
 
@@ -1489,14 +1635,14 @@ class Comment(CreativeWork):
     all CreativeWorks."""
 
     type: str = Field(default="Comment", alias="@type")
+    downvoteCount: int | str | list[int | str] | None = Field(default=None)
+    parentItem: (
+        Comment | CreativeWork | str | list[Comment | CreativeWork | str] | None
+    ) = Field(default=None)
     sharedContent: CreativeWork | str | list[CreativeWork | str] | None = Field(
         default=None
     )
     upvoteCount: int | str | list[int | str] | None = Field(default=None)
-    downvoteCount: int | str | list[int | str] | None = Field(default=None)
-    parentItem: (
-        CreativeWork | Comment | str | list[CreativeWork | Comment | str] | None
-    ) = Field(default=None)
 
 
 class Answer(Comment):
@@ -1507,7 +1653,7 @@ class Answer(Comment):
         Comment | WebContent | str | list[Comment | WebContent | str] | None
     ) = Field(default=None)
     parentItem: (
-        CreativeWork | Comment | str | list[CreativeWork | Comment | str] | None
+        Comment | CreativeWork | str | list[Comment | CreativeWork | str] | None
     ) = Field(default=None)
 
 
@@ -1519,7 +1665,7 @@ class Apartment(Accommodation):
 
     type: str = Field(default="Apartment", alias="@type")
     numberOfRooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -1540,17 +1686,17 @@ class ApartmentComplex(Residence):
     """Residence type: Apartment complex."""
 
     type: str = Field(default="ApartmentComplex", alias="@type")
-    petsAllowed: str | bool | list[str | bool] | None = Field(default=None)
-    tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    numberOfAccommodationUnits: (
+        QuantitativeValue | str | list[QuantitativeValue | str] | None
+    ) = Field(default=None)
     numberOfAvailableAccommodationUnits: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
     numberOfBedrooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
-    numberOfAccommodationUnits: (
-        QuantitativeValue | str | list[QuantitativeValue | str] | None
-    ) = Field(default=None)
+    petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
+    tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
 
 
 class InsertAction(AddAction):
@@ -1604,7 +1750,7 @@ class ArchiveComponent(CreativeWork):
         ArchiveOrganization | str | list[ArchiveOrganization | str] | None
     ) = Field(default=None)
     itemLocation: (
-        str | PostalAddress | Place | list[str | PostalAddress | Place] | None
+        Place | PostalAddress | str | list[Place | PostalAddress | str] | None
     ) = Field(default=None)
 
 
@@ -1624,8 +1770,8 @@ class MoveAction(Action):
     rather than an inanimate object."""
 
     type: str = Field(default="MoveAction", alias="@type")
-    toLocation: Place | str | list[Place | str] | None = Field(default=None)
     fromLocation: Place | str | list[Place | str] | None = Field(default=None)
+    toLocation: Place | str | list[Place | str] | None = Field(default=None)
 
 
 class ArriveAction(MoveAction):
@@ -1671,18 +1817,18 @@ class CommunicateAction(InteractAction):
     (instrument) such as speech, email, or telephone conversation."""
 
     type: str = Field(default="CommunicateAction", alias="@type")
-    language: Language | str | list[Language | str] | None = Field(default=None)
     about: Thing | str | list[Thing | str] | None = Field(default=None)
+    inLanguage: Language | str | list[Language | str] | None = Field(default=None)
+    language: Language | str | list[Language | str] | None = Field(default=None)
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
-    inLanguage: str | Language | list[str | Language] | None = Field(default=None)
 
 
 class AskAction(CommunicateAction):
@@ -1744,8 +1890,8 @@ class AudioObject(MediaObject):
     """An audio file."""
 
     type: str = Field(default="AudioObject", alias="@type")
+    caption: MediaObject | str | list[MediaObject | str] | None = Field(default=None)
     embeddedTextCaption: str | list[str] | None = Field(default=None)
-    caption: str | MediaObject | list[str | MediaObject] | None = Field(default=None)
     transcript: str | list[str] | None = Field(default=None)
 
 
@@ -1764,20 +1910,19 @@ class Book(CreativeWork):
 
     type: str = Field(default="Book", alias="@type")
     abridged: bool | str | list[bool | str] | None = Field(default=None)
+    bookEdition: str | list[str] | None = Field(default=None)
     bookFormat: BookFormatType | str | list[BookFormatType | str] | None = Field(
         default=None
     )
-    bookEdition: str | list[str] | None = Field(default=None)
     illustrator: Person | str | list[Person | str] | None = Field(default=None)
-    numberOfPages: int | str | list[int | str] | None = Field(default=None)
     isbn: str | list[str] | None = Field(default=None)
+    numberOfPages: int | str | list[int | str] | None = Field(default=None)
 
 
 class Audiobook(Book, AudioObject):
     """An audiobook."""
 
     type: str = Field(default="Audiobook", alias="@type")
-    readBy: Person | str | list[Person | str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -1785,6 +1930,7 @@ class Audiobook(Book, AudioObject):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
+    readBy: Person | str | list[Person | str] | None = Field(default=None)
 
 
 class AuthenticateAction(ControlAction):
@@ -1798,12 +1944,12 @@ class AuthorizeAction(AllocateAction):
 
     type: str = Field(default="AuthorizeAction", alias="@type")
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
 
@@ -1878,15 +2024,15 @@ class FoodEstablishment(LocalBusiness):
     """A food-related business."""
 
     type: str = Field(default="FoodEstablishment", alias="@type")
-    servesCuisine: str | list[str] | None = Field(default=None)
+    acceptsReservations: bool | str | AnyUrl | list[bool | str | AnyUrl] | None = Field(
+        default=None
+    )
     hasMenu: Menu | str | AnyUrl | list[Menu | str | AnyUrl] | None = Field(
         default=None
     )
-    starRating: Rating | str | list[Rating | str] | None = Field(default=None)
     menu: Menu | str | AnyUrl | list[Menu | str | AnyUrl] | None = Field(default=None)
-    acceptsReservations: AnyUrl | bool | str | list[AnyUrl | bool | str] | None = Field(
-        default=None
-    )
+    servesCuisine: str | list[str] | None = Field(default=None)
+    starRating: Rating | str | list[Rating | str] | None = Field(default=None)
 
 
 class Bakery(FoodEstablishment):
@@ -1899,79 +2045,79 @@ class Service(Intangible):
     """A service provided by an organization, e.g. delivery service, print services, etc."""
 
     type: str = Field(default="Service", alias="@type")
-    hoursAvailable: (
-        OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
-    ) = Field(default=None)
-    availableChannel: ServiceChannel | str | list[ServiceChannel | str] | None = Field(
-        default=None
-    )
-    isSimilarTo: Service | Product | str | list[Service | Product | str] | None = Field(
-        default=None
-    )
-    providerMobility: str | list[str] | None = Field(default=None)
-    category: (
-        str
-        | AnyUrl
-        | Thing
-        | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
-        | None
-    ) = Field(default=None)
-    logo: AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None = Field(
-        default=None
-    )
-    produces: Thing | str | list[Thing | str] | None = Field(default=None)
-    serviceArea: (
-        GeoShape
-        | AdministrativeArea
-        | Place
-        | str
-        | list[GeoShape | AdministrativeArea | Place | str]
-        | None
-    ) = Field(default=None)
-    serviceAudience: Audience | str | list[Audience | str] | None = Field(default=None)
-    hasOfferCatalog: OfferCatalog | str | list[OfferCatalog | str] | None = Field(
-        default=None
-    )
-    review: Review | str | list[Review | str] | None = Field(default=None)
-    hasCertification: Certification | str | list[Certification | str] | None = Field(
-        default=None
-    )
-    offers: Offer | Demand | str | list[Offer | Demand | str] | None = Field(
-        default=None
-    )
-    provider: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
     aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
         default=None
     )
-    slogan: str | list[str] | None = Field(default=None)
-    isRelatedTo: Service | Product | str | list[Service | Product | str] | None = Field(
-        default=None
-    )
-    serviceOutput: Thing | str | list[Thing | str] | None = Field(default=None)
-    broker: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
+    areaServed: (
+        AdministrativeArea
+        | GeoShape
+        | Place
+        | str
+        | list[AdministrativeArea | GeoShape | Place | str]
+        | None
+    ) = Field(default=None)
     audience: Audience | str | list[Audience | str] | None = Field(default=None)
-    brand: Organization | Brand | str | list[Organization | Brand | str] | None = Field(
+    availableChannel: ServiceChannel | str | list[ServiceChannel | str] | None = Field(
         default=None
     )
     award: str | list[str] | None = Field(default=None)
-    termsOfService: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    areaServed: (
-        GeoShape
-        | AdministrativeArea
-        | Place
+    brand: Brand | Organization | str | list[Brand | Organization | str] | None = Field(
+        default=None
+    )
+    broker: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    category: (
+        CategoryCode
+        | PhysicalActivityCategory
         | str
-        | list[GeoShape | AdministrativeArea | Place | str]
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
         | None
     ) = Field(default=None)
+    hasCertification: Certification | str | list[Certification | str] | None = Field(
+        default=None
+    )
+    hasOfferCatalog: OfferCatalog | str | list[OfferCatalog | str] | None = Field(
+        default=None
+    )
+    hoursAvailable: (
+        OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
+    ) = Field(default=None)
+    isRelatedTo: Product | Service | str | list[Product | Service | str] | None = Field(
+        default=None
+    )
+    isSimilarTo: Product | Service | str | list[Product | Service | str] | None = Field(
+        default=None
+    )
+    logo: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
+        default=None
+    )
+    offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
+        default=None
+    )
+    produces: Thing | str | list[Thing | str] | None = Field(default=None)
+    provider: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    providerMobility: str | list[str] | None = Field(default=None)
+    review: Review | str | list[Review | str] | None = Field(default=None)
+    serviceArea: (
+        AdministrativeArea
+        | GeoShape
+        | Place
+        | str
+        | list[AdministrativeArea | GeoShape | Place | str]
+        | None
+    ) = Field(default=None)
+    serviceAudience: Audience | str | list[Audience | str] | None = Field(default=None)
+    serviceOutput: Thing | str | list[Thing | str] | None = Field(default=None)
     serviceType: (
         GovernmentBenefitsType | str | list[GovernmentBenefitsType | str] | None
     ) = Field(default=None)
+    slogan: str | list[str] | None = Field(default=None)
+    termsOfService: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
 
 
 class FinancialProduct(Service):
@@ -1980,15 +2126,15 @@ class FinancialProduct(Service):
     investment companies which comprise the financial services industry."""
 
     type: str = Field(default="FinancialProduct", alias="@type")
-    interestRate: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
     annualPercentageRate: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
     feesAndCommissionsSpecification: str | AnyUrl | list[str | AnyUrl] | None = Field(
         default=None
     )
+    interestRate: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
 
 
 class BankAccount(FinancialProduct):
@@ -2021,8 +2167,8 @@ class ImageObject(MediaObject):
     """An image file."""
 
     type: str = Field(default="ImageObject", alias="@type")
+    caption: MediaObject | str | list[MediaObject | str] | None = Field(default=None)
     embeddedTextCaption: str | list[str] | None = Field(default=None)
-    caption: str | MediaObject | list[str | MediaObject] | None = Field(default=None)
     exifData: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
     )
@@ -2057,14 +2203,6 @@ class LodgingBusiness(LocalBusiness):
     """A lodging business, such as a motel, hotel, or inn."""
 
     type: str = Field(default="LodgingBusiness", alias="@type")
-    availableLanguage: str | Language | list[str | Language] | None = Field(
-        default=None
-    )
-    numberOfRooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
-    starRating: Rating | str | list[Rating | str] | None = Field(default=None)
-    petsAllowed: str | bool | list[str | bool] | None = Field(default=None)
     amenityFeature: (
         LocationFeatureSpecification
         | str
@@ -2072,12 +2210,20 @@ class LodgingBusiness(LocalBusiness):
         | None
     ) = Field(default=None)
     audience: Audience | str | list[Audience | str] | None = Field(default=None)
-    checkoutTime: datetime | time | str | list[datetime | time | str] | None = Field(
+    availableLanguage: Language | str | list[Language | str] | None = Field(
         default=None
     )
     checkinTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
+    checkoutTime: datetime | time | str | list[datetime | time | str] | None = Field(
+        default=None
+    )
+    numberOfRooms: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
+    starRating: Rating | str | list[Rating | str] | None = Field(default=None)
 
 
 class BedAndBreakfast(LodgingBusiness):
@@ -2106,38 +2252,20 @@ class QualitativeValue(Enumeration):
     or the garment sizes 'S', 'M', 'L', and 'XL'."""
 
     type: str = Field(default="QualitativeValue", alias="@type")
-    lesser: QualitativeValue | str | list[QualitativeValue | str] | None = Field(
-        default=None
-    )
     additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
     )
-    valueReference: (
-        StructuredValue
-        | str
-        | QualitativeValue
-        | PropertyValue
-        | MeasurementTypeEnumeration
-        | QuantitativeValue
-        | DefinedTerm
-        | Enumeration
-        | list[
-            StructuredValue
-            | str
-            | QualitativeValue
-            | PropertyValue
-            | MeasurementTypeEnumeration
-            | QuantitativeValue
-            | DefinedTerm
-            | Enumeration
-        ]
-        | None
-    ) = Field(default=None)
+    equal: QualitativeValue | str | list[QualitativeValue | str] | None = Field(
+        default=None
+    )
     greater: QualitativeValue | str | list[QualitativeValue | str] | None = Field(
         default=None
     )
     greaterOrEqual: QualitativeValue | str | list[QualitativeValue | str] | None = (
         Field(default=None)
+    )
+    lesser: QualitativeValue | str | list[QualitativeValue | str] | None = Field(
+        default=None
     )
     lesserOrEqual: QualitativeValue | str | list[QualitativeValue | str] | None = Field(
         default=None
@@ -2145,9 +2273,27 @@ class QualitativeValue(Enumeration):
     nonEqual: QualitativeValue | str | list[QualitativeValue | str] | None = Field(
         default=None
     )
-    equal: QualitativeValue | str | list[QualitativeValue | str] | None = Field(
-        default=None
-    )
+    valueReference: (
+        DefinedTerm
+        | Enumeration
+        | MeasurementTypeEnumeration
+        | PropertyValue
+        | QualitativeValue
+        | QuantitativeValue
+        | StructuredValue
+        | str
+        | list[
+            DefinedTerm
+            | Enumeration
+            | MeasurementTypeEnumeration
+            | PropertyValue
+            | QualitativeValue
+            | QuantitativeValue
+            | StructuredValue
+            | str
+        ]
+        | None
+    ) = Field(default=None)
 
 
 class BedType(QualitativeValue):
@@ -2176,64 +2322,64 @@ class BioChemEntity(Thing):
     chemical; a synthetic chemical."""
 
     type: str = Field(default="BioChemEntity", alias="@type")
-    hasRepresentation: (
-        str | AnyUrl | PropertyValue | list[str | AnyUrl | PropertyValue] | None
-    ) = Field(default=None)
-    hasMolecularFunction: (
-        PropertyValue
-        | DefinedTerm
+    associatedDisease: (
+        MedicalCondition
+        | PropertyValue
         | AnyUrl
         | str
-        | list[PropertyValue | DefinedTerm | AnyUrl | str]
+        | list[MedicalCondition | PropertyValue | AnyUrl | str]
         | None
     ) = Field(default=None)
     bioChemInteraction: BioChemEntity | str | list[BioChemEntity | str] | None = Field(
         default=None
     )
-    isInvolvedInBiologicalProcess: (
-        PropertyValue
-        | DefinedTerm
+    bioChemSimilarity: BioChemEntity | str | list[BioChemEntity | str] | None = Field(
+        default=None
+    )
+    biologicalRole: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
+    funding: Grant | str | list[Grant | str] | None = Field(default=None)
+    hasBioChemEntityPart: BioChemEntity | str | list[BioChemEntity | str] | None = (
+        Field(default=None)
+    )
+    hasMolecularFunction: (
+        DefinedTerm
+        | PropertyValue
         | AnyUrl
         | str
-        | list[PropertyValue | DefinedTerm | AnyUrl | str]
+        | list[DefinedTerm | PropertyValue | AnyUrl | str]
         | None
     ) = Field(default=None)
-    taxonomicRange: (
+    hasRepresentation: (
+        PropertyValue | str | AnyUrl | list[PropertyValue | str | AnyUrl] | None
+    ) = Field(default=None)
+    isEncodedByBioChemEntity: Gene | str | list[Gene | str] | None = Field(default=None)
+    isInvolvedInBiologicalProcess: (
         DefinedTerm
-        | str
+        | PropertyValue
         | AnyUrl
-        | Taxon
-        | list[DefinedTerm | str | AnyUrl | Taxon]
+        | str
+        | list[DefinedTerm | PropertyValue | AnyUrl | str]
         | None
     ) = Field(default=None)
     isLocatedInSubcellularLocation: (
         DefinedTerm
-        | AnyUrl
         | PropertyValue
+        | AnyUrl
         | str
-        | list[DefinedTerm | AnyUrl | PropertyValue | str]
+        | list[DefinedTerm | PropertyValue | AnyUrl | str]
         | None
     ) = Field(default=None)
-    funding: Grant | str | list[Grant | str] | None = Field(default=None)
-    biologicalRole: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
-        default=None
-    )
     isPartOfBioChemEntity: BioChemEntity | str | list[BioChemEntity | str] | None = (
         Field(default=None)
     )
-    isEncodedByBioChemEntity: Gene | str | list[Gene | str] | None = Field(default=None)
-    hasBioChemEntityPart: BioChemEntity | str | list[BioChemEntity | str] | None = (
-        Field(default=None)
-    )
-    bioChemSimilarity: BioChemEntity | str | list[BioChemEntity | str] | None = Field(
-        default=None
-    )
-    associatedDisease: (
-        PropertyValue
-        | MedicalCondition
-        | AnyUrl
+    taxonomicRange: (
+        DefinedTerm
+        | Taxon
         | str
-        | list[PropertyValue | MedicalCondition | AnyUrl | str]
+        | AnyUrl
+        | list[DefinedTerm | Taxon | str | AnyUrl]
         | None
     ) = Field(default=None)
 
@@ -2269,19 +2415,19 @@ class MedicalTest(MedicalEntity):
     """Any medical test, typically performed for diagnostic purposes."""
 
     type: str = Field(default="MedicalTest", alias="@type")
-    usedToDiagnose: MedicalCondition | str | list[MedicalCondition | str] | None = (
+    affectedBy: Drug | str | list[Drug | str] | None = Field(default=None)
+    normalRange: MedicalEnumeration | str | list[MedicalEnumeration | str] | None = (
         Field(default=None)
     )
     signDetected: MedicalSign | str | list[MedicalSign | str] | None = Field(
         default=None
     )
+    usedToDiagnose: MedicalCondition | str | list[MedicalCondition | str] | None = (
+        Field(default=None)
+    )
     usesDevice: MedicalDevice | str | list[MedicalDevice | str] | None = Field(
         default=None
     )
-    normalRange: MedicalEnumeration | str | list[MedicalEnumeration | str] | None = (
-        Field(default=None)
-    )
-    affectedBy: Drug | str | list[Drug | str] | None = Field(default=None)
 
 
 class BloodTest(MedicalTest):
@@ -2303,11 +2449,14 @@ class Reservation(Intangible):
     offers of tickets, restaurant reservations, flights, or rental cars, use Offer."""
 
     type: str = Field(default="Reservation", alias="@type")
-    reservedTicket: Ticket | str | list[Ticket | str] | None = Field(default=None)
-    totalPrice: (
-        PriceSpecification | str | float | list[PriceSpecification | str | float] | None
+    bookingAgent: (
+        Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
     bookingTime: datetime | str | list[datetime | str] | None = Field(default=None)
+    broker: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    modifiedTime: datetime | str | list[datetime | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     programMembershipUsed: (
         ProgramMembership | str | list[ProgramMembership | str] | None
@@ -2315,21 +2464,18 @@ class Reservation(Intangible):
     provider: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
+    reservationFor: Thing | str | list[Thing | str] | None = Field(default=None)
     reservationId: str | list[str] | None = Field(default=None)
-    underName: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    broker: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
     reservationStatus: (
         ReservationStatusType | str | list[ReservationStatusType | str] | None
     ) = Field(default=None)
-    reservationFor: Thing | str | list[Thing | str] | None = Field(default=None)
-    bookingAgent: (
+    reservedTicket: Ticket | str | list[Ticket | str] | None = Field(default=None)
+    totalPrice: (
+        float | PriceSpecification | str | list[float | PriceSpecification | str] | None
+    ) = Field(default=None)
+    underName: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    modifiedTime: datetime | str | list[datetime | str] | None = Field(default=None)
 
 
 class BoatReservation(Reservation):
@@ -2352,24 +2498,24 @@ class Trip(Intangible):
     """A trip or journey. An itinerary of visits to one or more places."""
 
     type: str = Field(default="Trip", alias="@type")
-    subTrip: Trip | str | list[Trip | str] | None = Field(default=None)
-    itinerary: Place | ItemList | str | list[Place | ItemList | str] | None = Field(
-        default=None
-    )
     arrivalTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
-    tripOrigin: Place | str | list[Place | str] | None = Field(default=None)
     departureTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
-    offers: Offer | Demand | str | list[Offer | Demand | str] | None = Field(
+    itinerary: ItemList | Place | str | list[ItemList | Place | str] | None = Field(
         default=None
     )
+    offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
+        default=None
+    )
+    partOfTrip: Trip | str | list[Trip | str] | None = Field(default=None)
     provider: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    partOfTrip: Trip | str | list[Trip | str] | None = Field(default=None)
+    subTrip: Trip | str | list[Trip | str] | None = Field(default=None)
+    tripOrigin: Place | str | list[Place | str] | None = Field(default=None)
 
 
 class BoatTrip(Trip):
@@ -2449,13 +2595,13 @@ class CreativeWorkSeries(Series, CreativeWork):
     """
 
     type: str = Field(default="CreativeWorkSeries", alias="@type")
-    endDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    startDate: date | datetime | str | list[date | datetime | str] | None = Field(
+    endDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
     issn: str | list[str] | None = Field(default=None)
+    startDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
 
 
 class BookSeries(CreativeWorkSeries):
@@ -2487,8 +2633,8 @@ class TransferAction(Action):
     from one place to another."""
 
     type: str = Field(default="TransferAction", alias="@type")
-    toLocation: Place | str | list[Place | str] | None = Field(default=None)
     fromLocation: Place | str | list[Place | str] | None = Field(default=None)
+    toLocation: Place | str | list[Place | str] | None = Field(default=None)
 
 
 class BorrowAction(TransferAction):
@@ -2497,7 +2643,7 @@ class BorrowAction(TransferAction):
     BorrowAction."""
 
     type: str = Field(default="BorrowAction", alias="@type")
-    lender: Person | Organization | str | list[Person | Organization | str] | None = (
+    lender: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
 
@@ -2526,13 +2672,13 @@ class Brand(Intangible):
     product group, or similar."""
 
     type: str = Field(default="Brand", alias="@type")
-    logo: AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None = Field(
-        default=None
-    )
-    review: Review | str | list[Review | str] | None = Field(default=None)
     aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
         default=None
     )
+    logo: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
+        default=None
+    )
+    review: Review | str | list[Review | str] | None = Field(default=None)
     slogan: str | list[str] | None = Field(default=None)
 
 
@@ -2542,14 +2688,14 @@ class ItemList(Intangible):
     for formatting."""
 
     type: str = Field(default="ItemList", alias="@type")
-    numberOfItems: int | str | list[int | str] | None = Field(default=None)
     aggregateElement: Thing | str | list[Thing | str] | None = Field(default=None)
-    itemListElement: str | Thing | ListItem | list[str | Thing | ListItem] | None = (
+    itemListElement: ListItem | str | Thing | list[ListItem | str | Thing] | None = (
         Field(default=None)
     )
-    itemListOrder: str | ItemListOrderType | list[str | ItemListOrderType] | None = (
+    itemListOrder: ItemListOrderType | str | list[ItemListOrderType | str] | None = (
         Field(default=None)
     )
+    numberOfItems: int | str | list[int | str] | None = Field(default=None)
 
 
 class BreadcrumbList(ItemList):
@@ -2585,96 +2731,30 @@ class Event(Thing):
     events may be structured as separate Event objects."""
 
     type: str = Field(default="Event", alias="@type")
-    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
+    about: Thing | str | list[Thing | str] | None = Field(default=None)
+    actor: (
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
+    ) = Field(default=None)
+    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
+        default=None
+    )
+    attendee: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    attendees: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    audience: Audience | str | list[Audience | str] | None = Field(default=None)
+    composer: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
     contributor: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    typicalAgeRange: str | list[str] | None = Field(default=None)
-    funder: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    maximumAttendeeCapacity: int | str | list[int | str] | None = Field(default=None)
-    previousStartDate: datetime | date | str | list[datetime | date | str] | None = (
-        Field(default=None)
-    )
-    actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
-    ) = Field(default=None)
-    organizer: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
-        Field(default=None)
-    )
-    composer: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    funding: Grant | str | list[Grant | str] | None = Field(default=None)
-    location: (
-        str
-        | PostalAddress
-        | VirtualLocation
-        | Place
-        | list[str | PostalAddress | VirtualLocation | Place]
-        | None
-    ) = Field(default=None)
-    attendee: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    review: Review | str | list[Review | str] | None = Field(default=None)
-    eventAttendanceMode: (
-        EventAttendanceModeEnumeration
-        | str
-        | list[EventAttendanceModeEnumeration | str]
-        | None
-    ) = Field(default=None)
-    maximumVirtualAttendeeCapacity: int | str | list[int | str] | None = Field(
-        default=None
-    )
-    subEvent: Event | str | list[Event | str] | None = Field(default=None)
-    workFeatured: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
+    director: Person | str | list[Person | str] | None = Field(default=None)
     doorTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
-    performers: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    eventStatus: EventStatusType | str | list[EventStatusType | str] | None = Field(
-        default=None
-    )
-    remainingAttendeeCapacity: int | str | list[int | str] | None = Field(default=None)
-    workPerformed: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    offers: Offer | Demand | str | list[Offer | Demand | str] | None = Field(
-        default=None
-    )
-    eventSchedule: Schedule | str | list[Schedule | str] | None = Field(default=None)
-    maximumPhysicalAttendeeCapacity: int | str | list[int | str] | None = Field(
-        default=None
-    )
-    endDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    about: Thing | str | list[Thing | str] | None = Field(default=None)
-    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
-        default=None
-    )
-    recordedIn: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    superEvent: Event | str | list[Event | str] | None = Field(default=None)
-    startDate: date | datetime | str | list[date | datetime | str] | None = Field(
-        default=None
-    )
-    hasSponsorshipOffer: Offer | str | list[Offer | str] | None = Field(default=None)
-    audience: Audience | str | list[Audience | str] | None = Field(default=None)
-    director: Person | str | list[Person | str] | None = Field(default=None)
-    subEvents: Event | str | list[Event | str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -2682,18 +2762,84 @@ class Event(Thing):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
+    endDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    eventAttendanceMode: (
+        EventAttendanceModeEnumeration
+        | str
+        | list[EventAttendanceModeEnumeration | str]
+        | None
+    ) = Field(default=None)
+    eventSchedule: Schedule | str | list[Schedule | str] | None = Field(default=None)
+    eventStatus: EventStatusType | str | list[EventStatusType | str] | None = Field(
+        default=None
+    )
+    funder: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    funding: Grant | str | list[Grant | str] | None = Field(default=None)
     hasParticipationOffer: Offer | str | list[Offer | str] | None = Field(default=None)
-    attendees: (
+    hasSponsorshipOffer: Offer | str | list[Offer | str] | None = Field(default=None)
+    inLanguage: Language | str | list[Language | str] | None = Field(default=None)
+    isAccessibleForFree: bool | str | list[bool | str] | None = Field(default=None)
+    keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
+        Field(default=None)
+    )
+    location: (
+        Place
+        | PostalAddress
+        | str
+        | VirtualLocation
+        | list[Place | PostalAddress | str | VirtualLocation]
+        | None
+    ) = Field(default=None)
+    maximumAttendeeCapacity: int | str | list[int | str] | None = Field(default=None)
+    maximumPhysicalAttendeeCapacity: int | str | list[int | str] | None = Field(
+        default=None
+    )
+    maximumVirtualAttendeeCapacity: int | str | list[int | str] | None = Field(
+        default=None
+    )
+    offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
+        default=None
+    )
+    organizer: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
     performer: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    isAccessibleForFree: bool | str | list[bool | str] | None = Field(default=None)
-    inLanguage: str | Language | list[str | Language] | None = Field(default=None)
+    performers: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    previousStartDate: date | datetime | str | list[date | datetime | str] | None = (
+        Field(default=None)
+    )
+    recordedIn: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
+    remainingAttendeeCapacity: int | str | list[int | str] | None = Field(default=None)
+    review: Review | str | list[Review | str] | None = Field(default=None)
+    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    startDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    subEvent: Event | str | list[Event | str] | None = Field(default=None)
+    subEvents: Event | str | list[Event | str] | None = Field(default=None)
+    superEvent: Event | str | list[Event | str] | None = Field(default=None)
     translator: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
+    typicalAgeRange: str | list[str] | None = Field(default=None)
+    workFeatured: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
+    workPerformed: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
 
 
 class PublicationEvent(Event):
@@ -2702,13 +2848,13 @@ class PublicationEvent(Event):
     publication via a variety of delivery media."""
 
     type: str = Field(default="PublicationEvent", alias="@type")
-    publishedOn: BroadcastService | str | list[BroadcastService | str] | None = Field(
-        default=None
-    )
     free: bool | str | list[bool | str] | None = Field(default=None)
     publishedBy: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
+    publishedOn: BroadcastService | str | list[BroadcastService | str] | None = Field(
+        default=None
+    )
 
 
 class BroadcastEvent(PublicationEvent):
@@ -2716,9 +2862,9 @@ class BroadcastEvent(PublicationEvent):
 
     type: str = Field(default="BroadcastEvent", alias="@type")
     broadcastOfEvent: Event | str | list[Event | str] | None = Field(default=None)
-    subtitleLanguage: str | Language | list[str | Language] | None = Field(default=None)
-    videoFormat: str | list[str] | None = Field(default=None)
     isLiveBroadcast: bool | str | list[bool | str] | None = Field(default=None)
+    subtitleLanguage: Language | str | list[Language | str] | None = Field(default=None)
+    videoFormat: str | list[str] | None = Field(default=None)
 
 
 class BroadcastFrequencySpecification(Intangible):
@@ -2726,12 +2872,12 @@ class BroadcastFrequencySpecification(Intangible):
 
     type: str = Field(default="BroadcastFrequencySpecification", alias="@type")
     broadcastFrequencyValue: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
-    broadcastSubChannel: str | list[str] | None = Field(default=None)
     broadcastSignalModulation: (
         QualitativeValue | str | list[QualitativeValue | str] | None
     ) = Field(default=None)
+    broadcastSubChannel: str | list[str] | None = Field(default=None)
 
 
 class BroadcastService(Service):
@@ -2739,30 +2885,30 @@ class BroadcastService(Service):
     online."""
 
     type: str = Field(default="BroadcastService", alias="@type")
-    hasBroadcastChannel: (
-        BroadcastChannel | str | list[BroadcastChannel | str] | None
-    ) = Field(default=None)
-    callSign: str | list[str] | None = Field(default=None)
+    area: Place | str | list[Place | str] | None = Field(default=None)
     broadcastAffiliateOf: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
-    broadcaster: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
-    videoFormat: str | list[str] | None = Field(default=None)
-    parentService: BroadcastService | str | list[BroadcastService | str] | None = Field(
         default=None
     )
     broadcastDisplayName: str | list[str] | None = Field(default=None)
     broadcastFrequency: (
-        str
-        | BroadcastFrequencySpecification
-        | list[str | BroadcastFrequencySpecification]
+        BroadcastFrequencySpecification
+        | str
+        | list[BroadcastFrequencySpecification | str]
         | None
     ) = Field(default=None)
-    area: Place | str | list[Place | str] | None = Field(default=None)
-    inLanguage: str | Language | list[str | Language] | None = Field(default=None)
     broadcastTimezone: str | list[str] | None = Field(default=None)
+    broadcaster: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    callSign: str | list[str] | None = Field(default=None)
+    hasBroadcastChannel: (
+        BroadcastChannel | str | list[BroadcastChannel | str] | None
+    ) = Field(default=None)
+    inLanguage: Language | str | list[Language | str] | None = Field(default=None)
+    parentService: BroadcastService | str | list[BroadcastService | str] | None = Field(
+        default=None
+    )
+    videoFormat: str | list[str] | None = Field(default=None)
 
 
 class InvestmentOrDeposit(FinancialProduct):
@@ -2799,52 +2945,89 @@ class Product(Thing):
     rental of a car; a haircut; or an episode of a TV show streamed online."""
 
     type: str = Field(default="Product", alias="@type")
-    isConsumableFor: Product | str | list[Product | str] | None = Field(default=None)
-    isSimilarTo: Service | Product | str | list[Service | Product | str] | None = Field(
-        default=None
-    )
-    category: (
-        str
-        | AnyUrl
-        | Thing
-        | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
-        | None
-    ) = Field(default=None)
-    logo: AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None = Field(
-        default=None
-    )
-    mpn: str | list[str] | None = Field(default=None)
-    gtin12: str | list[str] | None = Field(default=None)
-    gtin8: str | list[str] | None = Field(default=None)
-    displayLocation: Place | str | list[Place | str] | None = Field(default=None)
-    nsn: str | list[str] | None = Field(default=None)
-    countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
-    reviews: Review | str | list[Review | str] | None = Field(default=None)
-    isVariantOf: (
-        ProductModel
-        | ProductGroup
-        | str
-        | list[ProductModel | ProductGroup | str]
-        | None
-    ) = Field(default=None)
-    size: (
-        DefinedTerm
-        | QuantitativeValue
-        | SizeSpecification
-        | str
-        | list[DefinedTerm | QuantitativeValue | SizeSpecification | str]
-        | None
-    ) = Field(default=None)
     additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
     )
-    width: (
-        QuantitativeValue
-        | Distance
+    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
+        default=None
+    )
+    asin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    audience: Audience | str | list[Audience | str] | None = Field(default=None)
+    award: str | list[str] | None = Field(default=None)
+    awards: str | list[str] | None = Field(default=None)
+    brand: Brand | Organization | str | list[Brand | Organization | str] | None = Field(
+        default=None
+    )
+    category: (
+        CategoryCode
+        | PhysicalActivityCategory
         | str
-        | list[QuantitativeValue | Distance | str]
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
+        | None
+    ) = Field(default=None)
+    color: str | list[str] | None = Field(default=None)
+    colorSwatch: (
+        ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None
+    ) = Field(default=None)
+    countryOfAssembly: str | list[str] | None = Field(default=None)
+    countryOfLastProcessing: str | list[str] | None = Field(default=None)
+    countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
+    depth: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
+    displayLocation: Place | str | list[Place | str] | None = Field(default=None)
+    funding: Grant | str | list[Grant | str] | None = Field(default=None)
+    gtin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    gtin12: str | list[str] | None = Field(default=None)
+    gtin13: str | list[str] | None = Field(default=None)
+    gtin14: str | list[str] | None = Field(default=None)
+    gtin8: str | list[str] | None = Field(default=None)
+    hasAdultConsideration: (
+        AdultOrientedEnumeration | str | list[AdultOrientedEnumeration | str] | None
+    ) = Field(default=None)
+    hasCertification: Certification | str | list[Certification | str] | None = Field(
+        default=None
+    )
+    hasEnergyConsumptionDetails: (
+        EnergyConsumptionDetails | str | list[EnergyConsumptionDetails | str] | None
+    ) = Field(default=None)
+    hasGS1DigitalLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    hasMeasurement: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    hasMerchantReturnPolicy: (
+        MerchantReturnPolicy | str | list[MerchantReturnPolicy | str] | None
+    ) = Field(default=None)
+    height: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
+    inProductGroupWithID: str | list[str] | None = Field(default=None)
+    isAccessoryOrSparePartFor: Product | str | list[Product | str] | None = Field(
+        default=None
+    )
+    isConsumableFor: Product | str | list[Product | str] | None = Field(default=None)
+    isFamilyFriendly: bool | str | list[bool | str] | None = Field(default=None)
+    isRelatedTo: Product | Service | str | list[Product | Service | str] | None = Field(
+        default=None
+    )
+    isSimilarTo: Product | Service | str | list[Product | Service | str] | None = Field(
+        default=None
+    )
+    isVariantOf: (
+        ProductGroup
+        | ProductModel
+        | str
+        | list[ProductGroup | ProductModel | str]
         | None
     ) = Field(default=None)
     itemCondition: OfferItemCondition | str | list[OfferItemCondition | str] | None = (
@@ -2853,56 +3036,18 @@ class Product(Thing):
     keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
         Field(default=None)
     )
+    logo: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
+        default=None
+    )
     manufacturer: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
-    depth: (
-        QuantitativeValue
-        | Distance
-        | str
-        | list[QuantitativeValue | Distance | str]
-        | None
-    ) = Field(default=None)
-    sku: str | list[str] | None = Field(default=None)
-    weight: (
-        QuantitativeValue | Mass | str | list[QuantitativeValue | Mass | str] | None
-    ) = Field(default=None)
-    funding: Grant | str | list[Grant | str] | None = Field(default=None)
-    hasEnergyConsumptionDetails: (
-        EnergyConsumptionDetails | str | list[EnergyConsumptionDetails | str] | None
-    ) = Field(default=None)
-    asin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    review: Review | str | list[Review | str] | None = Field(default=None)
-    isFamilyFriendly: bool | str | list[bool | str] | None = Field(default=None)
-    hasCertification: Certification | str | list[Certification | str] | None = Field(
+    material: Product | str | AnyUrl | list[Product | str | AnyUrl] | None = Field(
         default=None
     )
-    gtin13: str | list[str] | None = Field(default=None)
-    color: str | list[str] | None = Field(default=None)
-    hasMerchantReturnPolicy: (
-        MerchantReturnPolicy | str | list[MerchantReturnPolicy | str] | None
-    ) = Field(default=None)
-    awards: str | list[str] | None = Field(default=None)
-    countryOfLastProcessing: str | list[str] | None = Field(default=None)
-    productID: str | list[str] | None = Field(default=None)
-    purchaseDate: date | str | list[date | str] | None = Field(default=None)
-    positiveNotes: (
-        WebContent
-        | ItemList
-        | ListItem
-        | str
-        | list[WebContent | ItemList | ListItem | str]
-        | None
-    ) = Field(default=None)
-    offers: Offer | Demand | str | list[Offer | Demand | str] | None = Field(
-        default=None
-    )
-    hasGS1DigitalLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    gtin14: str | list[str] | None = Field(default=None)
     mobileUrl: str | list[str] | None = Field(default=None)
-    aggregateRating: AggregateRating | str | list[AggregateRating | str] | None = Field(
-        default=None
-    )
+    model: ProductModel | str | list[ProductModel | str] | None = Field(default=None)
+    mpn: str | list[str] | None = Field(default=None)
     negativeNotes: (
         ItemList
         | ListItem
@@ -2911,44 +3056,45 @@ class Product(Thing):
         | list[ItemList | ListItem | str | WebContent]
         | None
     ) = Field(default=None)
-    slogan: str | list[str] | None = Field(default=None)
-    isRelatedTo: Service | Product | str | list[Service | Product | str] | None = Field(
-        default=None
-    )
-    model: str | ProductModel | list[str | ProductModel] | None = Field(default=None)
-    audience: Audience | str | list[Audience | str] | None = Field(default=None)
-    material: str | Product | AnyUrl | list[str | Product | AnyUrl] | None = Field(
+    nsn: str | list[str] | None = Field(default=None)
+    offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
         default=None
     )
     pattern: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
-    gtin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    colorSwatch: (
-        AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None
-    ) = Field(default=None)
-    inProductGroupWithID: str | list[str] | None = Field(default=None)
-    countryOfAssembly: str | list[str] | None = Field(default=None)
-    brand: Organization | Brand | str | list[Organization | Brand | str] | None = Field(
-        default=None
-    )
-    award: str | list[str] | None = Field(default=None)
-    releaseDate: date | str | list[date | str] | None = Field(default=None)
-    height: (
-        QuantitativeValue
-        | Distance
+    positiveNotes: (
+        ItemList
+        | ListItem
         | str
-        | list[QuantitativeValue | Distance | str]
+        | WebContent
+        | list[ItemList | ListItem | str | WebContent]
         | None
     ) = Field(default=None)
-    hasAdultConsideration: (
-        AdultOrientedEnumeration | str | list[AdultOrientedEnumeration | str] | None
-    ) = Field(default=None)
+    productID: str | list[str] | None = Field(default=None)
     productionDate: date | str | list[date | str] | None = Field(default=None)
-    hasMeasurement: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    isAccessoryOrSparePartFor: Product | str | list[Product | str] | None = Field(
-        default=None
-    )
+    purchaseDate: date | str | list[date | str] | None = Field(default=None)
+    releaseDate: date | str | list[date | str] | None = Field(default=None)
+    review: Review | str | list[Review | str] | None = Field(default=None)
+    reviews: Review | str | list[Review | str] | None = Field(default=None)
+    size: (
+        DefinedTerm
+        | QuantitativeValue
+        | SizeSpecification
+        | str
+        | list[DefinedTerm | QuantitativeValue | SizeSpecification | str]
+        | None
+    ) = Field(default=None)
+    sku: str | list[str] | None = Field(default=None)
+    slogan: str | list[str] | None = Field(default=None)
+    weight: (
+        Mass | QuantitativeValue | str | list[Mass | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    width: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
 
 
 class Vehicle(Product):
@@ -2956,102 +3102,102 @@ class Vehicle(Product):
     land, water, air, or through space."""
 
     type: str = Field(default="Vehicle", alias="@type")
-    speed: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
-        default=None
-    )
-    callSign: str | list[str] | None = Field(default=None)
-    numberOfForwardGears: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
-    numberOfAirbags: str | float | list[str | float] | None = Field(default=None)
-    fuelEfficiency: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    vehicleInteriorColor: str | list[str] | None = Field(default=None)
-    knownVehicleDamages: str | list[str] | None = Field(default=None)
-    vehicleSpecialUsage: str | CarUsageType | list[str | CarUsageType] | None = Field(
-        default=None
-    )
-    seatingCapacity: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
     accelerationTime: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
-    vehicleInteriorType: str | list[str] | None = Field(default=None)
-    meetsEmissionStandard: (
-        str | AnyUrl | QualitativeValue | list[str | AnyUrl | QualitativeValue] | None
+    bodyType: (
+        QualitativeValue | str | AnyUrl | list[QualitativeValue | str | AnyUrl] | None
     ) = Field(default=None)
-    numberOfPreviousOwners: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
+    callSign: str | list[str] | None = Field(default=None)
+    cargoVolume: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
     dateVehicleFirstRegistered: date | str | list[date | str] | None = Field(
         default=None
     )
-    trailerWeight: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    vehicleTransmission: (
-        str | AnyUrl | QualitativeValue | list[str | AnyUrl | QualitativeValue] | None
-    ) = Field(default=None)
-    vehicleSeatingCapacity: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
-    fuelConsumption: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    vehicleConfiguration: str | list[str] | None = Field(default=None)
-    mileageFromOdometer: (
-        QuantitativeValue | str | list[QuantitativeValue | str] | None
-    ) = Field(default=None)
     driveWheelConfiguration: (
         DriveWheelConfigurationValue
         | str
         | list[DriveWheelConfigurationValue | str]
         | None
     ) = Field(default=None)
-    vehicleEngine: (
-        EngineSpecification | str | list[EngineSpecification | str] | None
-    ) = Field(default=None)
-    bodyType: (
-        str | AnyUrl | QualitativeValue | list[str | AnyUrl | QualitativeValue] | None
-    ) = Field(default=None)
-    cargoVolume: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
-        default=None
-    )
+    emissionsCO2: float | str | list[float | str] | None = Field(default=None)
     fuelCapacity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
-    emissionsCO2: float | str | list[float | str] | None = Field(default=None)
-    purchaseDate: date | str | list[date | str] | None = Field(default=None)
-    payload: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
-        default=None
+    fuelConsumption: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
     )
-    weightTotal: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
-        default=None
+    fuelEfficiency: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
     )
     fuelType: (
         QualitativeValue | str | AnyUrl | list[QualitativeValue | str | AnyUrl] | None
     ) = Field(default=None)
-    wheelbase: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+    knownVehicleDamages: str | list[str] | None = Field(default=None)
+    meetsEmissionStandard: (
+        QualitativeValue | str | AnyUrl | list[QualitativeValue | str | AnyUrl] | None
+    ) = Field(default=None)
+    mileageFromOdometer: (
+        QuantitativeValue | str | list[QuantitativeValue | str] | None
+    ) = Field(default=None)
+    modelDate: date | str | list[date | str] | None = Field(default=None)
+    numberOfAirbags: float | str | list[float | str] | None = Field(default=None)
+    numberOfAxles: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    numberOfDoors: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    numberOfForwardGears: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    numberOfPreviousOwners: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    payload: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
+    productionDate: date | str | list[date | str] | None = Field(default=None)
+    purchaseDate: date | str | list[date | str] | None = Field(default=None)
+    seatingCapacity: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    speed: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
     )
     steeringPosition: (
         SteeringPositionValue | str | list[SteeringPositionValue | str] | None
     ) = Field(default=None)
-    numberOfDoors: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
-    vehicleIdentificationNumber: str | list[str] | None = Field(default=None)
-    numberOfAxles: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
-    modelDate: date | str | list[date | str] | None = Field(default=None)
     tongueWeight: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
+    trailerWeight: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    vehicleConfiguration: str | list[str] | None = Field(default=None)
+    vehicleEngine: (
+        EngineSpecification | str | list[EngineSpecification | str] | None
+    ) = Field(default=None)
+    vehicleIdentificationNumber: str | list[str] | None = Field(default=None)
+    vehicleInteriorColor: str | list[str] | None = Field(default=None)
+    vehicleInteriorType: str | list[str] | None = Field(default=None)
     vehicleModelDate: date | str | list[date | str] | None = Field(default=None)
-    productionDate: date | str | list[date | str] | None = Field(default=None)
+    vehicleSeatingCapacity: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    vehicleSpecialUsage: CarUsageType | str | list[CarUsageType | str] | None = Field(
+        default=None
+    )
+    vehicleTransmission: (
+        QualitativeValue | str | AnyUrl | list[QualitativeValue | str | AnyUrl] | None
+    ) = Field(default=None)
+    weightTotal: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
+    wheelbase: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
 
 
 class BusOrCoach(Vehicle):
@@ -3059,10 +3205,10 @@ class BusOrCoach(Vehicle):
     Coaches are luxury buses, usually in service for long distance travel."""
 
     type: str = Field(default="BusOrCoach", alias="@type")
+    acrissCode: str | list[str] | None = Field(default=None)
     roofLoad: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
     )
-    acrissCode: str | list[str] | None = Field(default=None)
 
 
 class BusReservation(Reservation):
@@ -3089,12 +3235,12 @@ class BusTrip(Trip):
     """A trip on a commercial bus line."""
 
     type: str = Field(default="BusTrip", alias="@type")
-    busNumber: str | list[str] | None = Field(default=None)
-    departureBusStop: (
+    arrivalBusStop: (
         BusStation | BusStop | str | list[BusStation | BusStop | str] | None
     ) = Field(default=None)
     busName: str | list[str] | None = Field(default=None)
-    arrivalBusStop: (
+    busNumber: str | list[str] | None = Field(default=None)
+    departureBusStop: (
         BusStation | BusStop | str | list[BusStation | BusStop | str] | None
     ) = Field(default=None)
 
@@ -3104,15 +3250,15 @@ class BusinessAudience(Audience):
     audience."""
 
     type: str = Field(default="BusinessAudience", alias="@type")
-    yearsInOperation: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    yearlyRevenue: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
     numberOfEmployees: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
+    yearlyRevenue: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    yearsInOperation: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
 
 
 class BusinessEntityType(Enumeration):
@@ -3158,11 +3304,11 @@ class TradeAction(Action):
     exchange for a one time or periodic payment."""
 
     type: str = Field(default="TradeAction", alias="@type")
+    price: float | str | list[float | str] | None = Field(default=None)
+    priceCurrency: str | list[str] | None = Field(default=None)
     priceSpecification: (
         PriceSpecification | str | list[PriceSpecification | str] | None
     ) = Field(default=None)
-    priceCurrency: str | list[str] | None = Field(default=None)
-    price: str | float | list[str | float] | None = Field(default=None)
 
 
 class BuyAction(TradeAction):
@@ -3171,14 +3317,14 @@ class BuyAction(TradeAction):
     SellAction."""
 
     type: str = Field(default="BuyAction", alias="@type")
-    warrantyPromise: WarrantyPromise | str | list[WarrantyPromise | str] | None = Field(
-        default=None
+    seller: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
     )
     vendor: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    seller: Person | Organization | str | list[Person | Organization | str] | None = (
-        Field(default=None)
+    warrantyPromise: WarrantyPromise | str | list[WarrantyPromise | str] | None = Field(
+        default=None
     )
 
 
@@ -3198,29 +3344,29 @@ class CDCPMDRecord(StructuredValue):
     """
 
     type: str = Field(default="CDCPMDRecord", alias="@type")
-    cvdNumVentUse: float | str | list[float | str] | None = Field(default=None)
-    cvdNumBedsOcc: float | str | list[float | str] | None = Field(default=None)
-    datePosted: datetime | date | str | list[datetime | date | str] | None = Field(
+    cvdCollectionDate: datetime | str | list[datetime | str] | None = Field(
         default=None
     )
-    cvdNumC19HOPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumTotBeds: float | str | list[float | str] | None = Field(default=None)
-    cvdNumICUBedsOcc: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19OverflowPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19HospPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumBeds: float | str | list[float | str] | None = Field(default=None)
     cvdFacilityCounty: str | list[str] | None = Field(default=None)
-    cvdNumC19MechVentPats: float | str | list[float | str] | None = Field(default=None)
     cvdFacilityId: str | list[str] | None = Field(default=None)
+    cvdNumBeds: float | str | list[float | str] | None = Field(default=None)
+    cvdNumBedsOcc: float | str | list[float | str] | None = Field(default=None)
+    cvdNumC19Died: float | str | list[float | str] | None = Field(default=None)
+    cvdNumC19HOPats: float | str | list[float | str] | None = Field(default=None)
+    cvdNumC19HospPats: float | str | list[float | str] | None = Field(default=None)
+    cvdNumC19MechVentPats: float | str | list[float | str] | None = Field(default=None)
     cvdNumC19OFMechVentPats: float | str | list[float | str] | None = Field(
         default=None
     )
+    cvdNumC19OverflowPats: float | str | list[float | str] | None = Field(default=None)
     cvdNumICUBeds: float | str | list[float | str] | None = Field(default=None)
-    cvdCollectionDate: str | datetime | list[str | datetime] | None = Field(
+    cvdNumICUBedsOcc: float | str | list[float | str] | None = Field(default=None)
+    cvdNumTotBeds: float | str | list[float | str] | None = Field(default=None)
+    cvdNumVent: float | str | list[float | str] | None = Field(default=None)
+    cvdNumVentUse: float | str | list[float | str] | None = Field(default=None)
+    datePosted: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    cvdNumC19Died: float | str | list[float | str] | None = Field(default=None)
-    cvdNumVent: float | str | list[float | str] | None = Field(default=None)
 
 
 class CableOrSatelliteService(Service):
@@ -3299,10 +3445,10 @@ class Car(Vehicle):
     """A car is a wheeled, self-powered motor vehicle used for transportation."""
 
     type: str = Field(default="Car", alias="@type")
+    acrissCode: str | list[str] | None = Field(default=None)
     roofLoad: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
     )
-    acrissCode: str | list[str] | None = Field(default=None)
 
 
 class CarUsageType(Enumeration):
@@ -3329,7 +3475,7 @@ class DefinedTerm(Intangible):
     type: str = Field(default="DefinedTerm", alias="@type")
     about: Thing | str | list[Thing | str] | None = Field(default=None)
     inDefinedTermSet: (
-        AnyUrl | DefinedTermSet | str | list[AnyUrl | DefinedTermSet | str] | None
+        DefinedTermSet | AnyUrl | str | list[DefinedTermSet | AnyUrl | str] | None
     ) = Field(default=None)
     termCode: str | list[str] | None = Field(default=None)
 
@@ -3340,7 +3486,7 @@ class CategoryCode(DefinedTerm):
     type: str = Field(default="CategoryCode", alias="@type")
     codeValue: str | list[str] | None = Field(default=None)
     inCodeSet: (
-        AnyUrl | CategoryCodeSet | str | list[AnyUrl | CategoryCodeSet | str] | None
+        CategoryCodeSet | AnyUrl | str | list[CategoryCodeSet | AnyUrl | str] | None
     ) = Field(default=None)
 
 
@@ -3350,10 +3496,10 @@ class DefinedTermSet(CreativeWork):
     term set is about."""
 
     type: str = Field(default="DefinedTermSet", alias="@type")
+    about: Thing | str | list[Thing | str] | None = Field(default=None)
     hasDefinedTerm: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
         default=None
     )
-    about: Thing | str | list[Thing | str] | None = Field(default=None)
 
 
 class CategoryCodeSet(DefinedTermSet):
@@ -3397,35 +3543,35 @@ class Certification(CreativeWork):
     class in the GS1 Web Vocabulary."""
 
     type: str = Field(default="Certification", alias="@type")
-    logo: AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None = Field(
-        default=None
-    )
-    expires: date | datetime | str | list[date | datetime | str] | None = Field(
-        default=None
-    )
-    certificationIdentification: str | DefinedTerm | list[str | DefinedTerm] | None = (
-        Field(default=None)
-    )
-    datePublished: date | datetime | str | list[date | datetime | str] | None = Field(
-        default=None
-    )
+    about: Thing | str | list[Thing | str] | None = Field(default=None)
     auditDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    about: Thing | str | list[Thing | str] | None = Field(default=None)
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
+    certificationIdentification: DefinedTerm | str | list[DefinedTerm | str] | None = (
+        Field(default=None)
     )
+    certificationRating: Rating | str | list[Rating | str] | None = Field(default=None)
     certificationStatus: (
         CertificationStatusEnumeration
         | str
         | list[CertificationStatusEnumeration | str]
         | None
     ) = Field(default=None)
-    issuedBy: Organization | str | list[Organization | str] | None = Field(default=None)
-    certificationRating: Rating | str | list[Rating | str] | None = Field(default=None)
+    datePublished: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    expires: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
     hasMeasurement: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
+    )
+    issuedBy: Organization | str | list[Organization | str] | None = Field(default=None)
+    logo: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
+        default=None
+    )
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
     )
     validIn: AdministrativeArea | str | list[AdministrativeArea | str] | None = Field(
         default=None
@@ -3443,9 +3589,9 @@ class Chapter(CreativeWork):
     number or a name."""
 
     type: str = Field(default="Chapter", alias="@type")
-    pagination: str | list[str] | None = Field(default=None)
     pageEnd: int | str | list[int | str] | None = Field(default=None)
     pageStart: int | str | list[int | str] | None = Field(default=None)
+    pagination: str | list[str] | None = Field(default=None)
 
 
 class FindAction(Action):
@@ -3499,13 +3645,13 @@ class ChemicalSubstance(BioChemEntity):
     [ChEBI:59999](https://www.ebi.ac.uk/chebi/searchId.do?chebiId=59999))."""
 
     type: str = Field(default="ChemicalSubstance", alias="@type")
-    potentialUse: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
-        default=None
-    )
+    chemicalComposition: str | list[str] | None = Field(default=None)
     chemicalRole: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
         default=None
     )
-    chemicalComposition: str | list[str] | None = Field(default=None)
+    potentialUse: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
 
 
 class ChildCare(LocalBusiness):
@@ -3525,8 +3671,8 @@ class ChooseAction(AssessAction):
     of choices/options."""
 
     type: str = Field(default="ChooseAction", alias="@type")
-    option: str | Thing | list[str | Thing] | None = Field(default=None)
     actionOption: str | Thing | list[str | Thing] | None = Field(default=None)
+    option: str | Thing | list[str | Thing] | None = Field(default=None)
 
 
 class City(AdministrativeArea):
@@ -3564,13 +3710,13 @@ class Claim(CreativeWork):
     """
 
     type: str = Field(default="Claim", alias="@type")
+    appearance: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
     claimInterpreter: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
     firstAppearance: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    appearance: CreativeWork | str | list[CreativeWork | str] | None = Field(
         default=None
     )
 
@@ -3579,22 +3725,13 @@ class Review(CreativeWork):
     """A review of an item - for example, of a restaurant, movie, or store."""
 
     type: str = Field(default="Review", alias="@type")
-    reviewBody: str | list[str] | None = Field(default=None)
-    reviewAspect: StructuredValue | str | list[StructuredValue | str] | None = Field(
-        default=None
-    )
     associatedClaimReview: Review | str | list[Review | str] | None = Field(
         default=None
     )
-    reviewRating: Rating | str | list[Rating | str] | None = Field(default=None)
-    positiveNotes: (
-        WebContent
-        | ItemList
-        | ListItem
-        | str
-        | list[WebContent | ItemList | ListItem | str]
-        | None
-    ) = Field(default=None)
+    associatedMediaReview: Review | str | list[Review | str] | None = Field(
+        default=None
+    )
+    associatedReview: Review | str | list[Review | str] | None = Field(default=None)
     itemReviewed: Thing | str | list[Thing | str] | None = Field(default=None)
     negativeNotes: (
         ItemList
@@ -3604,10 +3741,19 @@ class Review(CreativeWork):
         | list[ItemList | ListItem | str | WebContent]
         | None
     ) = Field(default=None)
-    associatedReview: Review | str | list[Review | str] | None = Field(default=None)
-    associatedMediaReview: Review | str | list[Review | str] | None = Field(
+    positiveNotes: (
+        ItemList
+        | ListItem
+        | str
+        | WebContent
+        | list[ItemList | ListItem | str | WebContent]
+        | None
+    ) = Field(default=None)
+    reviewAspect: StructuredValue | str | list[StructuredValue | str] | None = Field(
         default=None
     )
+    reviewBody: str | list[str] | None = Field(default=None)
+    reviewRating: Rating | str | list[Rating | str] | None = Field(default=None)
 
 
 class ClaimReview(Review):
@@ -3623,11 +3769,11 @@ class Class(Intangible):
 
     type: str = Field(default="Class", alias="@type")
     supersededBy: (
-        Enumeration
+        Class
+        | Enumeration
         | Property
-        | Class
         | str
-        | list[Enumeration | Property | Class | str]
+        | list[Class | Enumeration | Property | str]
         | None
     ) = Field(default=None)
 
@@ -3636,29 +3782,29 @@ class Clip(CreativeWork):
     """A short TV or radio program or a segment/part of a program."""
 
     type: str = Field(default="Clip", alias="@type")
-    startOffset: (
-        float | HyperTocEntry | str | list[float | HyperTocEntry | str] | None
-    ) = Field(default=None)
-    partOfSeason: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = (
-        Field(default=None)
-    )
     actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
     ) = Field(default=None)
-    partOfSeries: CreativeWorkSeries | str | list[CreativeWorkSeries | str] | None = (
-        Field(default=None)
-    )
-    clipNumber: str | int | list[str | int] | None = Field(default=None)
-    directors: Person | str | list[Person | str] | None = Field(default=None)
     actors: Person | str | list[Person | str] | None = Field(default=None)
+    clipNumber: int | str | list[int | str] | None = Field(default=None)
     director: Person | str | list[Person | str] | None = Field(default=None)
+    directors: Person | str | list[Person | str] | None = Field(default=None)
     endOffset: (
         HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
     ) = Field(default=None)
-    partOfEpisode: Episode | str | list[Episode | str] | None = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
         default=None
     )
+    partOfEpisode: Episode | str | list[Episode | str] | None = Field(default=None)
+    partOfSeason: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = (
+        Field(default=None)
+    )
+    partOfSeries: CreativeWorkSeries | str | list[CreativeWorkSeries | str] | None = (
+        Field(default=None)
+    )
+    startOffset: (
+        HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
+    ) = Field(default=None)
 
 
 class ClothingStore(Store):
@@ -3720,51 +3866,51 @@ class ComicStory(CreativeWork):
     story."""
 
     type: str = Field(default="ComicStory", alias="@type")
-    inker: Person | str | list[Person | str] | None = Field(default=None)
-    penciler: Person | str | list[Person | str] | None = Field(default=None)
     artist: Person | str | list[Person | str] | None = Field(default=None)
     colorist: Person | str | list[Person | str] | None = Field(default=None)
+    inker: Person | str | list[Person | str] | None = Field(default=None)
     letterer: Person | str | list[Person | str] | None = Field(default=None)
+    penciler: Person | str | list[Person | str] | None = Field(default=None)
 
 
 class VisualArtwork(CreativeWork):
     """A work of art that is primarily visual in character."""
 
     type: str = Field(default="VisualArtwork", alias="@type")
-    inker: Person | str | list[Person | str] | None = Field(default=None)
-    penciler: Person | str | list[Person | str] | None = Field(default=None)
-    artMedium: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    width: (
-        QuantitativeValue
-        | Distance
-        | str
-        | list[QuantitativeValue | Distance | str]
-        | None
-    ) = Field(default=None)
-    artEdition: str | int | list[str | int] | None = Field(default=None)
-    artist: Person | str | list[Person | str] | None = Field(default=None)
-    depth: (
-        QuantitativeValue
-        | Distance
-        | str
-        | list[QuantitativeValue | Distance | str]
-        | None
-    ) = Field(default=None)
-    weight: (
-        QuantitativeValue | Mass | str | list[QuantitativeValue | Mass | str] | None
-    ) = Field(default=None)
-    colorist: Person | str | list[Person | str] | None = Field(default=None)
-    letterer: Person | str | list[Person | str] | None = Field(default=None)
-    artworkSurface: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    height: (
-        QuantitativeValue
-        | Distance
-        | str
-        | list[QuantitativeValue | Distance | str]
-        | None
-    ) = Field(default=None)
+    artEdition: int | str | list[int | str] | None = Field(default=None)
+    artMedium: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     artform: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    artist: Person | str | list[Person | str] | None = Field(default=None)
+    artworkSurface: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    colorist: Person | str | list[Person | str] | None = Field(default=None)
+    depth: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
+    height: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
+    inker: Person | str | list[Person | str] | None = Field(default=None)
+    letterer: Person | str | list[Person | str] | None = Field(default=None)
+    penciler: Person | str | list[Person | str] | None = Field(default=None)
     surface: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    weight: (
+        Mass | QuantitativeValue | str | list[Mass | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    width: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
 
 
 class CoverArt(VisualArtwork):
@@ -3786,10 +3932,10 @@ class PublicationIssue(CreativeWork):
     support-for-bibliographic-relationships-and-periodicals/)."""
 
     type: str = Field(default="PublicationIssue", alias="@type")
-    pagination: str | list[str] | None = Field(default=None)
-    issueNumber: str | int | list[str | int] | None = Field(default=None)
+    issueNumber: int | str | list[int | str] | None = Field(default=None)
     pageEnd: int | str | list[int | str] | None = Field(default=None)
     pageStart: int | str | list[int | str] | None = Field(default=None)
+    pagination: str | list[str] | None = Field(default=None)
 
 
 class ComicIssue(PublicationIssue):
@@ -3801,11 +3947,11 @@ class ComicIssue(PublicationIssue):
     description of the issue (if any)."""
 
     type: str = Field(default="ComicIssue", alias="@type")
-    inker: Person | str | list[Person | str] | None = Field(default=None)
-    penciler: Person | str | list[Person | str] | None = Field(default=None)
     artist: Person | str | list[Person | str] | None = Field(default=None)
     colorist: Person | str | list[Person | str] | None = Field(default=None)
+    inker: Person | str | list[Person | str] | None = Field(default=None)
     letterer: Person | str | list[Person | str] | None = Field(default=None)
+    penciler: Person | str | list[Person | str] | None = Field(default=None)
     variantCover: str | list[str] | None = Field(default=None)
 
 
@@ -3838,44 +3984,44 @@ class Dataset(CreativeWork):
     """A body of structured information describing some topic(s) of interest."""
 
     type: str = Field(default="Dataset", alias="@type")
+    catalog: DataCatalog | str | list[DataCatalog | str] | None = Field(default=None)
+    datasetTimeInterval: datetime | str | list[datetime | str] | None = Field(
+        default=None
+    )
     distribution: DataDownload | str | list[DataDownload | str] | None = Field(
         default=None
     )
-    measurementTechnique: (
-        str
-        | AnyUrl
-        | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
-        | None
-    ) = Field(default=None)
-    measurementMethod: (
-        str
-        | AnyUrl
-        | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
-        | None
-    ) = Field(default=None)
+    includedDataCatalog: DataCatalog | str | list[DataCatalog | str] | None = Field(
+        default=None
+    )
     includedInDataCatalog: DataCatalog | str | list[DataCatalog | str] | None = Field(
         default=None
     )
     issn: str | list[str] | None = Field(default=None)
-    datasetTimeInterval: datetime | str | list[datetime | str] | None = Field(
-        default=None
-    )
-    variableMeasured: (
-        PropertyValue
-        | Property
+    measurementMethod: (
+        DefinedTerm
+        | MeasurementMethodEnum
         | str
-        | StatisticalVariable
-        | list[PropertyValue | Property | str | StatisticalVariable]
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
-    includedDataCatalog: DataCatalog | str | list[DataCatalog | str] | None = Field(
-        default=None
-    )
-    catalog: DataCatalog | str | list[DataCatalog | str] | None = Field(default=None)
+    measurementTechnique: (
+        DefinedTerm
+        | MeasurementMethodEnum
+        | str
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
+        | None
+    ) = Field(default=None)
+    variableMeasured: (
+        Property
+        | PropertyValue
+        | StatisticalVariable
+        | str
+        | list[Property | PropertyValue | StatisticalVariable | str]
+        | None
+    ) = Field(default=None)
 
 
 class DataFeed(Dataset):
@@ -3883,7 +4029,7 @@ class DataFeed(Dataset):
 
     type: str = Field(default="DataFeed", alias="@type")
     dataFeedElement: (
-        str | DataFeedItem | Thing | list[str | DataFeedItem | Thing] | None
+        DataFeedItem | str | Thing | list[DataFeedItem | str | Thing] | None
     ) = Field(default=None)
 
 
@@ -3908,29 +4054,29 @@ class PriceSpecification(StructuredValue):
     to describe independent amounts of money such as a salary, credit card limits, etc."""
 
     type: str = Field(default="PriceSpecification", alias="@type")
-    minPrice: float | str | list[float | str] | None = Field(default=None)
-    valueAddedTaxIncluded: bool | str | list[bool | str] | None = Field(default=None)
-    validForMemberTier: (
-        MemberProgramTier | str | list[MemberProgramTier | str] | None
-    ) = Field(default=None)
-    validThrough: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
+    eligibleQuantity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
     )
+    eligibleTransactionVolume: (
+        PriceSpecification | str | list[PriceSpecification | str] | None
+    ) = Field(default=None)
     maxPrice: float | str | list[float | str] | None = Field(default=None)
     membershipPointsEarned: (
         float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
+    minPrice: float | str | list[float | str] | None = Field(default=None)
+    price: float | str | list[float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
-    eligibleTransactionVolume: (
-        PriceSpecification | str | list[PriceSpecification | str] | None
+    validForMemberTier: (
+        MemberProgramTier | str | list[MemberProgramTier | str] | None
     ) = Field(default=None)
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    price: str | float | list[str | float] | None = Field(default=None)
-    eligibleQuantity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
+    validThrough: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
     )
+    valueAddedTaxIncluded: bool | str | list[bool | str] | None = Field(default=None)
 
 
 class CompoundPriceSpecification(PriceSpecification):
@@ -3943,7 +4089,7 @@ class CompoundPriceSpecification(PriceSpecification):
     priceComponent: PriceSpecification | str | list[PriceSpecification | str] | None = (
         Field(default=None)
     )
-    priceType: str | PriceTypeEnumeration | list[str | PriceTypeEnumeration] | None = (
+    priceType: PriceTypeEnumeration | str | list[PriceTypeEnumeration | str] | None = (
         Field(default=None)
     )
 
@@ -4025,36 +4171,36 @@ class ContactPoint(StructuredValue):
     """A contact point&#x2014;for example, a Customer Complaints department."""
 
     type: str = Field(default="ContactPoint", alias="@type")
-    telephone: str | list[str] | None = Field(default=None)
-    hoursAvailable: (
-        OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
-    ) = Field(default=None)
-    availableLanguage: str | Language | list[str | Language] | None = Field(
-        default=None
-    )
-    serviceArea: (
-        GeoShape
-        | AdministrativeArea
+    areaServed: (
+        AdministrativeArea
+        | GeoShape
         | Place
         | str
-        | list[GeoShape | AdministrativeArea | Place | str]
+        | list[AdministrativeArea | GeoShape | Place | str]
         | None
     ) = Field(default=None)
-    email: str | list[str] | None = Field(default=None)
+    availableLanguage: Language | str | list[Language | str] | None = Field(
+        default=None
+    )
     contactOption: ContactPointOption | str | list[ContactPointOption | str] | None = (
         Field(default=None)
     )
     contactType: str | list[str] | None = Field(default=None)
+    email: str | list[str] | None = Field(default=None)
     faxNumber: str | list[str] | None = Field(default=None)
-    productSupported: str | Product | list[str | Product] | None = Field(default=None)
-    areaServed: (
-        GeoShape
-        | AdministrativeArea
+    hoursAvailable: (
+        OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
+    ) = Field(default=None)
+    productSupported: Product | str | list[Product | str] | None = Field(default=None)
+    serviceArea: (
+        AdministrativeArea
+        | GeoShape
         | Place
         | str
-        | list[GeoShape | AdministrativeArea | Place | str]
+        | list[AdministrativeArea | GeoShape | Place | str]
         | None
     ) = Field(default=None)
+    telephone: str | list[str] | None = Field(default=None)
 
 
 class ContactPointOption(Enumeration):
@@ -4094,10 +4240,10 @@ class CookAction(CreateAction):
     """The act of producing/preparing food."""
 
     type: str = Field(default="CookAction", alias="@type")
-    foodEvent: FoodEvent | str | list[FoodEvent | str] | None = Field(default=None)
     foodEstablishment: (
         FoodEstablishment | Place | str | list[FoodEstablishment | Place | str] | None
     ) = Field(default=None)
+    foodEvent: FoodEvent | str | list[FoodEvent | str] | None = Field(default=None)
     recipe: Recipe | str | list[Recipe | str] | None = Field(default=None)
 
 
@@ -4139,23 +4285,23 @@ class LearningResource(CreativeWork):
     recording one."""
 
     type: str = Field(default="LearningResource", alias="@type")
-    educationalUse: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
-        default=None
-    )
-    learningResourceType: str | DefinedTerm | list[str | DefinedTerm] | None = Field(
-        default=None
-    )
+    assesses: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
     competencyRequired: (
-        str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None
+        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
     ) = Field(default=None)
     educationalAlignment: AlignmentObject | str | list[AlignmentObject | str] | None = (
         Field(default=None)
     )
-    assesses: str | DefinedTerm | list[str | DefinedTerm] | None = Field(default=None)
-    teaches: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
     educationalLevel: (
-        str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None
+        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
     ) = Field(default=None)
+    educationalUse: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
+    learningResourceType: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
+    teaches: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
 
 
 class Course(LearningResource, CreativeWork):
@@ -4166,13 +4312,26 @@ class Course(LearningResource, CreativeWork):
     knowledge, competence or ability of learners."""
 
     type: str = Field(default="Course", alias="@type")
-    totalHistoricalEnrollment: int | str | list[int | str] | None = Field(default=None)
-    availableLanguage: str | Language | list[str | Language] | None = Field(
+    availableLanguage: Language | str | list[Language | str] | None = Field(
         default=None
     )
+    courseCode: str | list[str] | None = Field(default=None)
     coursePrerequisites: (
-        str | Course | AlignmentObject | list[str | Course | AlignmentObject] | None
+        AlignmentObject | Course | str | list[AlignmentObject | Course | str] | None
     ) = Field(default=None)
+    educationalCredentialAwarded: (
+        EducationalOccupationalCredential
+        | str
+        | AnyUrl
+        | list[EducationalOccupationalCredential | str | AnyUrl]
+        | None
+    ) = Field(default=None)
+    financialAidEligible: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
+    hasCourseInstance: CourseInstance | str | list[CourseInstance | str] | None = Field(
+        default=None
+    )
     numberOfCredits: (
         int | StructuredValue | str | list[int | StructuredValue | str] | None
     ) = Field(default=None)
@@ -4183,21 +4342,8 @@ class Course(LearningResource, CreativeWork):
         | list[EducationalOccupationalCredential | str | AnyUrl]
         | None
     ) = Field(default=None)
-    hasCourseInstance: CourseInstance | str | list[CourseInstance | str] | None = Field(
-        default=None
-    )
-    courseCode: str | list[str] | None = Field(default=None)
-    educationalCredentialAwarded: (
-        str
-        | AnyUrl
-        | EducationalOccupationalCredential
-        | list[str | AnyUrl | EducationalOccupationalCredential]
-        | None
-    ) = Field(default=None)
     syllabusSections: Syllabus | str | list[Syllabus | str] | None = Field(default=None)
-    financialAidEligible: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
-        default=None
-    )
+    totalHistoricalEnrollment: int | str | list[int | str] | None = Field(default=None)
 
 
 class CourseInstance(Event):
@@ -4206,9 +4352,9 @@ class CourseInstance(Event):
     specific section of students."""
 
     type: str = Field(default="CourseInstance", alias="@type")
+    courseMode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     courseSchedule: Schedule | str | list[Schedule | str] | None = Field(default=None)
     courseWorkload: str | list[str] | None = Field(default=None)
-    courseMode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     instructor: Person | str | list[Person | str] | None = Field(default=None)
 
 
@@ -4231,10 +4377,10 @@ class MedicalOrganization(Organization):
 
     type: str = Field(default="MedicalOrganization", alias="@type")
     healthPlanNetworkId: str | list[str] | None = Field(default=None)
+    isAcceptingNewPatients: bool | str | list[bool | str] | None = Field(default=None)
     medicalSpecialty: MedicalSpecialty | str | list[MedicalSpecialty | str] | None = (
         Field(default=None)
     )
-    isAcceptingNewPatients: bool | str | list[bool | str] | None = Field(default=None)
 
 
 class MedicalClinic(MedicalOrganization, MedicalBusiness):
@@ -4273,26 +4419,26 @@ class CreativeWorkSeason(CreativeWork):
     """A media season, e.g. TV, radio, video game etc."""
 
     type: str = Field(default="CreativeWorkSeason", alias="@type")
-    episodes: Episode | str | list[Episode | str] | None = Field(default=None)
     actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
     ) = Field(default=None)
+    director: Person | str | list[Person | str] | None = Field(default=None)
+    endDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    episode: Episode | str | list[Episode | str] | None = Field(default=None)
+    episodes: Episode | str | list[Episode | str] | None = Field(default=None)
+    numberOfEpisodes: int | str | list[int | str] | None = Field(default=None)
     partOfSeries: CreativeWorkSeries | str | list[CreativeWorkSeries | str] | None = (
         Field(default=None)
     )
     productionCompany: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
-    numberOfEpisodes: int | str | list[int | str] | None = Field(default=None)
-    endDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
+    seasonNumber: int | str | list[int | str] | None = Field(default=None)
     startDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    seasonNumber: int | str | list[int | str] | None = Field(default=None)
-    episode: Episode | str | list[Episode | str] | None = Field(default=None)
-    director: Person | str | list[Person | str] | None = Field(default=None)
     trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
 
 
@@ -4301,16 +4447,38 @@ class Credential(CreativeWork):
     entity."""
 
     type: str = Field(default="Credential", alias="@type")
-    validFor: timedelta | str | list[timedelta | str] | None = Field(default=None)
     credentialCategory: (
         DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
     ) = Field(default=None)
-    validIn: AdministrativeArea | str | list[AdministrativeArea | str] | None = Field(
-        default=None
-    )
     recognizedBy: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
+    validFor: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    validIn: AdministrativeArea | str | list[AdministrativeArea | str] | None = Field(
+        default=None
+    )
+
+
+class LoanOrCredit(FinancialProduct):
+    """A financial product for the loaning of an amount of money, or line of credit, under
+    agreed terms and charges."""
+
+    type: str = Field(default="LoanOrCredit", alias="@type")
+    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
+        Field(default=None)
+    )
+    currency: str | list[str] | None = Field(default=None)
+    gracePeriod: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    loanRepaymentForm: (
+        RepaymentSpecification | str | list[RepaymentSpecification | str] | None
+    ) = Field(default=None)
+    loanTerm: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
+    loanType: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    recourseLoan: bool | str | list[bool | str] | None = Field(default=None)
+    renegotiableLoan: bool | str | list[bool | str] | None = Field(default=None)
+    requiredCollateral: str | Thing | list[str | Thing] | None = Field(default=None)
 
 
 class PaymentMethod(Intangible):
@@ -4340,39 +4508,17 @@ class PaymentCard(PaymentMethod, FinancialProduct):
     with an account."""
 
     type: str = Field(default="PaymentCard", alias="@type")
+    cashBack: bool | float | str | list[bool | float | str] | None = Field(default=None)
+    contactlessPayment: bool | str | list[bool | str] | None = Field(default=None)
     floorLimit: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
     monthlyMinimumRepaymentAmount: (
         MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
     ) = Field(default=None)
-    cashBack: float | bool | str | list[float | bool | str] | None = Field(default=None)
-    contactlessPayment: bool | str | list[bool | str] | None = Field(default=None)
 
 
-class LoanOrCredit(FinancialProduct):
-    """A financial product for the loaning of an amount of money, or line of credit, under
-    agreed terms and charges."""
-
-    type: str = Field(default="LoanOrCredit", alias="@type")
-    requiredCollateral: Thing | str | list[Thing | str] | None = Field(default=None)
-    loanType: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    loanTerm: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
-        default=None
-    )
-    recourseLoan: bool | str | list[bool | str] | None = Field(default=None)
-    gracePeriod: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    loanRepaymentForm: (
-        RepaymentSpecification | str | list[RepaymentSpecification | str] | None
-    ) = Field(default=None)
-    renegotiableLoan: bool | str | list[bool | str] | None = Field(default=None)
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
-    currency: str | list[str] | None = Field(default=None)
-
-
-class CreditCard(LoanOrCredit, PaymentCard):
+class CreditCard(PaymentCard, LoanOrCredit):
     """A card payment method of a particular brand or name.  Used to mark up a particular
     payment method and/or the financial product/service that supplies the card
     account.nnCommonly used values:nn*
@@ -4478,43 +4624,43 @@ class DataCatalog(CreativeWork):
     """A collection of datasets."""
 
     type: str = Field(default="DataCatalog", alias="@type")
-    measurementTechnique: (
-        str
-        | AnyUrl
-        | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
-        | None
-    ) = Field(default=None)
-    measurementMethod: (
-        str
-        | AnyUrl
-        | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
-        | None
-    ) = Field(default=None)
     dataset: Dataset | str | list[Dataset | str] | None = Field(default=None)
+    measurementMethod: (
+        DefinedTerm
+        | MeasurementMethodEnum
+        | str
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
+        | None
+    ) = Field(default=None)
+    measurementTechnique: (
+        DefinedTerm
+        | MeasurementMethodEnum
+        | str
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
+        | None
+    ) = Field(default=None)
 
 
 class DataDownload(MediaObject):
     """All or part of a Dataset in downloadable form."""
 
     type: str = Field(default="DataDownload", alias="@type")
-    measurementTechnique: (
-        str
-        | AnyUrl
+    measurementMethod: (
+        DefinedTerm
         | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
+        | str
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
-    measurementMethod: (
-        str
-        | AnyUrl
+    measurementTechnique: (
+        DefinedTerm
         | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
+        | str
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
 
@@ -4523,16 +4669,16 @@ class DataFeedItem(Intangible):
     """A single item within a larger data feed."""
 
     type: str = Field(default="DataFeedItem", alias="@type")
+    dateCreated: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    dateDeleted: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    dateModified: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
     item: Thing | str | list[Thing | str] | None = Field(default=None)
-    dateCreated: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    dateModified: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    dateDeleted: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
 
 
 class DataType(SchemaOrgBase):
@@ -4561,16 +4707,16 @@ class DatedMoneySpecification(StructuredValue):
     is recommended."""
 
     type: str = Field(default="DatedMoneySpecification", alias="@type")
-    endDate: datetime | date | str | list[datetime | date | str] | None = Field(
+    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
+        Field(default=None)
+    )
+    currency: str | list[str] | None = Field(default=None)
+    endDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
     startDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
-    currency: str | list[str] | None = Field(default=None)
 
 
 class DayOfWeek(Enumeration):
@@ -4624,18 +4770,18 @@ class DefinedRegion(StructuredValue, Place):
     """
 
     type: str = Field(default="DefinedRegion", alias="@type")
-    addressRegion: str | AdministrativeArea | list[str | AdministrativeArea] | None = (
+    addressCountry: Country | str | list[Country | str] | None = Field(default=None)
+    addressRegion: AdministrativeArea | str | list[AdministrativeArea | str] | None = (
         Field(default=None)
     )
-    postalCodePrefix: str | list[str] | None = Field(default=None)
     postalCode: str | list[str] | None = Field(default=None)
+    postalCodePrefix: str | list[str] | None = Field(default=None)
     postalCodeRange: (
         PostalCodeRangeSpecification
         | str
         | list[PostalCodeRangeSpecification | str]
         | None
     ) = Field(default=None)
-    addressCountry: Country | str | list[Country | str] | None = Field(default=None)
 
 
 class DeleteAction(UpdateAction):
@@ -4651,20 +4797,20 @@ class DeliveryChargeSpecification(PriceSpecification):
     appliesToDeliveryMethod: (
         DeliveryMethod | str | list[DeliveryMethod | str] | None
     ) = Field(default=None)
-    eligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
-        Field(default=None)
-    )
-    ineligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
-        Field(default=None)
-    )
     areaServed: (
-        GeoShape
-        | AdministrativeArea
+        AdministrativeArea
+        | GeoShape
         | Place
         | str
-        | list[GeoShape | AdministrativeArea | Place | str]
+        | list[AdministrativeArea | GeoShape | Place | str]
         | None
     ) = Field(default=None)
+    eligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
+        Field(default=None)
+    )
+    ineligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
+        Field(default=None)
+    )
 
 
 class DeliveryEvent(Event):
@@ -4672,11 +4818,11 @@ class DeliveryEvent(Event):
 
     type: str = Field(default="DeliveryEvent", alias="@type")
     accessCode: str | list[str] | None = Field(default=None)
+    availableFrom: datetime | str | list[datetime | str] | None = Field(default=None)
+    availableThrough: datetime | str | list[datetime | str] | None = Field(default=None)
     hasDeliveryMethod: DeliveryMethod | str | list[DeliveryMethod | str] | None = Field(
         default=None
     )
-    availableFrom: datetime | str | list[datetime | str] | None = Field(default=None)
-    availableThrough: datetime | str | list[datetime | str] | None = Field(default=None)
 
 
 class DeliveryMethod(Enumeration):
@@ -4705,115 +4851,115 @@ class Demand(Intangible):
     for Offer apply."""
 
     type: str = Field(default="Demand", alias="@type")
-    eligibleDuration: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    mpn: str | list[str] | None = Field(default=None)
-    priceSpecification: (
-        PriceSpecification | str | list[PriceSpecification | str] | None
+    acceptedPaymentMethod: (
+        LoanOrCredit
+        | PaymentMethod
+        | str
+        | list[LoanOrCredit | PaymentMethod | str]
+        | None
     ) = Field(default=None)
-    validThrough: datetime | date | str | list[datetime | date | str] | None = Field(
+    advanceBookingRequirement: (
+        QuantitativeValue | str | list[QuantitativeValue | str] | None
+    ) = Field(default=None)
+    areaServed: (
+        AdministrativeArea
+        | GeoShape
+        | Place
+        | str
+        | list[AdministrativeArea | GeoShape | Place | str]
+        | None
+    ) = Field(default=None)
+    asin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    availability: ItemAvailability | str | list[ItemAvailability | str] | None = Field(
         default=None
     )
-    gtin12: str | list[str] | None = Field(default=None)
-    gtin8: str | list[str] | None = Field(default=None)
-    inventoryLevel: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+    availabilityEnds: (
+        date | datetime | time | str | list[date | datetime | time | str] | None
+    ) = Field(default=None)
+    availabilityStarts: (
+        date | datetime | time | str | list[date | datetime | time | str] | None
+    ) = Field(default=None)
+    availableAtOrFrom: Place | str | list[Place | str] | None = Field(default=None)
+    availableDeliveryMethod: (
+        DeliveryMethod | str | list[DeliveryMethod | str] | None
+    ) = Field(default=None)
+    businessFunction: BusinessFunction | str | list[BusinessFunction | str] | None = (
+        Field(default=None)
+    )
+    deliveryLeadTime: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
     eligibleCustomerType: (
         BusinessEntityType | str | list[BusinessEntityType | str] | None
     ) = Field(default=None)
-    serialNumber: str | list[str] | None = Field(default=None)
-    deliveryLeadTime: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+    eligibleDuration: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
-    advanceBookingRequirement: (
-        QuantitativeValue | str | list[QuantitativeValue | str] | None
-    ) = Field(default=None)
-    itemCondition: OfferItemCondition | str | list[OfferItemCondition | str] | None = (
+    eligibleQuantity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
-    businessFunction: BusinessFunction | str | list[BusinessFunction | str] | None = (
-        Field(default=None)
-    )
-    availability: ItemAvailability | str | list[ItemAvailability | str] | None = Field(
-        default=None
-    )
-    sku: str | list[str] | None = Field(default=None)
-    availableAtOrFrom: Place | str | list[Place | str] | None = Field(default=None)
-    warranty: WarrantyPromise | str | list[WarrantyPromise | str] | None = Field(
-        default=None
-    )
-    asin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    gtin13: str | list[str] | None = Field(default=None)
-    eligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
+    eligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
         Field(default=None)
     )
     eligibleTransactionVolume: (
         PriceSpecification | str | list[PriceSpecification | str] | None
     ) = Field(default=None)
-    acceptedPaymentMethod: (
-        PaymentMethod
-        | LoanOrCredit
-        | str
-        | list[PaymentMethod | LoanOrCredit | str]
-        | None
-    ) = Field(default=None)
+    gtin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    gtin12: str | list[str] | None = Field(default=None)
+    gtin13: str | list[str] | None = Field(default=None)
     gtin14: str | list[str] | None = Field(default=None)
+    gtin8: str | list[str] | None = Field(default=None)
+    includesObject: (
+        TypeAndQuantityNode | str | list[TypeAndQuantityNode | str] | None
+    ) = Field(default=None)
+    ineligibleRegion: GeoShape | Place | str | list[GeoShape | Place | str] | None = (
+        Field(default=None)
+    )
+    inventoryLevel: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    itemCondition: OfferItemCondition | str | list[OfferItemCondition | str] | None = (
+        Field(default=None)
+    )
     itemOffered: (
-        MenuItem
-        | Trip
-        | Event
+        AggregateOffer
         | CreativeWork
+        | Event
+        | MenuItem
         | Product
         | Service
-        | AggregateOffer
+        | Trip
         | str
         | list[
-            MenuItem
-            | Trip
-            | Event
+            AggregateOffer
             | CreativeWork
+            | Event
+            | MenuItem
             | Product
             | Service
-            | AggregateOffer
+            | Trip
             | str
         ]
         | None
     ) = Field(default=None)
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
+    mpn: str | list[str] | None = Field(default=None)
+    priceSpecification: (
+        PriceSpecification | str | list[PriceSpecification | str] | None
+    ) = Field(default=None)
+    seller: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    serialNumber: str | list[str] | None = Field(default=None)
+    sku: str | list[str] | None = Field(default=None)
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    availabilityStarts: (
-        date | datetime | time | str | list[date | datetime | time | str] | None
-    ) = Field(default=None)
-    availableDeliveryMethod: (
-        DeliveryMethod | str | list[DeliveryMethod | str] | None
-    ) = Field(default=None)
-    eligibleQuantity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
+    validThrough: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
     )
-    gtin: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    seller: Person | Organization | str | list[Person | Organization | str] | None = (
-        Field(default=None)
+    warranty: WarrantyPromise | str | list[WarrantyPromise | str] | None = Field(
+        default=None
     )
-    availabilityEnds: (
-        datetime | time | date | str | list[datetime | time | date | str] | None
-    ) = Field(default=None)
-    ineligibleRegion: Place | str | GeoShape | list[Place | str | GeoShape] | None = (
-        Field(default=None)
-    )
-    areaServed: (
-        GeoShape
-        | AdministrativeArea
-        | Place
-        | str
-        | list[GeoShape | AdministrativeArea | Place | str]
-        | None
-    ) = Field(default=None)
-    includesObject: (
-        TypeAndQuantityNode | str | list[TypeAndQuantityNode | str] | None
-    ) = Field(default=None)
 
 
 class Dentist(MedicalOrganization, MedicalBusiness, LocalBusiness):
@@ -4856,7 +5002,15 @@ class MedicalProcedure(MedicalEntity):
     capacity that relies on invasive (surgical), non-invasive, or other techniques."""
 
     type: str = Field(default="MedicalProcedure", alias="@type")
+    bodyLocation: str | list[str] | None = Field(default=None)
     followup: str | list[str] | None = Field(default=None)
+    howPerformed: str | list[str] | None = Field(default=None)
+    preparation: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
+        default=None
+    )
+    procedureType: (
+        MedicalProcedureType | str | list[MedicalProcedureType | str] | None
+    ) = Field(default=None)
     status: (
         EventStatusType
         | MedicalStudyStatus
@@ -4864,14 +5018,6 @@ class MedicalProcedure(MedicalEntity):
         | list[EventStatusType | MedicalStudyStatus | str]
         | None
     ) = Field(default=None)
-    procedureType: (
-        MedicalProcedureType | str | list[MedicalProcedureType | str] | None
-    ) = Field(default=None)
-    preparation: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
-        default=None
-    )
-    bodyLocation: str | list[str] | None = Field(default=None)
-    howPerformed: str | list[str] | None = Field(default=None)
 
 
 class DiagnosticProcedure(MedicalProcedure):
@@ -4893,13 +5039,13 @@ class Diet(LifestyleModification, CreativeWork):
     health-related goal."""
 
     type: str = Field(default="Diet", alias="@type")
-    risks: str | list[str] | None = Field(default=None)
-    expertConsiderations: str | list[str] | None = Field(default=None)
     dietFeatures: str | list[str] | None = Field(default=None)
     endorsers: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
+    expertConsiderations: str | list[str] | None = Field(default=None)
     physiologicalBenefits: str | list[str] | None = Field(default=None)
+    risks: str | list[str] | None = Field(default=None)
 
 
 class Substance(MedicalEntity):
@@ -4920,17 +5066,8 @@ class DietarySupplement(Substance, Product):
     and metabolites."""
 
     type: str = Field(default="DietarySupplement", alias="@type")
-    isProprietary: bool | str | list[bool | str] | None = Field(default=None)
-    targetPopulation: str | list[str] | None = Field(default=None)
     activeIngredient: str | list[str] | None = Field(default=None)
-    maximumIntake: (
-        MaximumDoseSchedule | str | list[MaximumDoseSchedule | str] | None
-    ) = Field(default=None)
-    safetyConsideration: str | list[str] | None = Field(default=None)
-    recommendedIntake: (
-        RecommendedDoseSchedule | str | list[RecommendedDoseSchedule | str] | None
-    ) = Field(default=None)
-    proprietaryName: str | list[str] | None = Field(default=None)
+    isProprietary: bool | str | list[bool | str] | None = Field(default=None)
     legalStatus: (
         DrugLegalStatus
         | MedicalEnumeration
@@ -4938,8 +5075,17 @@ class DietarySupplement(Substance, Product):
         | list[DrugLegalStatus | MedicalEnumeration | str]
         | None
     ) = Field(default=None)
+    maximumIntake: (
+        MaximumDoseSchedule | str | list[MaximumDoseSchedule | str] | None
+    ) = Field(default=None)
     mechanismOfAction: str | list[str] | None = Field(default=None)
     nonProprietaryName: str | list[str] | None = Field(default=None)
+    proprietaryName: str | list[str] | None = Field(default=None)
+    recommendedIntake: (
+        RecommendedDoseSchedule | str | list[RecommendedDoseSchedule | str] | None
+    ) = Field(default=None)
+    safetyConsideration: str | list[str] | None = Field(default=None)
+    targetPopulation: str | list[str] | None = Field(default=None)
 
 
 class DigitalDocument(CreativeWork):
@@ -4956,12 +5102,12 @@ class DigitalDocumentPermission(Intangible):
 
     type: str = Field(default="DigitalDocumentPermission", alias="@type")
     grantee: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
     permissionType: (
@@ -5039,32 +5185,32 @@ class DonateAction(TransferAction):
     philanthropic reasons."""
 
     type: str = Field(default="DonateAction", alias="@type")
+    price: float | str | list[float | str] | None = Field(default=None)
+    priceCurrency: str | list[str] | None = Field(default=None)
     priceSpecification: (
         PriceSpecification | str | list[PriceSpecification | str] | None
     ) = Field(default=None)
-    priceCurrency: str | list[str] | None = Field(default=None)
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
-    price: str | float | list[str | float] | None = Field(default=None)
 
 
 class DoseSchedule(MedicalIntangible):
     """A specific dosing schedule for a drug or supplement."""
 
     type: str = Field(default="DoseSchedule", alias="@type")
-    targetPopulation: str | list[str] | None = Field(default=None)
-    frequency: str | list[str] | None = Field(default=None)
     doseUnit: str | list[str] | None = Field(default=None)
     doseValue: (
         float | QualitativeValue | str | list[float | QualitativeValue | str] | None
     ) = Field(default=None)
+    frequency: str | list[str] | None = Field(default=None)
+    targetPopulation: str | list[str] | None = Field(default=None)
 
 
 class DownloadAction(TransferAction):
@@ -5104,39 +5250,29 @@ class Drug(Substance, Product):
     the term medicine although clinical knowledge makes a clear difference between them."""
 
     type: str = Field(default="Drug", alias="@type")
+    activeIngredient: str | list[str] | None = Field(default=None)
+    administrationRoute: str | list[str] | None = Field(default=None)
+    alcoholWarning: str | list[str] | None = Field(default=None)
     availableStrength: DrugStrength | str | list[DrugStrength | str] | None = Field(
         default=None
     )
-    isProprietary: bool | str | list[bool | str] | None = Field(default=None)
-    dosageForm: str | list[str] | None = Field(default=None)
-    drugClass: DrugClass | str | list[DrugClass | str] | None = Field(default=None)
-    activeIngredient: str | list[str] | None = Field(default=None)
-    prescriptionStatus: (
-        str | DrugPrescriptionStatus | list[str | DrugPrescriptionStatus] | None
-    ) = Field(default=None)
-    maximumIntake: (
-        MaximumDoseSchedule | str | list[MaximumDoseSchedule | str] | None
-    ) = Field(default=None)
-    includedInHealthInsurancePlan: (
-        HealthInsurancePlan | str | list[HealthInsurancePlan | str] | None
-    ) = Field(default=None)
-    foodWarning: str | list[str] | None = Field(default=None)
-    pregnancyCategory: (
-        DrugPregnancyCategory | str | list[DrugPregnancyCategory | str] | None
-    ) = Field(default=None)
-    drugUnit: str | list[str] | None = Field(default=None)
-    alcoholWarning: str | list[str] | None = Field(default=None)
-    isAvailableGenerically: bool | str | list[bool | str] | None = Field(default=None)
+    breastfeedingWarning: str | list[str] | None = Field(default=None)
+    clincalPharmacology: str | list[str] | None = Field(default=None)
     clinicalPharmacology: str | list[str] | None = Field(default=None)
+    dosageForm: str | list[str] | None = Field(default=None)
     doseSchedule: DoseSchedule | str | list[DoseSchedule | str] | None = Field(
         default=None
     )
-    prescribingInfo: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    drugClass: DrugClass | str | list[DrugClass | str] | None = Field(default=None)
+    drugUnit: str | list[str] | None = Field(default=None)
+    foodWarning: str | list[str] | None = Field(default=None)
+    includedInHealthInsurancePlan: (
+        HealthInsurancePlan | str | list[HealthInsurancePlan | str] | None
+    ) = Field(default=None)
+    interactingDrug: Drug | str | list[Drug | str] | None = Field(default=None)
+    isAvailableGenerically: bool | str | list[bool | str] | None = Field(default=None)
+    isProprietary: bool | str | list[bool | str] | None = Field(default=None)
     labelDetails: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    proprietaryName: str | list[str] | None = Field(default=None)
-    rxcui: str | list[str] | None = Field(default=None)
-    breastfeedingWarning: str | list[str] | None = Field(default=None)
-    warning: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     legalStatus: (
         DrugLegalStatus
         | MedicalEnumeration
@@ -5144,14 +5280,24 @@ class Drug(Substance, Product):
         | list[DrugLegalStatus | MedicalEnumeration | str]
         | None
     ) = Field(default=None)
-    interactingDrug: Drug | str | list[Drug | str] | None = Field(default=None)
+    maximumIntake: (
+        MaximumDoseSchedule | str | list[MaximumDoseSchedule | str] | None
+    ) = Field(default=None)
     mechanismOfAction: str | list[str] | None = Field(default=None)
-    overdosage: str | list[str] | None = Field(default=None)
-    pregnancyWarning: str | list[str] | None = Field(default=None)
-    clincalPharmacology: str | list[str] | None = Field(default=None)
-    administrationRoute: str | list[str] | None = Field(default=None)
-    relatedDrug: Drug | str | list[Drug | str] | None = Field(default=None)
     nonProprietaryName: str | list[str] | None = Field(default=None)
+    overdosage: str | list[str] | None = Field(default=None)
+    pregnancyCategory: (
+        DrugPregnancyCategory | str | list[DrugPregnancyCategory | str] | None
+    ) = Field(default=None)
+    pregnancyWarning: str | list[str] | None = Field(default=None)
+    prescribingInfo: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    prescriptionStatus: (
+        DrugPrescriptionStatus | str | list[DrugPrescriptionStatus | str] | None
+    ) = Field(default=None)
+    proprietaryName: str | list[str] | None = Field(default=None)
+    relatedDrug: Drug | str | list[Drug | str] | None = Field(default=None)
+    rxcui: str | list[str] | None = Field(default=None)
+    warning: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
 
 
 class DrugClass(MedicalEntity):
@@ -5172,18 +5318,18 @@ class DrugCost(MedicalEntity):
     be used with caution by consumers of this schema's markup."""
 
     type: str = Field(default="DrugCost", alias="@type")
-    costCurrency: str | list[str] | None = Field(default=None)
-    costCategory: DrugCostCategory | str | list[DrugCostCategory | str] | None = Field(
-        default=None
-    )
-    drugUnit: str | list[str] | None = Field(default=None)
     applicableLocation: (
         AdministrativeArea | str | list[AdministrativeArea | str] | None
     ) = Field(default=None)
+    costCategory: DrugCostCategory | str | list[DrugCostCategory | str] | None = Field(
+        default=None
+    )
+    costCurrency: str | list[str] | None = Field(default=None)
     costOrigin: str | list[str] | None = Field(default=None)
     costPerUnit: (
-        QualitativeValue | str | float | list[QualitativeValue | str | float] | None
+        float | QualitativeValue | str | list[float | QualitativeValue | str] | None
     ) = Field(default=None)
+    drugUnit: str | list[str] | None = Field(default=None)
 
 
 class MedicalEnumeration(Enumeration):
@@ -5226,15 +5372,15 @@ class DrugStrength(MedicalIntangible):
     """A specific strength in which a medical drug is available in a specific country."""
 
     type: str = Field(default="DrugStrength", alias="@type")
-    strengthValue: float | str | list[float | str] | None = Field(default=None)
     activeIngredient: str | list[str] | None = Field(default=None)
+    availableIn: AdministrativeArea | str | list[AdministrativeArea | str] | None = (
+        Field(default=None)
+    )
     maximumIntake: (
         MaximumDoseSchedule | str | list[MaximumDoseSchedule | str] | None
     ) = Field(default=None)
     strengthUnit: str | list[str] | None = Field(default=None)
-    availableIn: AdministrativeArea | str | list[AdministrativeArea | str] | None = (
-        Field(default=None)
-    )
+    strengthValue: float | str | list[float | str] | None = Field(default=None)
 
 
 class DryCleaningOrLaundry(LocalBusiness):
@@ -5274,11 +5420,11 @@ class EducationEvent(Event):
     """Event type: Education event."""
 
     type: str = Field(default="EducationEvent", alias="@type")
-    assesses: str | DefinedTerm | list[str | DefinedTerm] | None = Field(default=None)
-    teaches: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    assesses: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
     educationalLevel: (
-        str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None
+        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
     ) = Field(default=None)
+    teaches: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
 
 
 class EducationalAudience(Audience):
@@ -5295,10 +5441,10 @@ class EducationalOccupationalCredential(Credential):
 
     type: str = Field(default="EducationalOccupationalCredential", alias="@type")
     competencyRequired: (
-        str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None
+        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
     ) = Field(default=None)
     educationalLevel: (
-        str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None
+        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
     ) = Field(default=None)
 
 
@@ -5311,21 +5457,33 @@ class EducationalOccupationalProgram(Intangible):
     opportunity (e.g., an advanced degree)."""
 
     type: str = Field(default="EducationalOccupationalProgram", alias="@type")
-    educationalProgramMode: AnyUrl | str | list[AnyUrl | str] | None = Field(
-        default=None
-    )
-    programType: str | DefinedTerm | list[str | DefinedTerm] | None = Field(
-        default=None
-    )
-    timeToComplete: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    applicationStartDate: date | str | list[date | str] | None = Field(default=None)
     applicationDeadline: date | str | list[date | str] | None = Field(default=None)
-    salaryUponCompletion: (
-        MonetaryAmountDistribution | str | list[MonetaryAmountDistribution | str] | None
+    applicationStartDate: date | str | list[date | str] | None = Field(default=None)
+    dayOfWeek: DayOfWeek | str | list[DayOfWeek | str] | None = Field(default=None)
+    educationalCredentialAwarded: (
+        EducationalOccupationalCredential
+        | str
+        | AnyUrl
+        | list[EducationalOccupationalCredential | str | AnyUrl]
+        | None
     ) = Field(default=None)
+    educationalProgramMode: str | AnyUrl | list[str | AnyUrl] | None = Field(
+        default=None
+    )
+    endDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    financialAidEligible: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
+    hasCourse: Course | str | list[Course | str] | None = Field(default=None)
+    maximumEnrollment: int | str | list[int | str] | None = Field(default=None)
     numberOfCredits: (
         int | StructuredValue | str | list[int | StructuredValue | str] | None
     ) = Field(default=None)
+    occupationalCategory: CategoryCode | str | list[CategoryCode | str] | None = Field(
+        default=None
+    )
     occupationalCredentialAwarded: (
         EducationalOccupationalCredential
         | str
@@ -5333,50 +5491,38 @@ class EducationalOccupationalProgram(Intangible):
         | list[EducationalOccupationalCredential | str | AnyUrl]
         | None
     ) = Field(default=None)
-    trainingSalary: (
-        MonetaryAmountDistribution | str | list[MonetaryAmountDistribution | str] | None
-    ) = Field(default=None)
-    termDuration: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    maximumEnrollment: int | str | list[int | str] | None = Field(default=None)
-    termsPerYear: float | str | list[float | str] | None = Field(default=None)
-    timeOfDay: str | list[str] | None = Field(default=None)
-    dayOfWeek: DayOfWeek | str | list[DayOfWeek | str] | None = Field(default=None)
-    programPrerequisites: (
-        EducationalOccupationalCredential
-        | AlignmentObject
-        | Course
-        | str
-        | list[EducationalOccupationalCredential | AlignmentObject | Course | str]
-        | None
-    ) = Field(default=None)
-    offers: Offer | Demand | str | list[Offer | Demand | str] | None = Field(
+    offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
         default=None
     )
-    educationalCredentialAwarded: (
-        str
-        | AnyUrl
+    programPrerequisites: (
+        AlignmentObject
+        | Course
         | EducationalOccupationalCredential
-        | list[str | AnyUrl | EducationalOccupationalCredential]
+        | str
+        | list[AlignmentObject | Course | EducationalOccupationalCredential | str]
         | None
     ) = Field(default=None)
+    programType: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
     provider: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    endDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    financialAidEligible: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
-        default=None
-    )
+    salaryUponCompletion: (
+        MonetaryAmountDistribution | str | list[MonetaryAmountDistribution | str] | None
+    ) = Field(default=None)
     startDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    occupationalCategory: CategoryCode | str | list[CategoryCode | str] | None = Field(
-        default=None
-    )
-    hasCourse: Course | str | list[Course | str] | None = Field(default=None)
+    termDuration: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    termsPerYear: float | str | list[float | str] | None = Field(default=None)
+    timeOfDay: str | list[str] | None = Field(default=None)
+    timeToComplete: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    trainingSalary: (
+        MonetaryAmountDistribution | str | list[MonetaryAmountDistribution | str] | None
+    ) = Field(default=None)
     typicalCreditsPerTerm: (
-        StructuredValue | int | str | list[StructuredValue | int | str] | None
+        int | StructuredValue | str | list[int | StructuredValue | str] | None
     ) = Field(default=None)
 
 
@@ -5410,54 +5556,54 @@ class Message(CreativeWork):
     """A single message from a sender to one or more organizations or people."""
 
     type: str = Field(default="Message", alias="@type")
-    sender: (
-        Organization
+    bccRecipient: (
+        ContactPoint
+        | Organization
         | Person
-        | Audience
         | str
-        | list[Organization | Person | Audience | str]
+        | list[ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
     ccRecipient: (
-        Organization
+        ContactPoint
+        | Organization
         | Person
-        | ContactPoint
         | str
-        | list[Organization | Person | ContactPoint | str]
+        | list[ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
-    dateRead: datetime | date | str | list[datetime | date | str] | None = Field(
+    dateRead: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
+    dateReceived: datetime | str | list[datetime | str] | None = Field(default=None)
+    dateSent: datetime | str | list[datetime | str] | None = Field(default=None)
     messageAttachment: CreativeWork | str | list[CreativeWork | str] | None = Field(
         default=None
     )
-    dateSent: datetime | str | list[datetime | str] | None = Field(default=None)
-    bccRecipient: (
-        Organization
-        | Person
-        | ContactPoint
-        | str
-        | list[Organization | Person | ContactPoint | str]
-        | None
-    ) = Field(default=None)
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
-    dateReceived: datetime | str | list[datetime | str] | None = Field(default=None)
-    toRecipient: (
-        Organization
+    sender: (
+        Audience
+        | Organization
         | Person
-        | ContactPoint
-        | Audience
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | Organization | Person | str]
+        | None
+    ) = Field(default=None)
+    toRecipient: (
+        Audience
+        | ContactPoint
+        | Organization
+        | Person
+        | str
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
 
@@ -5490,14 +5636,14 @@ class Role(Intangible):
     post](https://blog.schema.org/2014/06/16/introducing-role/)."""
 
     type: str = Field(default="Role", alias="@type")
-    roleName: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    endDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    startDate: date | datetime | str | list[date | datetime | str] | None = Field(
+    endDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
     namedPosition: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    roleName: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    startDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
 
 
 class OrganizationRole(Role):
@@ -5512,11 +5658,11 @@ class EmployeeRole(OrganizationRole):
 
     type: str = Field(default="EmployeeRole", alias="@type")
     baseSalary: (
-        PriceSpecification
+        MonetaryAmount
         | float
-        | MonetaryAmount
+        | PriceSpecification
         | str
-        | list[PriceSpecification | float | MonetaryAmount | str]
+        | list[MonetaryAmount | float | PriceSpecification | str]
         | None
     ) = Field(default=None)
     salaryCurrency: str | list[str] | None = Field(default=None)
@@ -5584,13 +5730,13 @@ class EnergyConsumptionDetails(Intangible):
     Conservation Act (EPCA) in the US."""
 
     type: str = Field(default="EnergyConsumptionDetails", alias="@type")
-    energyEfficiencyScaleMin: (
+    energyEfficiencyScaleMax: (
         EUEnergyEfficiencyEnumeration
         | str
         | list[EUEnergyEfficiencyEnumeration | str]
         | None
     ) = Field(default=None)
-    energyEfficiencyScaleMax: (
+    energyEfficiencyScaleMin: (
         EUEnergyEfficiencyEnumeration
         | str
         | list[EUEnergyEfficiencyEnumeration | str]
@@ -5615,19 +5761,19 @@ class EngineSpecification(StructuredValue):
     represented by multiple engine specification entities."""
 
     type: str = Field(default="EngineSpecification", alias="@type")
-    torque: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
-        default=None
-    )
     engineDisplacement: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
+    enginePower: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
     engineType: (
-        str | AnyUrl | QualitativeValue | list[str | AnyUrl | QualitativeValue] | None
+        QualitativeValue | str | AnyUrl | list[QualitativeValue | str | AnyUrl] | None
     ) = Field(default=None)
     fuelType: (
         QualitativeValue | str | AnyUrl | list[QualitativeValue | str | AnyUrl] | None
     ) = Field(default=None)
-    enginePower: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+    torque: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
     )
 
@@ -5640,19 +5786,19 @@ class EntryPoint(Intangible):
         SoftwareApplication | str | list[SoftwareApplication | str] | None
     ) = Field(default=None)
     actionPlatform: (
-        str
+        DigitalPlatformEnumeration
+        | str
         | AnyUrl
-        | DigitalPlatformEnumeration
-        | list[str | AnyUrl | DigitalPlatformEnumeration]
+        | list[DigitalPlatformEnumeration | str | AnyUrl]
         | None
     ) = Field(default=None)
-    urlTemplate: str | list[str] | None = Field(default=None)
     application: SoftwareApplication | str | list[SoftwareApplication | str] | None = (
         Field(default=None)
     )
-    encodingType: str | list[str] | None = Field(default=None)
     contentType: str | list[str] | None = Field(default=None)
+    encodingType: str | list[str] | None = Field(default=None)
     httpMethod: str | list[str] | None = Field(default=None)
+    urlTemplate: str | list[str] | None = Field(default=None)
 
 
 class Episode(CreativeWork):
@@ -5660,22 +5806,12 @@ class Episode(CreativeWork):
     season."""
 
     type: str = Field(default="Episode", alias="@type")
-    episodeNumber: str | int | list[str | int] | None = Field(default=None)
-    partOfSeason: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = (
-        Field(default=None)
-    )
     actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
     ) = Field(default=None)
-    partOfSeries: CreativeWorkSeries | str | list[CreativeWorkSeries | str] | None = (
-        Field(default=None)
-    )
-    directors: Person | str | list[Person | str] | None = Field(default=None)
-    productionCompany: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
     actors: Person | str | list[Person | str] | None = Field(default=None)
     director: Person | str | list[Person | str] | None = Field(default=None)
+    directors: Person | str | list[Person | str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -5683,7 +5819,17 @@ class Episode(CreativeWork):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
+    episodeNumber: int | str | list[int | str] | None = Field(default=None)
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
+        default=None
+    )
+    partOfSeason: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = (
+        Field(default=None)
+    )
+    partOfSeries: CreativeWorkSeries | str | list[CreativeWorkSeries | str] | None = (
+        Field(default=None)
+    )
+    productionCompany: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
     trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
@@ -5693,9 +5839,9 @@ class InstantaneousEvent(StructuredValue):
     """An event with no duration, like for instance a computer log entry."""
 
     type: str = Field(default="InstantaneousEvent", alias="@type")
-    timestamp: datetime | str | list[datetime | str] | None = Field(default=None)
-    source: Thing | str | list[Thing | str] | None = Field(default=None)
     data: Thing | str | list[Thing | str] | None = Field(default=None)
+    source: Thing | str | list[Thing | str] | None = Field(default=None)
+    timestamp: datetime | str | list[datetime | str] | None = Field(default=None)
 
 
 class Error(InstantaneousEvent):
@@ -5703,11 +5849,11 @@ class Error(InstantaneousEvent):
 
     type: str = Field(default="Error", alias="@type")
     errorCode: (
-        StatusEnumeration
+        DefinedTerm
         | int
-        | DefinedTerm
+        | StatusEnumeration
         | str
-        | list[StatusEnumeration | int | DefinedTerm | str]
+        | list[DefinedTerm | int | StatusEnumeration | str]
         | None
     ) = Field(default=None)
 
@@ -5772,13 +5918,13 @@ class ExchangeRateSpecification(StructuredValue):
     """A structured value representing exchange rate."""
 
     type: str = Field(default="ExchangeRateSpecification", alias="@type")
+    currency: str | list[str] | None = Field(default=None)
     currentExchangeRate: (
         UnitPriceSpecification | str | list[UnitPriceSpecification | str] | None
     ) = Field(default=None)
     exchangeRateSpread: (
         MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
     ) = Field(default=None)
-    currency: str | list[str] | None = Field(default=None)
 
 
 class PlayAction(Action):
@@ -5790,8 +5936,8 @@ class PlayAction(Action):
     for an audience or at an event, rather than consuming visual content."""
 
     type: str = Field(default="PlayAction", alias="@type")
-    event: Event | str | list[Event | str] | None = Field(default=None)
     audience: Audience | str | list[Audience | str] | None = Field(default=None)
+    event: Event | str | list[Event | str] | None = Field(default=None)
 
 
 class ExerciseAction(PlayAction):
@@ -5799,25 +5945,25 @@ class ExerciseAction(PlayAction):
     and fitness."""
 
     type: str = Field(default="ExerciseAction", alias="@type")
-    exerciseRelatedDiet: Diet | str | list[Diet | str] | None = Field(default=None)
-    sportsTeam: SportsTeam | str | list[SportsTeam | str] | None = Field(default=None)
-    sportsActivityLocation: (
-        SportsActivityLocation | str | list[SportsActivityLocation | str] | None
-    ) = Field(default=None)
+    course: Place | str | list[Place | str] | None = Field(default=None)
     diet: Diet | str | list[Diet | str] | None = Field(default=None)
-    sportsEvent: SportsEvent | str | list[SportsEvent | str] | None = Field(
-        default=None
-    )
-    opponent: Person | str | list[Person | str] | None = Field(default=None)
-    exerciseType: str | list[str] | None = Field(default=None)
-    toLocation: Place | str | list[Place | str] | None = Field(default=None)
-    fromLocation: Place | str | list[Place | str] | None = Field(default=None)
+    distance: Distance | str | list[Distance | str] | None = Field(default=None)
+    exerciseCourse: Place | str | list[Place | str] | None = Field(default=None)
     exercisePlan: ExercisePlan | str | list[ExercisePlan | str] | None = Field(
         default=None
     )
-    exerciseCourse: Place | str | list[Place | str] | None = Field(default=None)
-    course: Place | str | list[Place | str] | None = Field(default=None)
-    distance: Distance | str | list[Distance | str] | None = Field(default=None)
+    exerciseRelatedDiet: Diet | str | list[Diet | str] | None = Field(default=None)
+    exerciseType: str | list[str] | None = Field(default=None)
+    fromLocation: Place | str | list[Place | str] | None = Field(default=None)
+    opponent: Person | str | list[Person | str] | None = Field(default=None)
+    sportsActivityLocation: (
+        SportsActivityLocation | str | list[SportsActivityLocation | str] | None
+    ) = Field(default=None)
+    sportsEvent: SportsEvent | str | list[SportsEvent | str] | None = Field(
+        default=None
+    )
+    sportsTeam: SportsTeam | str | list[SportsTeam | str] | None = Field(default=None)
+    toLocation: Place | str | list[Place | str] | None = Field(default=None)
 
 
 class ExerciseGym(SportsActivityLocation):
@@ -5832,21 +5978,21 @@ class PhysicalActivity(LifestyleModification):
     exercise, and exercise prescribed as part of a medical treatment or recovery plan."""
 
     type: str = Field(default="PhysicalActivity", alias="@type")
-    category: (
-        str
-        | AnyUrl
-        | Thing
-        | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
+    associatedAnatomy: (
+        AnatomicalStructure
+        | AnatomicalSystem
+        | SuperficialAnatomy
+        | str
+        | list[AnatomicalStructure | AnatomicalSystem | SuperficialAnatomy | str]
         | None
     ) = Field(default=None)
-    associatedAnatomy: (
-        SuperficialAnatomy
-        | AnatomicalStructure
-        | AnatomicalSystem
+    category: (
+        CategoryCode
+        | PhysicalActivityCategory
         | str
-        | list[SuperficialAnatomy | AnatomicalStructure | AnatomicalSystem | str]
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
         | None
     ) = Field(default=None)
     epidemiology: str | list[str] | None = Field(default=None)
@@ -5858,27 +6004,27 @@ class ExercisePlan(PhysicalActivity, CreativeWork):
     defined exercise routines as well as activity prescribed by a clinician."""
 
     type: str = Field(default="ExercisePlan", alias="@type")
-    restPeriods: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
-        default=None
-    )
+    activityDuration: (
+        timedelta
+        | QuantitativeValue
+        | str
+        | list[timedelta | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
     activityFrequency: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
-    exerciseType: str | list[str] | None = Field(default=None)
     additionalVariable: str | list[str] | None = Field(default=None)
-    repetitions: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
-    ) = Field(default=None)
+    exerciseType: str | list[str] | None = Field(default=None)
     intensity: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
     )
-    activityDuration: (
-        QuantitativeValue
-        | timedelta
-        | str
-        | list[QuantitativeValue | timedelta | str]
-        | None
+    repetitions: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
+    restPeriods: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
     workload: (
         Energy | QuantitativeValue | str | list[Energy | QuantitativeValue | str] | None
     ) = Field(default=None)
@@ -5934,61 +6080,61 @@ class FinancialIncentive(Intangible):
     """
 
     type: str = Field(default="FinancialIncentive", alias="@type")
-    purchaseType: PurchaseType | str | list[PurchaseType | str] | None = Field(
+    areaServed: (
+        AdministrativeArea
+        | GeoShape
+        | Place
+        | str
+        | list[AdministrativeArea | GeoShape | Place | str]
+        | None
+    ) = Field(default=None)
+    eligibleWithSupplier: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    incentiveAmount: (
+        LoanOrCredit
+        | QuantitativeValue
+        | UnitPriceSpecification
+        | str
+        | list[LoanOrCredit | QuantitativeValue | UnitPriceSpecification | str]
+        | None
+    ) = Field(default=None)
+    incentiveStatus: IncentiveStatus | str | list[IncentiveStatus | str] | None = Field(
         default=None
     )
     incentiveType: IncentiveType | str | list[IncentiveType | str] | None = Field(
         default=None
     )
-    validThrough: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    incentiveStatus: IncentiveStatus | str | list[IncentiveStatus | str] | None = Field(
-        default=None
-    )
-    purchasePriceLimit: MonetaryAmount | str | list[MonetaryAmount | str] | None = (
-        Field(default=None)
-    )
-    publisher: (
-        Organization | Person | str | list[Organization | Person | str] | None
+    incentivizedItem: (
+        DefinedTerm | Product | str | list[DefinedTerm | Product | str] | None
     ) = Field(default=None)
-    eligibleWithSupplier: Organization | str | list[Organization | str] | None = Field(
+    incomeLimit: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
     provider: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    incomeLimit: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
+    publisher: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    purchasePriceLimit: MonetaryAmount | str | list[MonetaryAmount | str] | None = (
+        Field(default=None)
+    )
+    purchaseType: PurchaseType | str | list[PurchaseType | str] | None = Field(
         default=None
     )
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    incentivizedItem: (
-        Product | DefinedTerm | str | list[Product | DefinedTerm | str] | None
-    ) = Field(default=None)
-    incentiveAmount: (
-        UnitPriceSpecification
-        | QuantitativeValue
-        | LoanOrCredit
-        | str
-        | list[UnitPriceSpecification | QuantitativeValue | LoanOrCredit | str]
-        | None
-    ) = Field(default=None)
     qualifiedExpense: (
         IncentiveQualifiedExpenseType
         | str
         | list[IncentiveQualifiedExpenseType | str]
         | None
     ) = Field(default=None)
-    areaServed: (
-        GeoShape
-        | AdministrativeArea
-        | Place
-        | str
-        | list[GeoShape | AdministrativeArea | Place | str]
-        | None
-    ) = Field(default=None)
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    validThrough: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
 
 
 class FireStation(EmergencyService, CivicStructure):
@@ -6001,27 +6147,27 @@ class Flight(Trip):
     """An airline flight."""
 
     type: str = Field(default="Flight", alias="@type")
+    aircraft: str | Vehicle | list[str | Vehicle] | None = Field(default=None)
+    arrivalAirport: Airport | str | list[Airport | str] | None = Field(default=None)
+    arrivalGate: str | list[str] | None = Field(default=None)
+    arrivalTerminal: str | list[str] | None = Field(default=None)
     boardingPolicy: BoardingPolicyType | str | list[BoardingPolicyType | str] | None = (
         Field(default=None)
     )
-    arrivalGate: str | list[str] | None = Field(default=None)
-    arrivalTerminal: str | list[str] | None = Field(default=None)
-    webCheckinTime: datetime | str | list[datetime | str] | None = Field(default=None)
+    carrier: Organization | str | list[Organization | str] | None = Field(default=None)
+    departureAirport: Airport | str | list[Airport | str] | None = Field(default=None)
+    departureGate: str | list[str] | None = Field(default=None)
     departureTerminal: str | list[str] | None = Field(default=None)
-    arrivalAirport: Airport | str | list[Airport | str] | None = Field(default=None)
-    flightDistance: str | Distance | list[str | Distance] | None = Field(default=None)
-    mealService: str | list[str] | None = Field(default=None)
     estimatedFlightDuration: timedelta | str | list[timedelta | str] | None = Field(
         default=None
     )
-    departureAirport: Airport | str | list[Airport | str] | None = Field(default=None)
-    departureGate: str | list[str] | None = Field(default=None)
+    flightDistance: Distance | str | list[Distance | str] | None = Field(default=None)
     flightNumber: str | list[str] | None = Field(default=None)
-    aircraft: str | Vehicle | list[str | Vehicle] | None = Field(default=None)
-    seller: Person | Organization | str | list[Person | Organization | str] | None = (
+    mealService: str | list[str] | None = Field(default=None)
+    seller: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    carrier: Organization | str | list[Organization | str] | None = Field(default=None)
+    webCheckinTime: datetime | str | list[datetime | str] | None = Field(default=None)
 
 
 class FlightReservation(Reservation):
@@ -6030,11 +6176,11 @@ class FlightReservation(Reservation):
     confirmations of reservations. For offers of tickets, use Offer."""
 
     type: str = Field(default="FlightReservation", alias="@type")
+    boardingGroup: str | list[str] | None = Field(default=None)
     passengerPriorityStatus: (
-        str | QualitativeValue | list[str | QualitativeValue] | None
+        QualitativeValue | str | list[QualitativeValue | str] | None
     ) = Field(default=None)
     passengerSequenceNumber: str | list[str] | None = Field(default=None)
-    boardingGroup: str | list[str] | None = Field(default=None)
     securityScreening: str | list[str] | None = Field(default=None)
 
 
@@ -6063,14 +6209,6 @@ class FloorPlan(Intangible):
     wikipedia](https://en.wikipedia.org/wiki/Floor_plan)) can be indicated using image."""
 
     type: str = Field(default="FloorPlan", alias="@type")
-    numberOfRooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
-    numberOfPartialBathrooms: float | str | list[float | str] | None = Field(
-        default=None
-    )
-    numberOfFullBathrooms: float | str | list[float | str] | None = Field(default=None)
-    petsAllowed: str | bool | list[str | bool] | None = Field(default=None)
     amenityFeature: (
         LocationFeatureSpecification
         | str
@@ -6080,22 +6218,30 @@ class FloorPlan(Intangible):
     floorSize: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
     )
-    numberOfAvailableAccommodationUnits: (
-        QuantitativeValue | str | list[QuantitativeValue | str] | None
-    ) = Field(default=None)
-    layoutImage: (
-        AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None
-    ) = Field(default=None)
-    numberOfBathroomsTotal: int | str | list[int | str] | None = Field(default=None)
-    numberOfBedrooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
     isPlanForApartment: Accommodation | str | list[Accommodation | str] | None = Field(
         default=None
     )
+    layoutImage: (
+        ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None
+    ) = Field(default=None)
     numberOfAccommodationUnits: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
+    numberOfAvailableAccommodationUnits: (
+        QuantitativeValue | str | list[QuantitativeValue | str] | None
+    ) = Field(default=None)
+    numberOfBathroomsTotal: int | str | list[int | str] | None = Field(default=None)
+    numberOfBedrooms: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    numberOfFullBathrooms: float | str | list[float | str] | None = Field(default=None)
+    numberOfPartialBathrooms: float | str | list[float | str] | None = Field(
+        default=None
+    )
+    numberOfRooms: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
 
 
 class Florist(Store):
@@ -6118,7 +6264,7 @@ class FollowAction(InteractAction):
     location of inanimate objects (e.g. you track a package, but you don't follow it)."""
 
     type: str = Field(default="FollowAction", alias="@type")
-    followee: Person | Organization | str | list[Person | Organization | str] | None = (
+    followee: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
 
@@ -6208,20 +6354,20 @@ class Game(CreativeWork):
     characters in a fictional setting."""
 
     type: str = Field(default="Game", alias="@type")
+    characterAttribute: Thing | str | list[Thing | str] | None = Field(default=None)
+    gameItem: Thing | str | list[Thing | str] | None = Field(default=None)
+    gameLocation: (
+        Place
+        | PostalAddress
+        | AnyUrl
+        | str
+        | list[Place | PostalAddress | AnyUrl | str]
+        | None
+    ) = Field(default=None)
     numberOfPlayers: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
-    gameLocation: (
-        Place
-        | AnyUrl
-        | PostalAddress
-        | str
-        | list[Place | AnyUrl | PostalAddress | str]
-        | None
-    ) = Field(default=None)
-    characterAttribute: Thing | str | list[Thing | str] | None = Field(default=None)
     quest: Thing | str | list[Thing | str] | None = Field(default=None)
-    gameItem: Thing | str | list[Thing | str] | None = Field(default=None)
 
 
 class GameAvailabilityEnumeration(Enumeration):
@@ -6241,11 +6387,11 @@ class GameServer(Intangible):
     """Server that provides game interaction in a multiplayer game."""
 
     type: str = Field(default="GameServer", alias="@type")
+    game: VideoGame | str | list[VideoGame | str] | None = Field(default=None)
     playersOnline: int | str | list[int | str] | None = Field(default=None)
     serverStatus: GameServerStatus | str | list[GameServerStatus | str] | None = Field(
         default=None
     )
-    game: VideoGame | str | list[VideoGame | str] | None = Field(default=None)
 
 
 class GameServerStatus(StatusEnumeration):
@@ -6285,22 +6431,22 @@ class Gene(BioChemEntity):
     21), A- (agouti genotype)."""
 
     type: str = Field(default="Gene", alias="@type")
+    alternativeOf: Gene | str | list[Gene | str] | None = Field(default=None)
+    encodesBioChemEntity: BioChemEntity | str | list[BioChemEntity | str] | None = (
+        Field(default=None)
+    )
     expressedIn: (
-        AnatomicalSystem
-        | DefinedTerm
+        AnatomicalStructure
+        | AnatomicalSystem
         | BioChemEntity
-        | AnatomicalStructure
+        | DefinedTerm
         | str
         | list[
-            AnatomicalSystem | DefinedTerm | BioChemEntity | AnatomicalStructure | str
+            AnatomicalStructure | AnatomicalSystem | BioChemEntity | DefinedTerm | str
         ]
         | None
     ) = Field(default=None)
     hasBioPolymerSequence: str | list[str] | None = Field(default=None)
-    encodesBioChemEntity: BioChemEntity | str | list[BioChemEntity | str] | None = (
-        Field(default=None)
-    )
-    alternativeOf: Gene | str | list[Gene | str] | None = Field(default=None)
 
 
 class GeneralContractor(HomeAndConstructionBusiness):
@@ -6316,16 +6462,16 @@ class GeoShape(StructuredValue):
     when writing a list of several such points."""
 
     type: str = Field(default="GeoShape", alias="@type")
-    address: str | PostalAddress | list[str | PostalAddress] | None = Field(
+    address: PostalAddress | str | list[PostalAddress | str] | None = Field(
         default=None
     )
+    addressCountry: Country | str | list[Country | str] | None = Field(default=None)
     box: str | list[str] | None = Field(default=None)
-    postalCode: str | list[str] | None = Field(default=None)
+    circle: str | list[str] | None = Field(default=None)
+    elevation: float | str | list[float | str] | None = Field(default=None)
     line: str | list[str] | None = Field(default=None)
     polygon: str | list[str] | None = Field(default=None)
-    circle: str | list[str] | None = Field(default=None)
-    elevation: str | float | list[str | float] | None = Field(default=None)
-    addressCountry: Country | str | list[Country | str] | None = Field(default=None)
+    postalCode: str | list[str] | None = Field(default=None)
 
 
 class GeoCircle(GeoShape):
@@ -6341,7 +6487,7 @@ class GeoCircle(GeoShape):
     geoMidpoint: GeoCoordinates | str | list[GeoCoordinates | str] | None = Field(
         default=None
     )
-    geoRadius: str | float | Distance | list[str | float | Distance] | None = Field(
+    geoRadius: Distance | float | str | list[Distance | float | str] | None = Field(
         default=None
     )
 
@@ -6350,14 +6496,14 @@ class GeoCoordinates(StructuredValue):
     """The geographic coordinates of a place or event."""
 
     type: str = Field(default="GeoCoordinates", alias="@type")
-    address: str | PostalAddress | list[str | PostalAddress] | None = Field(
+    address: PostalAddress | str | list[PostalAddress | str] | None = Field(
         default=None
     )
-    postalCode: str | list[str] | None = Field(default=None)
-    longitude: str | float | list[str | float] | None = Field(default=None)
-    elevation: str | float | list[str | float] | None = Field(default=None)
     addressCountry: Country | str | list[Country | str] | None = Field(default=None)
-    latitude: str | float | list[str | float] | None = Field(default=None)
+    elevation: float | str | list[float | str] | None = Field(default=None)
+    latitude: float | str | list[float | str] | None = Field(default=None)
+    longitude: float | str | list[float | str] | None = Field(default=None)
+    postalCode: str | list[str] | None = Field(default=None)
 
 
 class GeospatialGeometry(Intangible):
@@ -6365,35 +6511,35 @@ class GeospatialGeometry(Intangible):
     definitions from Geo-Spatial best practices."""
 
     type: str = Field(default="GeospatialGeometry", alias="@type")
-    geoIntersects: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
-    ) = Field(default=None)
-    geoCoveredBy: (
+    geoContains: (
         GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
-    geoTouches: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
-    ) = Field(default=None)
-    geoWithin: (
+    geoCoveredBy: (
         GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
     geoCovers: (
         GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
+    geoCrosses: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
+    geoDisjoint: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
     geoEquals: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
+    ) = Field(default=None)
+    geoIntersects: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
     geoOverlaps: (
         GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
-    geoDisjoint: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
-    ) = Field(default=None)
-    geoCrosses: (
+    geoTouches: (
         GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
-    geoContains: (
-        Place | GeospatialGeometry | str | list[Place | GeospatialGeometry | str] | None
+    geoWithin: (
+        GeospatialGeometry | Place | str | list[GeospatialGeometry | Place | str] | None
     ) = Field(default=None)
 
 
@@ -6405,12 +6551,12 @@ class GiveAction(TransferAction):
 
     type: str = Field(default="GiveAction", alias="@type")
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
 
@@ -6445,17 +6591,17 @@ class Permit(Intangible):
     """A permit issued by an organization, e.g. a parking pass."""
 
     type: str = Field(default="Permit", alias="@type")
-    validUntil: date | str | list[date | str] | None = Field(default=None)
-    validFor: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    issuedBy: Organization | str | list[Organization | str] | None = Field(default=None)
     issuedThrough: Service | str | list[Service | str] | None = Field(default=None)
     permitAudience: Audience | str | list[Audience | str] | None = Field(default=None)
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
+    validFor: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    issuedBy: Organization | str | list[Organization | str] | None = Field(default=None)
     validIn: AdministrativeArea | str | list[AdministrativeArea | str] | None = Field(
         default=None
     )
+    validUntil: date | str | list[date | str] | None = Field(default=None)
 
 
 class GovernmentPermit(Permit):
@@ -6469,7 +6615,7 @@ class GovernmentService(Service):
     benefits, etc."""
 
     type: str = Field(default="GovernmentService", alias="@type")
-    jurisdiction: str | AdministrativeArea | list[str | AdministrativeArea] | None = (
+    jurisdiction: AdministrativeArea | str | list[AdministrativeArea | str] | None = (
         Field(default=None)
     )
     serviceOperator: Organization | str | list[Organization | str] | None = Field(
@@ -6494,33 +6640,33 @@ class Grant(Intangible):
     """
 
     type: str = Field(default="Grant", alias="@type")
-    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    funder: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
     fundedItem: (
-        Person
-        | MedicalEntity
-        | Event
+        BioChemEntity
         | CreativeWork
-        | Product
+        | Event
+        | MedicalEntity
         | Organization
-        | BioChemEntity
+        | Person
+        | Product
         | str
         | list[
-            Person
-            | MedicalEntity
-            | Event
+            BioChemEntity
             | CreativeWork
-            | Product
+            | Event
+            | MedicalEntity
             | Organization
-            | BioChemEntity
+            | Person
+            | Product
             | str
         ]
         | None
     ) = Field(default=None)
+    funder: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
 
 
 class GroceryStore(Store):
@@ -6537,18 +6683,18 @@ class Guide(CreativeWork):
     Ranked List and recommend specific products or services with ranking."""
 
     type: str = Field(default="Guide", alias="@type")
+    category: (
+        CategoryCode
+        | PhysicalActivityCategory
+        | str
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
+        | None
+    ) = Field(default=None)
     reviewAspect: StructuredValue | str | list[StructuredValue | str] | None = Field(
         default=None
     )
-    category: (
-        str
-        | AnyUrl
-        | Thing
-        | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
-        | None
-    ) = Field(default=None)
 
 
 class HVACBusiness(HomeAndConstructionBusiness):
@@ -6592,40 +6738,40 @@ class HealthInsurancePlan(Intangible):
     """A US-style health insurance plan, including PPOs, EPOs, and HMOs."""
 
     type: str = Field(default="HealthInsurancePlan", alias="@type")
-    usesHealthPlanIdStandard: str | AnyUrl | list[str | AnyUrl] | None = Field(
-        default=None
-    )
     benefitsSummaryUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    includesHealthPlanFormulary: (
-        HealthPlanFormulary | str | list[HealthPlanFormulary | str] | None
-    ) = Field(default=None)
     contactPoint: ContactPoint | str | list[ContactPoint | str] | None = Field(
         default=None
     )
     healthPlanDrugOption: str | list[str] | None = Field(default=None)
+    healthPlanDrugTier: str | list[str] | None = Field(default=None)
+    healthPlanId: str | list[str] | None = Field(default=None)
     healthPlanMarketingUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(
         default=None
     )
+    includesHealthPlanFormulary: (
+        HealthPlanFormulary | str | list[HealthPlanFormulary | str] | None
+    ) = Field(default=None)
     includesHealthPlanNetwork: (
         HealthPlanNetwork | str | list[HealthPlanNetwork | str] | None
     ) = Field(default=None)
-    healthPlanDrugTier: str | list[str] | None = Field(default=None)
-    healthPlanId: str | list[str] | None = Field(default=None)
+    usesHealthPlanIdStandard: str | AnyUrl | list[str | AnyUrl] | None = Field(
+        default=None
+    )
 
 
 class HealthPlanCostSharingSpecification(Intangible):
     """A description of costs to the patient under a given network or formulary."""
 
     type: str = Field(default="HealthPlanCostSharingSpecification", alias="@type")
+    healthPlanCoinsuranceOption: str | list[str] | None = Field(default=None)
     healthPlanCoinsuranceRate: float | str | list[float | str] | None = Field(
         default=None
     )
-    healthPlanCopayOption: str | list[str] | None = Field(default=None)
-    healthPlanCoinsuranceOption: str | list[str] | None = Field(default=None)
-    healthPlanPharmacyCategory: str | list[str] | None = Field(default=None)
     healthPlanCopay: (
         PriceSpecification | str | list[PriceSpecification | str] | None
     ) = Field(default=None)
+    healthPlanCopayOption: str | list[str] | None = Field(default=None)
+    healthPlanPharmacyCategory: str | list[str] | None = Field(default=None)
 
 
 class HealthPlanFormulary(Intangible):
@@ -6634,14 +6780,14 @@ class HealthPlanFormulary(Intangible):
 
     type: str = Field(default="HealthPlanFormulary", alias="@type")
     healthPlanCostSharing: (
-        HealthPlanCostSharingSpecification
-        | bool
+        bool
+        | HealthPlanCostSharingSpecification
         | str
-        | list[HealthPlanCostSharingSpecification | bool | str]
+        | list[bool | HealthPlanCostSharingSpecification | str]
         | None
     ) = Field(default=None)
-    offersPrescriptionByMail: bool | str | list[bool | str] | None = Field(default=None)
     healthPlanDrugTier: str | list[str] | None = Field(default=None)
+    offersPrescriptionByMail: bool | str | list[bool | str] | None = Field(default=None)
 
 
 class HealthPlanNetwork(Intangible):
@@ -6649,14 +6795,14 @@ class HealthPlanNetwork(Intangible):
 
     type: str = Field(default="HealthPlanNetwork", alias="@type")
     healthPlanCostSharing: (
-        HealthPlanCostSharingSpecification
-        | bool
+        bool
+        | HealthPlanCostSharingSpecification
         | str
-        | list[HealthPlanCostSharingSpecification | bool | str]
+        | list[bool | HealthPlanCostSharingSpecification | str]
         | None
     ) = Field(default=None)
-    healthPlanNetworkTier: str | list[str] | None = Field(default=None)
     healthPlanNetworkId: str | list[str] | None = Field(default=None)
+    healthPlanNetworkTier: str | list[str] | None = Field(default=None)
 
 
 class WebContent(CreativeWork):
@@ -6786,7 +6932,7 @@ class House(Accommodation):
 
     type: str = Field(default="House", alias="@type")
     numberOfRooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
 
 
@@ -6800,28 +6946,28 @@ class HowTo(CreativeWork):
     """Instructions that explain how to achieve a result by performing a sequence of steps."""
 
     type: str = Field(default="HowTo", alias="@type")
-    estimatedCost: str | MonetaryAmount | list[str | MonetaryAmount] | None = Field(
+    estimatedCost: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
-    supply: str | HowToSupply | list[str | HowToSupply] | None = Field(default=None)
+    performTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    prepTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
     step: (
-        str
-        | CreativeWork
-        | HowToStep
+        CreativeWork
         | HowToSection
-        | list[str | CreativeWork | HowToStep | HowToSection]
+        | HowToStep
+        | str
+        | list[CreativeWork | HowToSection | HowToStep | str]
         | None
     ) = Field(default=None)
-    yield_: str | QuantitativeValue | list[str | QuantitativeValue] | None = Field(
-        default=None, alias="yield"
-    )
     steps: (
         CreativeWork | ItemList | str | list[CreativeWork | ItemList | str] | None
     ) = Field(default=None)
+    supply: HowToSupply | str | list[HowToSupply | str] | None = Field(default=None)
     tool: HowToTool | str | list[HowToTool | str] | None = Field(default=None)
     totalTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    performTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    prepTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    yield_: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None, alias="yield"
+    )
 
 
 class ListItem(Intangible):
@@ -6829,9 +6975,9 @@ class ListItem(Intangible):
 
     type: str = Field(default="ListItem", alias="@type")
     item: Thing | str | list[Thing | str] | None = Field(default=None)
-    previousItem: ListItem | str | list[ListItem | str] | None = Field(default=None)
-    position: str | int | list[str | int] | None = Field(default=None)
     nextItem: ListItem | str | list[ListItem | str] | None = Field(default=None)
+    position: int | str | list[int | str] | None = Field(default=None)
+    previousItem: ListItem | str | list[ListItem | str] | None = Field(default=None)
 
 
 class HowToDirection(ListItem, CreativeWork):
@@ -6839,20 +6985,20 @@ class HowToDirection(ListItem, CreativeWork):
     a result."""
 
     type: str = Field(default="HowToDirection", alias="@type")
-    beforeMedia: (
-        MediaObject | AnyUrl | str | list[MediaObject | AnyUrl | str] | None
-    ) = Field(default=None)
-    supply: str | HowToSupply | list[str | HowToSupply] | None = Field(default=None)
-    duringMedia: (
-        AnyUrl | MediaObject | str | list[AnyUrl | MediaObject | str] | None
-    ) = Field(default=None)
     afterMedia: MediaObject | AnyUrl | str | list[MediaObject | AnyUrl | str] | None = (
         Field(default=None)
     )
-    tool: HowToTool | str | list[HowToTool | str] | None = Field(default=None)
-    totalTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    beforeMedia: (
+        MediaObject | AnyUrl | str | list[MediaObject | AnyUrl | str] | None
+    ) = Field(default=None)
+    duringMedia: (
+        MediaObject | AnyUrl | str | list[MediaObject | AnyUrl | str] | None
+    ) = Field(default=None)
     performTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
     prepTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    supply: HowToSupply | str | list[HowToSupply | str] | None = Field(default=None)
+    tool: HowToTool | str | list[HowToTool | str] | None = Field(default=None)
+    totalTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
 
 
 class HowToItem(ListItem):
@@ -6861,7 +7007,7 @@ class HowToItem(ListItem):
 
     type: str = Field(default="HowToItem", alias="@type")
     requiredQuantity: (
-        QuantitativeValue | str | float | list[QuantitativeValue | str | float] | None
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
 
 
@@ -6886,7 +7032,7 @@ class HowToSupply(HowToItem):
     """A supply consumed when performing the instructions for how to achieve a result."""
 
     type: str = Field(default="HowToSupply", alias="@type")
-    estimatedCost: str | MonetaryAmount | list[str | MonetaryAmount] | None = Field(
+    estimatedCost: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
 
@@ -6915,10 +7061,10 @@ class HyperToc(CreativeWork):
     items."""
 
     type: str = Field(default="HyperToc", alias="@type")
-    tocEntry: HyperTocEntry | str | list[HyperTocEntry | str] | None = Field(
+    associatedMedia: MediaObject | str | list[MediaObject | str] | None = Field(
         default=None
     )
-    associatedMedia: MediaObject | str | list[MediaObject | str] | None = Field(
+    tocEntry: HyperTocEntry | str | list[HyperTocEntry | str] | None = Field(
         default=None
     )
 
@@ -7039,9 +7185,6 @@ class Physician(MedicalOrganization, MedicalBusiness):
     """An individual physician or a physician's office considered as a MedicalOrganization."""
 
     type: str = Field(default="Physician", alias="@type")
-    hospitalAffiliation: Hospital | str | list[Hospital | str] | None = Field(
-        default=None
-    )
     availableService: (
         MedicalProcedure
         | MedicalTest
@@ -7050,6 +7193,9 @@ class Physician(MedicalOrganization, MedicalBusiness):
         | list[MedicalProcedure | MedicalTest | MedicalTherapy | str]
         | None
     ) = Field(default=None)
+    hospitalAffiliation: Hospital | str | list[Hospital | str] | None = Field(
+        default=None
+    )
     medicalSpecialty: MedicalSpecialty | str | list[MedicalSpecialty | str] | None = (
         Field(default=None)
     )
@@ -7091,11 +7237,53 @@ class MedicalCondition(MedicalEntity):
     disorders, syndromes, etc."""
 
     type: str = Field(default="MedicalCondition", alias="@type")
+    associatedAnatomy: (
+        AnatomicalStructure
+        | AnatomicalSystem
+        | SuperficialAnatomy
+        | str
+        | list[AnatomicalStructure | AnatomicalSystem | SuperficialAnatomy | str]
+        | None
+    ) = Field(default=None)
     cause: MedicalCause | str | list[MedicalCause | str] | None = Field(default=None)
-    possibleComplication: str | list[str] | None = Field(default=None)
-    naturalProgression: str | list[str] | None = Field(default=None)
-    typicalTest: MedicalTest | str | list[MedicalTest | str] | None = Field(
+    differentialDiagnosis: DDxElement | str | list[DDxElement | str] | None = Field(
         default=None
+    )
+    drug: Drug | str | list[Drug | str] | None = Field(default=None)
+    epidemiology: str | list[str] | None = Field(default=None)
+    expectedPrognosis: str | list[str] | None = Field(default=None)
+    naturalProgression: str | list[str] | None = Field(default=None)
+    pathophysiology: str | list[str] | None = Field(default=None)
+    possibleComplication: str | list[str] | None = Field(default=None)
+    possibleTreatment: (
+        Drug
+        | DrugClass
+        | LifestyleModification
+        | MedicalTherapy
+        | str
+        | list[Drug | DrugClass | LifestyleModification | MedicalTherapy | str]
+        | None
+    ) = Field(default=None)
+    primaryPrevention: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
+        default=None
+    )
+    riskFactor: MedicalRiskFactor | str | list[MedicalRiskFactor | str] | None = Field(
+        default=None
+    )
+    secondaryPrevention: (
+        Drug
+        | DrugClass
+        | LifestyleModification
+        | MedicalTherapy
+        | str
+        | list[Drug | DrugClass | LifestyleModification | MedicalTherapy | str]
+        | None
+    ) = Field(default=None)
+    signOrSymptom: (
+        MedicalSignOrSymptom | str | list[MedicalSignOrSymptom | str] | None
+    ) = Field(default=None)
+    stage: MedicalConditionStage | str | list[MedicalConditionStage | str] | None = (
+        Field(default=None)
     )
     status: (
         EventStatusType
@@ -7104,51 +7292,9 @@ class MedicalCondition(MedicalEntity):
         | list[EventStatusType | MedicalStudyStatus | str]
         | None
     ) = Field(default=None)
-    stage: MedicalConditionStage | str | list[MedicalConditionStage | str] | None = (
-        Field(default=None)
-    )
-    associatedAnatomy: (
-        SuperficialAnatomy
-        | AnatomicalStructure
-        | AnatomicalSystem
-        | str
-        | list[SuperficialAnatomy | AnatomicalStructure | AnatomicalSystem | str]
-        | None
-    ) = Field(default=None)
-    primaryPrevention: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
+    typicalTest: MedicalTest | str | list[MedicalTest | str] | None = Field(
         default=None
     )
-    epidemiology: str | list[str] | None = Field(default=None)
-    expectedPrognosis: str | list[str] | None = Field(default=None)
-    secondaryPrevention: (
-        DrugClass
-        | LifestyleModification
-        | MedicalTherapy
-        | Drug
-        | str
-        | list[DrugClass | LifestyleModification | MedicalTherapy | Drug | str]
-        | None
-    ) = Field(default=None)
-    riskFactor: MedicalRiskFactor | str | list[MedicalRiskFactor | str] | None = Field(
-        default=None
-    )
-    drug: Drug | str | list[Drug | str] | None = Field(default=None)
-    possibleTreatment: (
-        MedicalTherapy
-        | Drug
-        | LifestyleModification
-        | DrugClass
-        | str
-        | list[MedicalTherapy | Drug | LifestyleModification | DrugClass | str]
-        | None
-    ) = Field(default=None)
-    signOrSymptom: (
-        MedicalSignOrSymptom | str | list[MedicalSignOrSymptom | str] | None
-    ) = Field(default=None)
-    differentialDiagnosis: DDxElement | str | list[DDxElement | str] | None = Field(
-        default=None
-    )
-    pathophysiology: str | list[str] | None = Field(default=None)
 
 
 class InfectiousDisease(MedicalCondition):
@@ -7158,10 +7304,10 @@ class InfectiousDisease(MedicalCondition):
     infectious disease, such pathogens are known to be able to cause this disease."""
 
     type: str = Field(default="InfectiousDisease", alias="@type")
+    infectiousAgent: str | list[str] | None = Field(default=None)
     infectiousAgentClass: (
         InfectiousAgentClass | str | list[InfectiousAgentClass | str] | None
     ) = Field(default=None)
-    infectiousAgent: str | list[str] | None = Field(default=None)
     transmissionMethod: str | list[str] | None = Field(default=None)
 
 
@@ -7191,15 +7337,6 @@ class InteractionCounter(StructuredValue):
     endTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
-    location: (
-        str
-        | PostalAddress
-        | VirtualLocation
-        | Place
-        | list[str | PostalAddress | VirtualLocation | Place]
-        | None
-    ) = Field(default=None)
-    interactionType: Action | str | list[Action | str] | None = Field(default=None)
     interactionService: (
         SoftwareApplication
         | WebSite
@@ -7207,10 +7344,19 @@ class InteractionCounter(StructuredValue):
         | list[SoftwareApplication | WebSite | str]
         | None
     ) = Field(default=None)
-    userInteractionCount: int | str | list[int | str] | None = Field(default=None)
+    interactionType: Action | str | list[Action | str] | None = Field(default=None)
+    location: (
+        Place
+        | PostalAddress
+        | str
+        | VirtualLocation
+        | list[Place | PostalAddress | str | VirtualLocation]
+        | None
+    ) = Field(default=None)
     startTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
+    userInteractionCount: int | str | list[int | str] | None = Field(default=None)
 
 
 class InternetCafe(LocalBusiness):
@@ -7237,52 +7383,52 @@ class Invoice(Intangible):
     """A statement of the money due for goods or services; a bill."""
 
     type: str = Field(default="Invoice", alias="@type")
-    paymentMethod: str | PaymentMethod | list[str | PaymentMethod] | None = Field(
-        default=None
-    )
-    billingPeriod: timedelta | str | list[timedelta | str] | None = Field(default=None)
     accountId: str | list[str] | None = Field(default=None)
+    billingPeriod: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    broker: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
     category: (
-        str
-        | AnyUrl
-        | Thing
+        CategoryCode
         | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
+        | str
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
         | None
     ) = Field(default=None)
-    totalPaymentDue: (
+    confirmationNumber: str | list[str] | None = Field(default=None)
+    customer: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    minimumPaymentDue: (
         MonetaryAmount
         | PriceSpecification
         | str
         | list[MonetaryAmount | PriceSpecification | str]
         | None
     ) = Field(default=None)
-    paymentMethodId: str | list[str] | None = Field(default=None)
-    scheduledPaymentDate: date | str | list[date | str] | None = Field(default=None)
-    referencesOrder: Order | str | list[Order | str] | None = Field(default=None)
-    paymentStatus: str | PaymentStatusType | list[str | PaymentStatusType] | None = (
-        Field(default=None)
-    )
-    paymentDueDate: datetime | date | str | list[datetime | date | str] | None = Field(
+    paymentDue: datetime | str | list[datetime | str] | None = Field(default=None)
+    paymentDueDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    customer: Organization | Person | str | list[Organization | Person | str] | None = (
+    paymentMethod: PaymentMethod | str | list[PaymentMethod | str] | None = Field(
+        default=None
+    )
+    paymentMethodId: str | list[str] | None = Field(default=None)
+    paymentStatus: PaymentStatusType | str | list[PaymentStatusType | str] | None = (
         Field(default=None)
     )
-    paymentDue: datetime | str | list[datetime | str] | None = Field(default=None)
     provider: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    confirmationNumber: str | list[str] | None = Field(default=None)
-    broker: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    minimumPaymentDue: (
-        PriceSpecification
-        | MonetaryAmount
+    referencesOrder: Order | str | list[Order | str] | None = Field(default=None)
+    scheduledPaymentDate: date | str | list[date | str] | None = Field(default=None)
+    totalPaymentDue: (
+        MonetaryAmount
+        | PriceSpecification
         | str
-        | list[PriceSpecification | MonetaryAmount | str]
+        | list[MonetaryAmount | PriceSpecification | str]
         | None
     ) = Field(default=None)
 
@@ -7316,100 +7462,100 @@ class JobPosting(Intangible):
     """A listing that describes a job opening in a certain organization."""
 
     type: str = Field(default="JobPosting", alias="@type")
-    qualifications: Credential | str | list[Credential | str] | None = Field(
-        default=None
-    )
-    datePosted: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    jobDuration: (
-        QuantitativeValue
-        | timedelta
-        | str
-        | list[QuantitativeValue | timedelta | str]
-        | None
-    ) = Field(default=None)
     applicantLocationRequirements: (
         AdministrativeArea | str | list[AdministrativeArea | str] | None
     ) = Field(default=None)
-    incentiveCompensation: str | list[str] | None = Field(default=None)
-    jobBenefits: str | list[str] | None = Field(default=None)
-    securityClearanceRequirement: str | AnyUrl | list[str | AnyUrl] | None = Field(
+    applicationContact: ContactPoint | str | list[ContactPoint | str] | None = Field(
         default=None
     )
     baseSalary: (
-        PriceSpecification
+        MonetaryAmount
         | float
-        | MonetaryAmount
+        | PriceSpecification
         | str
-        | list[PriceSpecification | float | MonetaryAmount | str]
+        | list[MonetaryAmount | float | PriceSpecification | str]
         | None
     ) = Field(default=None)
-    validThrough: datetime | date | str | list[datetime | date | str] | None = Field(
+    benefits: str | list[str] | None = Field(default=None)
+    datePosted: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    responsibilities: str | list[str] | None = Field(default=None)
-    specialCommitments: str | list[str] | None = Field(default=None)
     directApply: bool | str | list[bool | str] | None = Field(default=None)
-    jobLocation: Place | str | list[Place | str] | None = Field(default=None)
-    employmentType: str | list[str] | None = Field(default=None)
-    jobStartDate: date | str | list[date | str] | None = Field(default=None)
-    estimatedSalary: (
-        MonetaryAmountDistribution
-        | MonetaryAmount
-        | float
-        | str
-        | list[MonetaryAmountDistribution | MonetaryAmount | float | str]
-        | None
-    ) = Field(default=None)
     educationRequirements: (
         EducationalOccupationalCredential
         | str
         | list[EducationalOccupationalCredential | str]
         | None
     ) = Field(default=None)
-    experienceInPlaceOfEducation: bool | str | list[bool | str] | None = Field(
-        default=None
-    )
-    hiringOrganization: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    relevantOccupation: Occupation | str | list[Occupation | str] | None = Field(
-        default=None
-    )
-    benefits: str | list[str] | None = Field(default=None)
-    physicalRequirement: (
-        str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None
-    ) = Field(default=None)
-    employerOverview: str | list[str] | None = Field(default=None)
-    title: str | list[str] | None = Field(default=None)
-    jobImmediateStart: bool | str | list[bool | str] | None = Field(default=None)
-    industry: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
-    experienceRequirements: (
-        str
-        | OccupationalExperienceRequirements
-        | list[str | OccupationalExperienceRequirements]
-        | None
-    ) = Field(default=None)
-    occupationalCategory: CategoryCode | str | list[CategoryCode | str] | None = Field(
-        default=None
-    )
-    skills: str | DefinedTerm | list[str | DefinedTerm] | None = Field(default=None)
-    sensoryRequirement: (
-        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
-    ) = Field(default=None)
-    applicationContact: ContactPoint | str | list[ContactPoint | str] | None = Field(
-        default=None
-    )
-    workHours: str | list[str] | None = Field(default=None)
-    jobLocationType: str | list[str] | None = Field(default=None)
-    salaryCurrency: str | list[str] | None = Field(default=None)
     eligibilityToWorkRequirement: str | list[str] | None = Field(default=None)
-    incentives: str | list[str] | None = Field(default=None)
+    employerOverview: str | list[str] | None = Field(default=None)
+    employmentType: str | list[str] | None = Field(default=None)
     employmentUnit: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
+    estimatedSalary: (
+        MonetaryAmount
+        | MonetaryAmountDistribution
+        | float
+        | str
+        | list[MonetaryAmount | MonetaryAmountDistribution | float | str]
+        | None
+    ) = Field(default=None)
+    experienceInPlaceOfEducation: bool | str | list[bool | str] | None = Field(
+        default=None
+    )
+    experienceRequirements: (
+        OccupationalExperienceRequirements
+        | str
+        | list[OccupationalExperienceRequirements | str]
+        | None
+    ) = Field(default=None)
+    hiringOrganization: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    incentiveCompensation: str | list[str] | None = Field(default=None)
+    incentives: str | list[str] | None = Field(default=None)
+    industry: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    jobBenefits: str | list[str] | None = Field(default=None)
+    jobDuration: (
+        timedelta
+        | QuantitativeValue
+        | str
+        | list[timedelta | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
+    jobImmediateStart: bool | str | list[bool | str] | None = Field(default=None)
+    jobLocation: Place | str | list[Place | str] | None = Field(default=None)
+    jobLocationType: str | list[str] | None = Field(default=None)
+    jobStartDate: date | str | list[date | str] | None = Field(default=None)
+    occupationalCategory: CategoryCode | str | list[CategoryCode | str] | None = Field(
+        default=None
+    )
+    physicalRequirement: (
+        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
+    ) = Field(default=None)
+    qualifications: Credential | str | list[Credential | str] | None = Field(
+        default=None
+    )
+    relevantOccupation: Occupation | str | list[Occupation | str] | None = Field(
+        default=None
+    )
+    responsibilities: str | list[str] | None = Field(default=None)
+    salaryCurrency: str | list[str] | None = Field(default=None)
+    securityClearanceRequirement: str | AnyUrl | list[str | AnyUrl] | None = Field(
+        default=None
+    )
+    sensoryRequirement: (
+        DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None
+    ) = Field(default=None)
+    skills: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    specialCommitments: str | list[str] | None = Field(default=None)
+    title: str | list[str] | None = Field(default=None)
     totalJobOpenings: int | str | list[int | str] | None = Field(default=None)
+    validThrough: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    workHours: str | list[str] | None = Field(default=None)
 
 
 class JoinAction(InteractAction):
@@ -7427,11 +7573,11 @@ class Joint(AnatomicalStructure):
     """The anatomical location at which two or more bones make contact."""
 
     type: str = Field(default="Joint", alias="@type")
-    structuralClass: str | list[str] | None = Field(default=None)
+    biomechnicalClass: str | list[str] | None = Field(default=None)
     functionalClass: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
         default=None
     )
-    biomechnicalClass: str | list[str] | None = Field(default=None)
+    structuralClass: str | list[str] | None = Field(default=None)
 
 
 class LakeBodyOfWater(BodyOfWater):
@@ -7483,60 +7629,60 @@ class Legislation(CreativeWork):
     component of a legal act (like an article)."""
 
     type: str = Field(default="Legislation", alias="@type")
-    legislationTransposes: Legislation | str | list[Legislation | str] | None = Field(
-        default=None
+    jurisdiction: AdministrativeArea | str | list[AdministrativeArea | str] | None = (
+        Field(default=None)
     )
-    legislationCountersignedBy: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    legislationIdentifier: str | AnyUrl | list[str | AnyUrl] | None = Field(
-        default=None
-    )
-    legislationCorrects: Legislation | str | list[Legislation | str] | None = Field(
-        default=None
-    )
-    legislationEnsuresImplementationOf: (
-        Legislation | str | list[Legislation | str] | None
-    ) = Field(default=None)
     legislationAmends: Legislation | str | list[Legislation | str] | None = Field(
         default=None
     )
-    legislationJurisdiction: (
-        AdministrativeArea | str | list[AdministrativeArea | str] | None
-    ) = Field(default=None)
-    legislationConsolidates: Legislation | str | list[Legislation | str] | None = Field(
-        default=None
-    )
-    legislationPassedBy: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    legislationDateOfApplicability: date | str | list[date | str] | None = Field(
-        default=None
-    )
-    legislationCommences: Legislation | str | list[Legislation | str] | None = Field(
-        default=None
-    )
-    legislationRepeals: Legislation | str | list[Legislation | str] | None = Field(
+    legislationApplies: Legislation | str | list[Legislation | str] | None = Field(
         default=None
     )
     legislationChanges: Legislation | str | list[Legislation | str] | None = Field(
         default=None
     )
-    jurisdiction: str | AdministrativeArea | list[str | AdministrativeArea] | None = (
-        Field(default=None)
-    )
-    legislationType: CategoryCode | str | list[CategoryCode | str] | None = Field(
+    legislationCommences: Legislation | str | list[Legislation | str] | None = Field(
         default=None
     )
-    legislationLegalForce: (
-        LegalForceStatus | str | list[LegalForceStatus | str] | None
-    ) = Field(default=None)
-    legislationResponsible: (
+    legislationConsolidates: Legislation | str | list[Legislation | str] | None = Field(
+        default=None
+    )
+    legislationCorrects: Legislation | str | list[Legislation | str] | None = Field(
+        default=None
+    )
+    legislationCountersignedBy: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
     legislationDate: date | str | list[date | str] | None = Field(default=None)
+    legislationDateOfApplicability: date | str | list[date | str] | None = Field(
+        default=None
+    )
     legislationDateVersion: date | str | list[date | str] | None = Field(default=None)
-    legislationApplies: Legislation | str | list[Legislation | str] | None = Field(
+    legislationEnsuresImplementationOf: (
+        Legislation | str | list[Legislation | str] | None
+    ) = Field(default=None)
+    legislationIdentifier: str | AnyUrl | list[str | AnyUrl] | None = Field(
+        default=None
+    )
+    legislationJurisdiction: (
+        AdministrativeArea | str | list[AdministrativeArea | str] | None
+    ) = Field(default=None)
+    legislationLegalForce: (
+        LegalForceStatus | str | list[LegalForceStatus | str] | None
+    ) = Field(default=None)
+    legislationPassedBy: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    legislationRepeals: Legislation | str | list[Legislation | str] | None = Field(
+        default=None
+    )
+    legislationResponsible: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
+    legislationTransposes: Legislation | str | list[Legislation | str] | None = Field(
+        default=None
+    )
+    legislationType: CategoryCode | str | list[CategoryCode | str] | None = Field(
         default=None
     )
 
@@ -7601,8 +7747,8 @@ class LinkRole(Role):
     HTML, e.g. in JSON-LD feeds."""
 
     type: str = Field(default="LinkRole", alias="@type")
+    inLanguage: Language | str | list[Language | str] | None = Field(default=None)
     linkRelationship: str | list[str] | None = Field(default=None)
-    inLanguage: str | Language | list[str | Language] | None = Field(default=None)
 
 
 class LiquorStore(Store):
@@ -7629,10 +7775,10 @@ class LiveBlogPosting(BlogPosting):
 
     type: str = Field(default="LiveBlogPosting", alias="@type")
     coverageEndTime: datetime | str | list[datetime | str] | None = Field(default=None)
-    liveBlogUpdate: BlogPosting | str | list[BlogPosting | str] | None = Field(
+    coverageStartTime: datetime | str | list[datetime | str] | None = Field(
         default=None
     )
-    coverageStartTime: datetime | str | list[datetime | str] | None = Field(
+    liveBlogUpdate: BlogPosting | str | list[BlogPosting | str] | None = Field(
         default=None
     )
 
@@ -7647,56 +7793,56 @@ class PropertyValue(StructuredValue):
     """
 
     type: str = Field(default="PropertyValue", alias="@type")
-    unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    valueReference: (
-        StructuredValue
+    maxValue: float | str | list[float | str] | None = Field(default=None)
+    measurementMethod: (
+        DefinedTerm
+        | MeasurementMethodEnum
         | str
-        | QualitativeValue
-        | PropertyValue
-        | MeasurementTypeEnumeration
-        | QuantitativeValue
-        | DefinedTerm
-        | Enumeration
-        | list[
-            StructuredValue
-            | str
-            | QualitativeValue
-            | PropertyValue
-            | MeasurementTypeEnumeration
-            | QuantitativeValue
-            | DefinedTerm
-            | Enumeration
-        ]
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
     measurementTechnique: (
-        str
-        | AnyUrl
+        DefinedTerm
         | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
-        | None
-    ) = Field(default=None)
-    unitText: str | list[str] | None = Field(default=None)
-    measurementMethod: (
-        str
-        | AnyUrl
-        | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
-        | None
-    ) = Field(default=None)
-    maxValue: float | str | list[float | str] | None = Field(default=None)
-    value: (
-        StructuredValue
         | str
-        | float
-        | bool
-        | list[StructuredValue | str | float | bool]
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
     minValue: float | str | list[float | str] | None = Field(default=None)
     propertyID: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    unitText: str | list[str] | None = Field(default=None)
+    value: (
+        bool
+        | float
+        | StructuredValue
+        | str
+        | list[bool | float | StructuredValue | str]
+        | None
+    ) = Field(default=None)
+    valueReference: (
+        DefinedTerm
+        | Enumeration
+        | MeasurementTypeEnumeration
+        | PropertyValue
+        | QualitativeValue
+        | QuantitativeValue
+        | StructuredValue
+        | str
+        | list[
+            DefinedTerm
+            | Enumeration
+            | MeasurementTypeEnumeration
+            | PropertyValue
+            | QualitativeValue
+            | QuantitativeValue
+            | StructuredValue
+            | str
+        ]
+        | None
+    ) = Field(default=None)
 
 
 class LocationFeatureSpecification(PropertyValue):
@@ -7707,10 +7853,10 @@ class LocationFeatureSpecification(PropertyValue):
     hoursAvailable: (
         OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
     ) = Field(default=None)
-    validThrough: datetime | date | str | list[datetime | date | str] | None = Field(
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
+    validThrough: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
 
@@ -7727,22 +7873,22 @@ class LodgingReservation(Reservation):
     with individual confirmations of reservations."""
 
     type: str = Field(default="LodgingReservation", alias="@type")
-    lodgingUnitDescription: str | list[str] | None = Field(default=None)
-    numChildren: (
-        int | QuantitativeValue | str | list[int | QuantitativeValue | str] | None
-    ) = Field(default=None)
-    numAdults: (
-        int | QuantitativeValue | str | list[int | QuantitativeValue | str] | None
-    ) = Field(default=None)
-    checkoutTime: datetime | time | str | list[datetime | time | str] | None = Field(
-        default=None
-    )
-    lodgingUnitType: str | QualitativeValue | list[str | QualitativeValue] | None = (
-        Field(default=None)
-    )
     checkinTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
+    checkoutTime: datetime | time | str | list[datetime | time | str] | None = Field(
+        default=None
+    )
+    lodgingUnitDescription: str | list[str] | None = Field(default=None)
+    lodgingUnitType: QualitativeValue | str | list[QualitativeValue | str] | None = (
+        Field(default=None)
+    )
+    numAdults: (
+        int | QuantitativeValue | str | list[int | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    numChildren: (
+        int | QuantitativeValue | str | list[int | QuantitativeValue | str] | None
+    ) = Field(default=None)
 
 
 class LoginAction(ControlAction):
@@ -7765,10 +7911,10 @@ class LymphaticVessel(Vessel):
     type: str = Field(default="LymphaticVessel", alias="@type")
     originatesFrom: Vessel | str | list[Vessel | str] | None = Field(default=None)
     regionDrained: (
-        AnatomicalSystem
-        | AnatomicalStructure
+        AnatomicalStructure
+        | AnatomicalSystem
         | str
-        | list[AnatomicalSystem | AnatomicalStructure | str]
+        | list[AnatomicalStructure | AnatomicalSystem | str]
         | None
     ) = Field(default=None)
     runsTo: Vessel | str | list[Vessel | str] | None = Field(default=None)
@@ -7812,7 +7958,7 @@ class MathSolver(CreativeWork):
     """A math solver which is capable of solving a subset of mathematical problems."""
 
     type: str = Field(default="MathSolver", alias="@type")
-    mathExpression: str | SolveMathAction | list[str | SolveMathAction] | None = Field(
+    mathExpression: SolveMathAction | str | list[SolveMathAction | str] | None = Field(
         default=None
     )
 
@@ -7855,19 +8001,19 @@ class MediaReview(Review):
     yet been finalized."""
 
     type: str = Field(default="MediaReview", alias="@type")
+    mediaAuthenticityCategory: (
+        MediaManipulationRatingEnumeration
+        | str
+        | list[MediaManipulationRatingEnumeration | str]
+        | None
+    ) = Field(default=None)
+    originalMediaContextDescription: str | list[str] | None = Field(default=None)
     originalMediaLink: (
         MediaObject
         | AnyUrl
         | WebPage
         | str
         | list[MediaObject | AnyUrl | WebPage | str]
-        | None
-    ) = Field(default=None)
-    originalMediaContextDescription: str | list[str] | None = Field(default=None)
-    mediaAuthenticityCategory: (
-        MediaManipulationRatingEnumeration
-        | str
-        | list[MediaManipulationRatingEnumeration | str]
         | None
     ) = Field(default=None)
 
@@ -7888,10 +8034,10 @@ class MediaSubscription(Intangible):
     etc."""
 
     type: str = Field(default="MediaSubscription", alias="@type")
-    expectsAcceptanceOf: Offer | str | list[Offer | str] | None = Field(default=None)
     authenticator: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
+    expectsAcceptanceOf: Offer | str | list[Offer | str] | None = Field(default=None)
 
 
 class PeopleAudience(Audience):
@@ -7899,23 +8045,23 @@ class PeopleAudience(Audience):
     audience."""
 
     type: str = Field(default="PeopleAudience", alias="@type")
-    suggestedMaxAge: float | str | list[float | str] | None = Field(default=None)
-    requiredMaxAge: int | str | list[int | str] | None = Field(default=None)
-    suggestedMeasurement: (
-        QuantitativeValue | str | list[QuantitativeValue | str] | None
-    ) = Field(default=None)
-    suggestedGender: str | GenderType | list[str | GenderType] | None = Field(
-        default=None
-    )
-    suggestedMinAge: float | str | list[float | str] | None = Field(default=None)
-    requiredMinAge: int | str | list[int | str] | None = Field(default=None)
-    suggestedAge: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
     healthCondition: MedicalCondition | str | list[MedicalCondition | str] | None = (
         Field(default=None)
     )
     requiredGender: str | list[str] | None = Field(default=None)
+    requiredMaxAge: int | str | list[int | str] | None = Field(default=None)
+    requiredMinAge: int | str | list[int | str] | None = Field(default=None)
+    suggestedAge: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    suggestedGender: GenderType | str | list[GenderType | str] | None = Field(
+        default=None
+    )
+    suggestedMaxAge: float | str | list[float | str] | None = Field(default=None)
+    suggestedMeasurement: (
+        QuantitativeValue | str | list[QuantitativeValue | str] | None
+    ) = Field(default=None)
+    suggestedMinAge: float | str | list[float | str] | None = Field(default=None)
 
 
 class MedicalAudience(PeopleAudience, Audience):
@@ -7982,18 +8128,18 @@ class MedicalDevice(MedicalEntity):
     """Any object used in a medical capacity, such as to diagnose or treat a patient."""
 
     type: str = Field(default="MedicalDevice", alias="@type")
-    preOp: str | list[str] | None = Field(default=None)
     adverseOutcome: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
         default=None
     )
     contraindication: (
-        str | MedicalContraindication | list[str | MedicalContraindication] | None
+        MedicalContraindication | str | list[MedicalContraindication | str] | None
     ) = Field(default=None)
+    postOp: str | list[str] | None = Field(default=None)
+    preOp: str | list[str] | None = Field(default=None)
     procedure: str | list[str] | None = Field(default=None)
     seriousAdverseOutcome: MedicalEntity | str | list[MedicalEntity | str] | None = (
         Field(default=None)
     )
-    postOp: str | list[str] | None = Field(default=None)
 
 
 class MedicalDevicePurpose(MedicalEnumeration):
@@ -8019,14 +8165,14 @@ class MedicalGuideline(MedicalEntity):
     MedicalEntity."""
 
     type: str = Field(default="MedicalGuideline", alias="@type")
-    guidelineSubject: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
-        default=None
-    )
-    evidenceOrigin: str | list[str] | None = Field(default=None)
     evidenceLevel: (
         MedicalEvidenceLevel | str | list[MedicalEvidenceLevel | str] | None
     ) = Field(default=None)
+    evidenceOrigin: str | list[str] | None = Field(default=None)
     guidelineDate: date | str | list[date | str] | None = Field(default=None)
+    guidelineSubject: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
+        default=None
+    )
 
 
 class MedicalGuidelineContraindication(MedicalGuideline):
@@ -8062,6 +8208,9 @@ class MedicalStudy(MedicalEntity):
     store study IDs, e.g. clinicaltrials.gov ID."""
 
     type: str = Field(default="MedicalStudy", alias="@type")
+    healthCondition: MedicalCondition | str | list[MedicalCondition | str] | None = (
+        Field(default=None)
+    )
     sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
@@ -8072,14 +8221,11 @@ class MedicalStudy(MedicalEntity):
         | list[EventStatusType | MedicalStudyStatus | str]
         | None
     ) = Field(default=None)
-    studySubject: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
-        default=None
-    )
     studyLocation: AdministrativeArea | str | list[AdministrativeArea | str] | None = (
         Field(default=None)
     )
-    healthCondition: MedicalCondition | str | list[MedicalCondition | str] | None = (
-        Field(default=None)
+    studySubject: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
+        default=None
     )
 
 
@@ -8118,12 +8264,12 @@ class MedicalRiskEstimator(MedicalEntity):
     complication or condition."""
 
     type: str = Field(default="MedicalRiskEstimator", alias="@type")
-    includedRiskFactor: (
-        MedicalRiskFactor | str | list[MedicalRiskFactor | str] | None
-    ) = Field(default=None)
     estimatesRiskOf: MedicalEntity | str | list[MedicalEntity | str] | None = Field(
         default=None
     )
+    includedRiskFactor: (
+        MedicalRiskFactor | str | list[MedicalRiskFactor | str] | None
+    ) = Field(default=None)
 
 
 class MedicalRiskCalculator(MedicalRiskEstimator):
@@ -8171,12 +8317,12 @@ class MedicalSignOrSymptom(MedicalCondition):
 
     type: str = Field(default="MedicalSignOrSymptom", alias="@type")
     possibleTreatment: (
-        MedicalTherapy
-        | Drug
-        | LifestyleModification
+        Drug
         | DrugClass
+        | LifestyleModification
+        | MedicalTherapy
         | str
-        | list[MedicalTherapy | Drug | LifestyleModification | DrugClass | str]
+        | list[Drug | DrugClass | LifestyleModification | MedicalTherapy | str]
         | None
     ) = Field(default=None)
 
@@ -8186,10 +8332,10 @@ class MedicalSign(MedicalSignOrSymptom):
     diagnostic tests or physical examination."""
 
     type: str = Field(default="MedicalSign", alias="@type")
-    identifyingTest: MedicalTest | str | list[MedicalTest | str] | None = Field(
+    identifyingExam: PhysicalExam | str | list[PhysicalExam | str] | None = Field(
         default=None
     )
-    identifyingExam: PhysicalExam | str | list[PhysicalExam | str] | None = Field(
+    identifyingTest: MedicalTest | str | list[MedicalTest | str] | None = Field(
         default=None
     )
 
@@ -8252,7 +8398,7 @@ class MedicalTherapy(TherapeuticProcedure):
 
     type: str = Field(default="MedicalTherapy", alias="@type")
     contraindication: (
-        str | MedicalContraindication | list[str | MedicalContraindication] | None
+        MedicalContraindication | str | list[MedicalContraindication | str] | None
     ) = Field(default=None)
     duplicateTherapy: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
         default=None
@@ -8284,6 +8430,7 @@ class MedicalWebPage(WebPage):
     """A web page that provides medical information."""
 
     type: str = Field(default="MedicalWebPage", alias="@type")
+    aspect: str | list[str] | None = Field(default=None)
     medicalAudience: (
         MedicalAudience
         | MedicalAudienceType
@@ -8291,7 +8438,6 @@ class MedicalWebPage(WebPage):
         | list[MedicalAudience | MedicalAudienceType | str]
         | None
     ) = Field(default=None)
-    aspect: str | list[str] | None = Field(default=None)
 
 
 class MedicineSystem(MedicalEnumeration):
@@ -8320,10 +8466,10 @@ class MemberProgram(Intangible):
     silver and gold members, each with different benefits."""
 
     type: str = Field(default="MemberProgram", alias="@type")
-    hostingOrganization: Organization | str | list[Organization | str] | None = Field(
+    hasTiers: MemberProgramTier | str | list[MemberProgramTier | str] | None = Field(
         default=None
     )
-    hasTiers: MemberProgramTier | str | list[MemberProgramTier | str] | None = Field(
+    hostingOrganization: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
 
@@ -8333,23 +8479,23 @@ class MemberProgramTier(Intangible):
     "gold"."""
 
     type: str = Field(default="MemberProgramTier", alias="@type")
-    hasTierRequirement: (
-        UnitPriceSpecification
-        | MonetaryAmount
-        | CreditCard
-        | str
-        | list[UnitPriceSpecification | MonetaryAmount | CreditCard | str]
-        | None
-    ) = Field(default=None)
-    membershipPointsEarned: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
-    ) = Field(default=None)
     hasTierBenefit: (
         TierBenefitEnumeration | str | list[TierBenefitEnumeration | str] | None
+    ) = Field(default=None)
+    hasTierRequirement: (
+        CreditCard
+        | MonetaryAmount
+        | str
+        | UnitPriceSpecification
+        | list[CreditCard | MonetaryAmount | str | UnitPriceSpecification]
+        | None
     ) = Field(default=None)
     isTierOf: MemberProgram | str | list[MemberProgram | str] | None = Field(
         default=None
     )
+    membershipPointsEarned: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
 
 
 class MensClothingStore(Store):
@@ -8363,10 +8509,10 @@ class Menu(CreativeWork):
     FoodEstablishment."""
 
     type: str = Field(default="Menu", alias="@type")
+    hasMenuItem: MenuItem | str | list[MenuItem | str] | None = Field(default=None)
     hasMenuSection: MenuSection | str | list[MenuSection | str] | None = Field(
         default=None
     )
-    hasMenuItem: MenuItem | str | list[MenuItem | str] | None = Field(default=None)
 
 
 class MenuItem(Intangible):
@@ -8374,17 +8520,17 @@ class MenuItem(Intangible):
 
     type: str = Field(default="MenuItem", alias="@type")
     menuAddOn: (
-        MenuSection | MenuItem | str | list[MenuSection | MenuItem | str] | None
+        MenuItem | MenuSection | str | list[MenuItem | MenuSection | str] | None
     ) = Field(default=None)
-    suitableForDiet: (
-        Diet | RestrictedDiet | str | list[Diet | RestrictedDiet | str] | None
-    ) = Field(default=None)
-    offers: Offer | Demand | str | list[Offer | Demand | str] | None = Field(
-        default=None
-    )
     nutrition: NutritionInformation | str | list[NutritionInformation | str] | None = (
         Field(default=None)
     )
+    offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
+        default=None
+    )
+    suitableForDiet: (
+        Diet | RestrictedDiet | str | list[Diet | RestrictedDiet | str] | None
+    ) = Field(default=None)
 
 
 class MenuSection(CreativeWork):
@@ -8393,10 +8539,10 @@ class MenuSection(CreativeWork):
     etc.), or some other classification made by the menu provider."""
 
     type: str = Field(default="MenuSection", alias="@type")
+    hasMenuItem: MenuItem | str | list[MenuItem | str] | None = Field(default=None)
     hasMenuSection: MenuSection | str | list[MenuSection | str] | None = Field(
         default=None
     )
-    hasMenuItem: MenuItem | str | list[MenuItem | str] | None = Field(default=None)
 
 
 class MerchantReturnEnumeration(Enumeration):
@@ -8410,42 +8556,12 @@ class MerchantReturnPolicy(Intangible):
     with an Organization, Product, or Offer."""
 
     type: str = Field(default="MerchantReturnPolicy", alias="@type")
-    returnShippingFeesAmount: (
-        MonetaryAmount | str | list[MonetaryAmount | str] | None
-    ) = Field(default=None)
-    validForMemberTier: (
-        MemberProgramTier | str | list[MemberProgramTier | str] | None
-    ) = Field(default=None)
-    returnPolicySeasonalOverride: (
-        MerchantReturnPolicySeasonalOverride
-        | str
-        | list[MerchantReturnPolicySeasonalOverride | str]
-        | None
-    ) = Field(default=None)
-    returnFees: (
-        ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
-    ) = Field(default=None)
-    restockingFee: (
-        float | MonetaryAmount | str | list[float | MonetaryAmount | str] | None
-    ) = Field(default=None)
-    refundType: (
-        RefundTypeEnumeration | str | list[RefundTypeEnumeration | str] | None
-    ) = Field(default=None)
     additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
     )
+    applicableCountry: Country | str | list[Country | str] | None = Field(default=None)
     customerRemorseReturnFees: (
         ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
-    ) = Field(default=None)
-    itemCondition: OfferItemCondition | str | list[OfferItemCondition | str] | None = (
-        Field(default=None)
-    )
-    applicableCountry: Country | str | list[Country | str] | None = Field(default=None)
-    returnPolicyCountry: Country | str | list[Country | str] | None = Field(
-        default=None
-    )
-    returnPolicyCategory: (
-        MerchantReturnEnumeration | str | list[MerchantReturnEnumeration | str] | None
     ) = Field(default=None)
     customerRemorseReturnLabelSource: (
         ReturnLabelSourceEnumeration
@@ -8453,9 +8569,13 @@ class MerchantReturnPolicy(Intangible):
         | list[ReturnLabelSourceEnumeration | str]
         | None
     ) = Field(default=None)
-    itemDefectReturnShippingFeesAmount: (
+    customerRemorseReturnShippingFeesAmount: (
         MonetaryAmount | str | list[MonetaryAmount | str] | None
     ) = Field(default=None)
+    inStoreReturnsOffered: bool | str | list[bool | str] | None = Field(default=None)
+    itemCondition: OfferItemCondition | str | list[OfferItemCondition | str] | None = (
+        Field(default=None)
+    )
     itemDefectReturnFees: (
         ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
     ) = Field(default=None)
@@ -8465,12 +8585,21 @@ class MerchantReturnPolicy(Intangible):
         | list[ReturnLabelSourceEnumeration | str]
         | None
     ) = Field(default=None)
-    returnMethod: (
-        ReturnMethodEnumeration | str | list[ReturnMethodEnumeration | str] | None
+    itemDefectReturnShippingFeesAmount: (
+        MonetaryAmount | str | list[MonetaryAmount | str] | None
+    ) = Field(default=None)
+    merchantReturnDays: (
+        date | datetime | int | str | list[date | datetime | int | str] | None
     ) = Field(default=None)
     merchantReturnLink: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    customerRemorseReturnShippingFeesAmount: (
-        MonetaryAmount | str | list[MonetaryAmount | str] | None
+    refundType: (
+        RefundTypeEnumeration | str | list[RefundTypeEnumeration | str] | None
+    ) = Field(default=None)
+    restockingFee: (
+        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+    ) = Field(default=None)
+    returnFees: (
+        ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
     ) = Field(default=None)
     returnLabelSource: (
         ReturnLabelSourceEnumeration
@@ -8478,9 +8607,26 @@ class MerchantReturnPolicy(Intangible):
         | list[ReturnLabelSourceEnumeration | str]
         | None
     ) = Field(default=None)
-    inStoreReturnsOffered: bool | str | list[bool | str] | None = Field(default=None)
-    merchantReturnDays: (
-        int | date | datetime | str | list[int | date | datetime | str] | None
+    returnMethod: (
+        ReturnMethodEnumeration | str | list[ReturnMethodEnumeration | str] | None
+    ) = Field(default=None)
+    returnPolicyCategory: (
+        MerchantReturnEnumeration | str | list[MerchantReturnEnumeration | str] | None
+    ) = Field(default=None)
+    returnPolicyCountry: Country | str | list[Country | str] | None = Field(
+        default=None
+    )
+    returnPolicySeasonalOverride: (
+        MerchantReturnPolicySeasonalOverride
+        | str
+        | list[MerchantReturnPolicySeasonalOverride | str]
+        | None
+    ) = Field(default=None)
+    returnShippingFeesAmount: (
+        MonetaryAmount | str | list[MonetaryAmount | str] | None
+    ) = Field(default=None)
+    validForMemberTier: (
+        MemberProgramTier | str | list[MemberProgramTier | str] | None
     ) = Field(default=None)
 
 
@@ -8488,33 +8634,33 @@ class MerchantReturnPolicySeasonalOverride(Intangible):
     """A seasonal override of a return policy, for example used for holidays."""
 
     type: str = Field(default="MerchantReturnPolicySeasonalOverride", alias="@type")
-    returnShippingFeesAmount: (
-        MonetaryAmount | str | list[MonetaryAmount | str] | None
-    ) = Field(default=None)
-    returnFees: (
-        ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
-    ) = Field(default=None)
-    restockingFee: (
-        float | MonetaryAmount | str | list[float | MonetaryAmount | str] | None
+    endDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    merchantReturnDays: (
+        date | datetime | int | str | list[date | datetime | int | str] | None
     ) = Field(default=None)
     refundType: (
         RefundTypeEnumeration | str | list[RefundTypeEnumeration | str] | None
     ) = Field(default=None)
+    restockingFee: (
+        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+    ) = Field(default=None)
+    returnFees: (
+        ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
+    ) = Field(default=None)
+    returnMethod: (
+        ReturnMethodEnumeration | str | list[ReturnMethodEnumeration | str] | None
+    ) = Field(default=None)
     returnPolicyCategory: (
         MerchantReturnEnumeration | str | list[MerchantReturnEnumeration | str] | None
     ) = Field(default=None)
-    endDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    returnMethod: (
-        ReturnMethodEnumeration | str | list[ReturnMethodEnumeration | str] | None
+    returnShippingFeesAmount: (
+        MonetaryAmount | str | list[MonetaryAmount | str] | None
     ) = Field(default=None)
     startDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    merchantReturnDays: (
-        int | date | datetime | str | list[int | date | datetime | str] | None
-    ) = Field(default=None)
 
 
 class MiddleSchool(EducationalOrganization):
@@ -8528,9 +8674,39 @@ class SoftwareApplication(CreativeWork):
     """A software application."""
 
     type: str = Field(default="SoftwareApplication", alias="@type")
-    softwareVersion: str | list[str] | None = Field(default=None)
+    applicationCategory: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    applicationSubCategory: str | AnyUrl | list[str | AnyUrl] | None = Field(
+        default=None
+    )
+    applicationSuite: str | list[str] | None = Field(default=None)
+    availableOnDevice: str | list[str] | None = Field(default=None)
+    countriesNotSupported: str | list[str] | None = Field(default=None)
+    countriesSupported: str | list[str] | None = Field(default=None)
+    device: str | list[str] | None = Field(default=None)
+    downloadUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    featureList: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    fileSize: str | list[str] | None = Field(default=None)
+    installUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     memoryRequirements: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    operatingSystem: OperatingSystem | str | list[OperatingSystem | str] | None = Field(
+        default=None
+    )
+    permissions: str | list[str] | None = Field(default=None)
+    processorRequirements: str | list[str] | None = Field(default=None)
+    releaseNotes: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     requirements: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    runtimePlatform: RuntimePlatform | str | list[RuntimePlatform | str] | None = Field(
+        default=None
+    )
+    screenshot: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = (
+        Field(default=None)
+    )
+    softwareAddOn: (
+        SoftwareApplication | str | list[SoftwareApplication | str] | None
+    ) = Field(default=None)
+    softwareHelp: CreativeWork | str | list[CreativeWork | str] | None = Field(
+        default=None
+    )
     softwareRequirements: (
         SoftwareApplication
         | str
@@ -8538,39 +8714,9 @@ class SoftwareApplication(CreativeWork):
         | list[SoftwareApplication | str | AnyUrl]
         | None
     ) = Field(default=None)
-    applicationSuite: str | list[str] | None = Field(default=None)
-    releaseNotes: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    featureList: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    applicationSubCategory: str | AnyUrl | list[str | AnyUrl] | None = Field(
-        default=None
-    )
-    fileSize: str | list[str] | None = Field(default=None)
+    softwareVersion: str | list[str] | None = Field(default=None)
     storageRequirements: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    softwareHelp: CreativeWork | str | list[CreativeWork | str] | None = Field(
-        default=None
-    )
-    applicationCategory: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    countriesNotSupported: str | list[str] | None = Field(default=None)
-    device: str | list[str] | None = Field(default=None)
-    runtimePlatform: RuntimePlatform | str | list[RuntimePlatform | str] | None = Field(
-        default=None
-    )
-    permissions: str | list[str] | None = Field(default=None)
     supportingData: DataFeed | str | list[DataFeed | str] | None = Field(default=None)
-    operatingSystem: OperatingSystem | str | list[OperatingSystem | str] | None = Field(
-        default=None
-    )
-    downloadUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    screenshot: AnyUrl | ImageObject | str | list[AnyUrl | ImageObject | str] | None = (
-        Field(default=None)
-    )
-    softwareAddOn: (
-        SoftwareApplication | str | list[SoftwareApplication | str] | None
-    ) = Field(default=None)
-    processorRequirements: str | list[str] | None = Field(default=None)
-    installUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    availableOnDevice: str | list[str] | None = Field(default=None)
-    countriesSupported: str | list[str] | None = Field(default=None)
 
 
 class MobileApplication(SoftwareApplication):
@@ -8593,23 +8739,23 @@ class MolecularEntity(BioChemEntity):
     distinguishable entity."""
 
     type: str = Field(default="MolecularEntity", alias="@type")
-    molecularFormula: str | list[str] | None = Field(default=None)
-    monoisotopicMolecularWeight: (
-        str | QuantitativeValue | list[str | QuantitativeValue] | None
-    ) = Field(default=None)
-    smiles: str | list[str] | None = Field(default=None)
-    inChI: str | list[str] | None = Field(default=None)
-    potentialUse: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
-        default=None
-    )
-    molecularWeight: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    iupacName: str | list[str] | None = Field(default=None)
-    inChIKey: str | list[str] | None = Field(default=None)
     chemicalRole: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
         default=None
     )
+    inChI: str | list[str] | None = Field(default=None)
+    inChIKey: str | list[str] | None = Field(default=None)
+    iupacName: str | list[str] | None = Field(default=None)
+    molecularFormula: str | list[str] | None = Field(default=None)
+    molecularWeight: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    monoisotopicMolecularWeight: (
+        QuantitativeValue | str | list[QuantitativeValue | str] | None
+    ) = Field(default=None)
+    potentialUse: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
+        default=None
+    )
+    smiles: str | list[str] | None = Field(default=None)
 
 
 class MonetaryAmount(StructuredValue):
@@ -8619,33 +8765,29 @@ class MonetaryAmount(StructuredValue):
     to use PriceSpecification Types to describe the price of an Offer, Invoice, etc."""
 
     type: str = Field(default="MonetaryAmount", alias="@type")
-    validThrough: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
+    currency: str | list[str] | None = Field(default=None)
     maxValue: float | str | list[float | str] | None = Field(default=None)
+    minValue: float | str | list[float | str] | None = Field(default=None)
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    validThrough: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
     value: (
-        StructuredValue
-        | str
+        bool
         | float
-        | bool
-        | list[StructuredValue | str | float | bool]
+        | StructuredValue
+        | str
+        | list[bool | float | StructuredValue | str]
         | None
     ) = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
-    currency: str | list[str] | None = Field(default=None)
 
 
 class QuantitativeValueDistribution(StructuredValue):
     """A statistical distribution of values."""
 
     type: str = Field(default="QuantitativeValueDistribution", alias="@type")
-    median: float | str | list[float | str] | None = Field(default=None)
-    percentile90: float | str | list[float | str] | None = Field(default=None)
-    percentile25: float | str | list[float | str] | None = Field(default=None)
-    percentile10: float | str | list[float | str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -8653,7 +8795,11 @@ class QuantitativeValueDistribution(StructuredValue):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
+    median: float | str | list[float | str] | None = Field(default=None)
+    percentile10: float | str | list[float | str] | None = Field(default=None)
+    percentile25: float | str | list[float | str] | None = Field(default=None)
     percentile75: float | str | list[float | str] | None = Field(default=None)
+    percentile90: float | str | list[float | str] | None = Field(default=None)
 
 
 class MonetaryAmountDistribution(QuantitativeValueDistribution):
@@ -8667,10 +8813,10 @@ class MonetaryGrant(Grant):
     """A monetary grant."""
 
     type: str = Field(default="MonetaryGrant", alias="@type")
-    funder: Organization | Person | str | list[Organization | Person | str] | None = (
+    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
         Field(default=None)
     )
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
+    funder: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
 
@@ -8680,10 +8826,10 @@ class MoneyTransfer(TransferAction):
     electronically or physically."""
 
     type: str = Field(default="MoneyTransfer", alias="@type")
-    beneficiaryBank: str | BankOrCreditUnion | list[str | BankOrCreditUnion] | None = (
+    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
         Field(default=None)
     )
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
+    beneficiaryBank: BankOrCreditUnion | str | list[BankOrCreditUnion | str] | None = (
         Field(default=None)
     )
 
@@ -8750,17 +8896,13 @@ class Movie(CreativeWork):
     """A movie."""
 
     type: str = Field(default="Movie", alias="@type")
-    countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
     actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
     ) = Field(default=None)
-    subtitleLanguage: str | Language | list[str | Language] | None = Field(default=None)
-    directors: Person | str | list[Person | str] | None = Field(default=None)
-    productionCompany: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
     actors: Person | str | list[Person | str] | None = Field(default=None)
+    countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
     director: Person | str | list[Person | str] | None = Field(default=None)
+    directors: Person | str | list[Person | str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -8768,11 +8910,15 @@ class Movie(CreativeWork):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
         default=None
     )
-    trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
+    productionCompany: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    subtitleLanguage: Language | str | list[Language | str] | None = Field(default=None)
     titleEIDR: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
 
 
 class MovieClip(Clip):
@@ -8792,15 +8938,15 @@ class MovieSeries(CreativeWorkSeries):
 
     type: str = Field(default="MovieSeries", alias="@type")
     actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
     ) = Field(default=None)
-    directors: Person | str | list[Person | str] | None = Field(default=None)
-    productionCompany: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
     actors: Person | str | list[Person | str] | None = Field(default=None)
     director: Person | str | list[Person | str] | None = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
+    directors: Person | str | list[Person | str] | None = Field(default=None)
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
+        default=None
+    )
+    productionCompany: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
     trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
@@ -8824,13 +8970,13 @@ class Muscle(AnatomicalStructure):
     animals use to effect movement."""
 
     type: str = Field(default="Muscle", alias="@type")
+    antagonist: Muscle | str | list[Muscle | str] | None = Field(default=None)
+    bloodSupply: Vessel | str | list[Vessel | str] | None = Field(default=None)
     insertion: AnatomicalStructure | str | list[AnatomicalStructure | str] | None = (
         Field(default=None)
     )
     muscleAction: str | list[str] | None = Field(default=None)
-    antagonist: Muscle | str | list[Muscle | str] | None = Field(default=None)
     nerve: Nerve | str | list[Nerve | str] | None = Field(default=None)
-    bloodSupply: Vessel | str | list[Vessel | str] | None = Field(default=None)
 
 
 class Museum(CivicStructure):
@@ -8843,29 +8989,29 @@ class MusicPlaylist(CreativeWork):
     """A collection of music tracks in playlist form."""
 
     type: str = Field(default="MusicPlaylist", alias="@type")
-    tracks: MusicRecording | str | list[MusicRecording | str] | None = Field(
-        default=None
-    )
+    numTracks: int | str | list[int | str] | None = Field(default=None)
     track: (
         ItemList | MusicRecording | str | list[ItemList | MusicRecording | str] | None
     ) = Field(default=None)
-    numTracks: int | str | list[int | str] | None = Field(default=None)
+    tracks: MusicRecording | str | list[MusicRecording | str] | None = Field(
+        default=None
+    )
 
 
 class MusicAlbum(MusicPlaylist):
     """A collection of music tracks."""
 
     type: str = Field(default="MusicAlbum", alias="@type")
-    albumRelease: MusicRelease | str | list[MusicRelease | str] | None = Field(
-        default=None
-    )
     albumProductionType: (
         MusicAlbumProductionType | str | list[MusicAlbumProductionType | str] | None
     ) = Field(default=None)
+    albumRelease: MusicRelease | str | list[MusicRelease | str] | None = Field(
+        default=None
+    )
     albumReleaseType: (
         MusicAlbumReleaseType | str | list[MusicAlbumReleaseType | str] | None
     ) = Field(default=None)
-    byArtist: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = (
+    byArtist: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = (
         Field(default=None)
     )
 
@@ -8887,24 +9033,24 @@ class MusicComposition(CreativeWork):
     """A musical composition."""
 
     type: str = Field(default="MusicComposition", alias="@type")
-    musicArrangement: MusicComposition | str | list[MusicComposition | str] | None = (
-        Field(default=None)
-    )
     composer: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    lyricist: Person | str | list[Person | str] | None = Field(default=None)
-    lyrics: CreativeWork | str | list[CreativeWork | str] | None = Field(default=None)
-    recordedAs: MusicRecording | str | list[MusicRecording | str] | None = Field(
-        default=None
-    )
-    musicCompositionForm: str | list[str] | None = Field(default=None)
+    firstPerformance: Event | str | list[Event | str] | None = Field(default=None)
     includedComposition: (
         MusicComposition | str | list[MusicComposition | str] | None
     ) = Field(default=None)
-    musicalKey: str | list[str] | None = Field(default=None)
-    firstPerformance: Event | str | list[Event | str] | None = Field(default=None)
     iswcCode: str | list[str] | None = Field(default=None)
+    lyricist: Person | str | list[Person | str] | None = Field(default=None)
+    lyrics: CreativeWork | str | list[CreativeWork | str] | None = Field(default=None)
+    musicArrangement: MusicComposition | str | list[MusicComposition | str] | None = (
+        Field(default=None)
+    )
+    musicCompositionForm: str | list[str] | None = Field(default=None)
+    musicalKey: str | list[str] | None = Field(default=None)
+    recordedAs: MusicRecording | str | list[MusicRecording | str] | None = Field(
+        default=None
+    )
 
 
 class MusicEvent(Event):
@@ -8918,16 +9064,16 @@ class MusicGroup(PerformingGroup):
     musician."""
 
     type: str = Field(default="MusicGroup", alias="@type")
-    tracks: MusicRecording | str | list[MusicRecording | str] | None = Field(
+    album: MusicAlbum | str | list[MusicAlbum | str] | None = Field(default=None)
+    albums: MusicAlbum | str | list[MusicAlbum | str] | None = Field(default=None)
+    genre: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = Field(
         default=None
     )
-    albums: MusicAlbum | str | list[MusicAlbum | str] | None = Field(default=None)
     musicGroupMember: Person | str | list[Person | str] | None = Field(default=None)
     track: (
         ItemList | MusicRecording | str | list[ItemList | MusicRecording | str] | None
     ) = Field(default=None)
-    album: MusicAlbum | str | list[MusicAlbum | str] | None = Field(default=None)
-    genre: str | AnyUrl | DefinedTerm | list[str | AnyUrl | DefinedTerm] | None = Field(
+    tracks: MusicRecording | str | list[MusicRecording | str] | None = Field(
         default=None
     )
 
@@ -8936,10 +9082,9 @@ class MusicRecording(CreativeWork):
     """A music recording (track), usually a single song."""
 
     type: str = Field(default="MusicRecording", alias="@type")
-    inPlaylist: MusicPlaylist | str | list[MusicPlaylist | str] | None = Field(
-        default=None
+    byArtist: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = (
+        Field(default=None)
     )
-    inAlbum: MusicAlbum | str | list[MusicAlbum | str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -8947,27 +9092,24 @@ class MusicRecording(CreativeWork):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
+    inAlbum: MusicAlbum | str | list[MusicAlbum | str] | None = Field(default=None)
+    inPlaylist: MusicPlaylist | str | list[MusicPlaylist | str] | None = Field(
+        default=None
+    )
+    isrcCode: str | list[str] | None = Field(default=None)
     recordingOf: MusicComposition | str | list[MusicComposition | str] | None = Field(
         default=None
     )
-    byArtist: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = (
-        Field(default=None)
-    )
-    isrcCode: str | list[str] | None = Field(default=None)
 
 
 class MusicRelease(MusicPlaylist):
     """A MusicRelease is a specific release of a music album."""
 
     type: str = Field(default="MusicRelease", alias="@type")
+    catalogNumber: str | list[str] | None = Field(default=None)
     creditedTo: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    releaseOf: MusicAlbum | str | list[MusicAlbum | str] | None = Field(default=None)
-    musicReleaseFormat: (
-        MusicReleaseFormatType | str | list[MusicReleaseFormatType | str] | None
-    ) = Field(default=None)
-    catalogNumber: str | list[str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -8975,9 +9117,13 @@ class MusicRelease(MusicPlaylist):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
+    musicReleaseFormat: (
+        MusicReleaseFormatType | str | list[MusicReleaseFormatType | str] | None
+    ) = Field(default=None)
     recordLabel: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
+    releaseOf: MusicAlbum | str | list[MusicAlbum | str] | None = Field(default=None)
 
 
 class MusicReleaseFormatType(Enumeration):
@@ -9031,51 +9177,45 @@ class Nerve(AnatomicalStructure):
     branch: AnatomicalStructure | str | list[AnatomicalStructure | str] | None = Field(
         default=None
     )
+    nerveMotor: Muscle | str | list[Muscle | str] | None = Field(default=None)
     sensoryUnit: (
-        SuperficialAnatomy
-        | AnatomicalStructure
+        AnatomicalStructure
+        | SuperficialAnatomy
         | str
-        | list[SuperficialAnatomy | AnatomicalStructure | str]
+        | list[AnatomicalStructure | SuperficialAnatomy | str]
         | None
     ) = Field(default=None)
     sourcedFrom: BrainStructure | str | list[BrainStructure | str] | None = Field(
         default=None
     )
-    nerveMotor: Muscle | str | list[Muscle | str] | None = Field(default=None)
 
 
 class NewsMediaOrganization(Organization):
     """A News/Media organization such as a newspaper or TV station."""
 
     type: str = Field(default="NewsMediaOrganization", alias="@type")
-    verificationFactCheckingPolicy: (
+    actionableFeedbackPolicy: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
     correctionsPolicy: (
-        AnyUrl | CreativeWork | str | list[AnyUrl | CreativeWork | str] | None
-    ) = Field(default=None)
-    noBylinesPolicy: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
-    unnamedSourcesPolicy: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
-    ) = Field(default=None)
-    ethicsPolicy: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
-    ) = Field(default=None)
-    missionCoveragePrioritiesPolicy: (
+    diversityPolicy: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
     diversityStaffingReport: (
-        AnyUrl | Article | str | list[AnyUrl | Article | str] | None
+        Article | AnyUrl | str | list[Article | AnyUrl | str] | None
     ) = Field(default=None)
-    actionableFeedbackPolicy: (
+    ethicsPolicy: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
     masthead: CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None = (
         Field(default=None)
     )
-    diversityPolicy: (
+    missionCoveragePrioritiesPolicy: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    ) = Field(default=None)
+    noBylinesPolicy: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
     ownershipFundingInfo: (
@@ -9085,6 +9225,12 @@ class NewsMediaOrganization(Organization):
         | AnyUrl
         | list[AboutPage | CreativeWork | str | AnyUrl]
         | None
+    ) = Field(default=None)
+    unnamedSourcesPolicy: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
+    ) = Field(default=None)
+    verificationFactCheckingPolicy: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
 
 
@@ -9118,60 +9264,60 @@ class NutritionInformation(StructuredValue):
     """Nutritional information about the recipe."""
 
     type: str = Field(default="NutritionInformation", alias="@type")
-    saturatedFatContent: Mass | str | list[Mass | str] | None = Field(default=None)
+    calories: Energy | str | list[Energy | str] | None = Field(default=None)
+    carbohydrateContent: Mass | str | list[Mass | str] | None = Field(default=None)
     cholesterolContent: Mass | str | list[Mass | str] | None = Field(default=None)
-    unsaturatedFatContent: Mass | str | list[Mass | str] | None = Field(default=None)
     fatContent: Mass | str | list[Mass | str] | None = Field(default=None)
     fiberContent: Mass | str | list[Mass | str] | None = Field(default=None)
-    carbohydrateContent: Mass | str | list[Mass | str] | None = Field(default=None)
-    transFatContent: Mass | str | list[Mass | str] | None = Field(default=None)
-    servingSize: str | list[str] | None = Field(default=None)
-    sugarContent: Mass | str | list[Mass | str] | None = Field(default=None)
-    calories: Energy | str | list[Energy | str] | None = Field(default=None)
     proteinContent: Mass | str | list[Mass | str] | None = Field(default=None)
+    saturatedFatContent: Mass | str | list[Mass | str] | None = Field(default=None)
+    servingSize: str | list[str] | None = Field(default=None)
     sodiumContent: Mass | str | list[Mass | str] | None = Field(default=None)
+    sugarContent: Mass | str | list[Mass | str] | None = Field(default=None)
+    transFatContent: Mass | str | list[Mass | str] | None = Field(default=None)
+    unsaturatedFatContent: Mass | str | list[Mass | str] | None = Field(default=None)
 
 
 class QuantitativeValue(StructuredValue):
     """A point value or interval for product characteristics and other purposes."""
 
     type: str = Field(default="QuantitativeValue", alias="@type")
-    unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
     )
-    valueReference: (
-        StructuredValue
+    maxValue: float | str | list[float | str] | None = Field(default=None)
+    minValue: float | str | list[float | str] | None = Field(default=None)
+    unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    unitText: str | list[str] | None = Field(default=None)
+    value: (
+        bool
+        | float
+        | StructuredValue
         | str
-        | QualitativeValue
-        | PropertyValue
-        | MeasurementTypeEnumeration
-        | QuantitativeValue
-        | DefinedTerm
+        | list[bool | float | StructuredValue | str]
+        | None
+    ) = Field(default=None)
+    valueReference: (
+        DefinedTerm
         | Enumeration
+        | MeasurementTypeEnumeration
+        | PropertyValue
+        | QualitativeValue
+        | QuantitativeValue
+        | StructuredValue
+        | str
         | list[
-            StructuredValue
-            | str
-            | QualitativeValue
-            | PropertyValue
-            | MeasurementTypeEnumeration
-            | QuantitativeValue
-            | DefinedTerm
+            DefinedTerm
             | Enumeration
+            | MeasurementTypeEnumeration
+            | PropertyValue
+            | QualitativeValue
+            | QuantitativeValue
+            | StructuredValue
+            | str
         ]
         | None
     ) = Field(default=None)
-    unitText: str | list[str] | None = Field(default=None)
-    maxValue: float | str | list[float | str] | None = Field(default=None)
-    value: (
-        StructuredValue
-        | str
-        | float
-        | bool
-        | list[StructuredValue | str | float | bool]
-        | None
-    ) = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
 
 
 class Observation(QuantitativeValue, Intangible):
@@ -9193,84 +9339,84 @@ class Observation(QuantitativeValue, Intangible):
     """
 
     type: str = Field(default="Observation", alias="@type")
-    observationPeriod: str | list[str] | None = Field(default=None)
-    measurementQualifier: Enumeration | str | list[Enumeration | str] | None = Field(
-        default=None
+    marginOfError: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
     )
     measuredProperty: Property | str | list[Property | str] | None = Field(default=None)
-    measurementTechnique: (
-        str
-        | AnyUrl
-        | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
-        | None
-    ) = Field(default=None)
     measurementDenominator: (
         StatisticalVariable | str | list[StatisticalVariable | str] | None
     ) = Field(default=None)
     measurementMethod: (
-        str
-        | AnyUrl
+        DefinedTerm
         | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
+        | str
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
-    observationDate: date | datetime | str | list[date | datetime | str] | None = Field(
+    measurementQualifier: Enumeration | str | list[Enumeration | str] | None = Field(
         default=None
     )
-    variableMeasured: (
-        PropertyValue
-        | Property
+    measurementTechnique: (
+        DefinedTerm
+        | MeasurementMethodEnum
         | str
-        | StatisticalVariable
-        | list[PropertyValue | Property | str | StatisticalVariable]
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
     observationAbout: Place | Thing | str | list[Place | Thing | str] | None = Field(
         default=None
     )
-    marginOfError: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
+    observationDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
     )
+    observationPeriod: str | list[str] | None = Field(default=None)
+    variableMeasured: (
+        Property
+        | PropertyValue
+        | StatisticalVariable
+        | str
+        | list[Property | PropertyValue | StatisticalVariable | str]
+        | None
+    ) = Field(default=None)
 
 
 class Occupation(Intangible):
     """A profession, may involve prolonged training and/or a formal qualification."""
 
     type: str = Field(default="Occupation", alias="@type")
-    qualifications: Credential | str | list[Credential | str] | None = Field(
-        default=None
-    )
-    responsibilities: str | list[str] | None = Field(default=None)
-    estimatedSalary: (
-        MonetaryAmountDistribution
-        | MonetaryAmount
-        | float
-        | str
-        | list[MonetaryAmountDistribution | MonetaryAmount | float | str]
-        | None
-    ) = Field(default=None)
     educationRequirements: (
         EducationalOccupationalCredential
         | str
         | list[EducationalOccupationalCredential | str]
         | None
     ) = Field(default=None)
-    experienceRequirements: (
-        str
-        | OccupationalExperienceRequirements
-        | list[str | OccupationalExperienceRequirements]
+    estimatedSalary: (
+        MonetaryAmount
+        | MonetaryAmountDistribution
+        | float
+        | str
+        | list[MonetaryAmount | MonetaryAmountDistribution | float | str]
         | None
+    ) = Field(default=None)
+    experienceRequirements: (
+        OccupationalExperienceRequirements
+        | str
+        | list[OccupationalExperienceRequirements | str]
+        | None
+    ) = Field(default=None)
+    occupationLocation: (
+        AdministrativeArea | str | list[AdministrativeArea | str] | None
     ) = Field(default=None)
     occupationalCategory: CategoryCode | str | list[CategoryCode | str] | None = Field(
         default=None
     )
-    skills: str | DefinedTerm | list[str | DefinedTerm] | None = Field(default=None)
-    occupationLocation: (
-        AdministrativeArea | str | list[AdministrativeArea | str] | None
-    ) = Field(default=None)
+    qualifications: Credential | str | list[Credential | str] | None = Field(
+        default=None
+    )
+    responsibilities: str | list[str] | None = Field(default=None)
+    skills: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
 
 
 class OccupationalExperienceRequirements(Intangible):
@@ -9346,33 +9492,30 @@ class OfferShippingDetails(StructuredValue):
     or Fast and expensive: $15 in 1-2 days."""
 
     type: str = Field(default="OfferShippingDetails", alias="@type")
-    hasShippingService: ShippingService | str | list[ShippingService | str] | None = (
-        Field(default=None)
-    )
-    validForMemberTier: (
-        MemberProgramTier | str | list[MemberProgramTier | str] | None
-    ) = Field(default=None)
-    doesNotShip: bool | str | list[bool | str] | None = Field(default=None)
-    width: (
-        QuantitativeValue
-        | Distance
-        | str
-        | list[QuantitativeValue | Distance | str]
-        | None
-    ) = Field(default=None)
     deliveryTime: (
         ShippingDeliveryTime | str | list[ShippingDeliveryTime | str] | None
     ) = Field(default=None)
     depth: (
-        QuantitativeValue
-        | Distance
+        Distance
+        | QuantitativeValue
         | str
-        | list[QuantitativeValue | Distance | str]
+        | list[Distance | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    weight: (
-        QuantitativeValue | Mass | str | list[QuantitativeValue | Mass | str] | None
+    doesNotShip: bool | str | list[bool | str] | None = Field(default=None)
+    hasShippingService: ShippingService | str | list[ShippingService | str] | None = (
+        Field(default=None)
+    )
+    height: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
+    shippingDestination: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
+        default=None
+    )
     shippingOrigin: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
         default=None
     )
@@ -9383,14 +9526,17 @@ class OfferShippingDetails(StructuredValue):
         | list[MonetaryAmount | ShippingRateSettings | str]
         | None
     ) = Field(default=None)
-    shippingDestination: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
-        default=None
-    )
-    height: (
-        QuantitativeValue
-        | Distance
+    validForMemberTier: (
+        MemberProgramTier | str | list[MemberProgramTier | str] | None
+    ) = Field(default=None)
+    weight: (
+        Mass | QuantitativeValue | str | list[Mass | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    width: (
+        Distance
+        | QuantitativeValue
         | str
-        | list[QuantitativeValue | Distance | str]
+        | list[Distance | QuantitativeValue | str]
         | None
     ) = Field(default=None)
 
@@ -9443,14 +9589,14 @@ class OpeningHoursSpecification(StructuredValue):
 
     type: str = Field(default="OpeningHoursSpecification", alias="@type")
     closes: time | str | list[time | str] | None = Field(default=None)
-    validThrough: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
     dayOfWeek: DayOfWeek | str | list[DayOfWeek | str] | None = Field(default=None)
-    validFrom: datetime | date | str | list[datetime | date | str] | None = Field(
+    opens: time | str | list[time | str] | None = Field(default=None)
+    validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
-    opens: time | str | list[time | str] | None = Field(default=None)
+    validThrough: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
 
 
 class OperatingSystem(SoftwareApplication):
@@ -9479,55 +9625,55 @@ class Order(Intangible):
     line items, each represented by an Offer that has been accepted by the customer."""
 
     type: str = Field(default="Order", alias="@type")
-    orderStatus: OrderStatus | str | list[OrderStatus | str] | None = Field(
-        default=None
-    )
-    discountCurrency: str | list[str] | None = Field(default=None)
-    paymentMethod: str | PaymentMethod | list[str | PaymentMethod] | None = Field(
-        default=None
-    )
     acceptedOffer: Offer | str | list[Offer | str] | None = Field(default=None)
+    billingAddress: PostalAddress | str | list[PostalAddress | str] | None = Field(
+        default=None
+    )
+    broker: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    confirmationNumber: str | list[str] | None = Field(default=None)
+    customer: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    discount: float | str | list[float | str] | None = Field(default=None)
+    discountCode: str | list[str] | None = Field(default=None)
+    discountCurrency: str | list[str] | None = Field(default=None)
     isGift: bool | str | list[bool | str] | None = Field(default=None)
-    paymentMethodId: str | list[str] | None = Field(default=None)
+    merchant: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
     orderDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
     orderDelivery: ParcelDelivery | str | list[ParcelDelivery | str] | None = Field(
         default=None
     )
-    paymentDueDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    paymentUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     orderNumber: str | list[str] | None = Field(default=None)
-    customer: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    billingAddress: PostalAddress | str | list[PostalAddress | str] | None = Field(
+    orderStatus: OrderStatus | str | list[OrderStatus | str] | None = Field(
         default=None
-    )
-    paymentDue: datetime | str | list[datetime | str] | None = Field(default=None)
-    confirmationNumber: str | list[str] | None = Field(default=None)
-    broker: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
-    partOfInvoice: Invoice | str | list[Invoice | str] | None = Field(default=None)
-    merchant: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
     )
     orderedItem: (
-        Product
+        OrderItem
+        | Product
         | Service
-        | OrderItem
         | str
-        | list[Product | Service | OrderItem | str]
+        | list[OrderItem | Product | Service | str]
         | None
     ) = Field(default=None)
-    seller: Person | Organization | str | list[Person | Organization | str] | None = (
+    partOfInvoice: Invoice | str | list[Invoice | str] | None = Field(default=None)
+    paymentDue: datetime | str | list[datetime | str] | None = Field(default=None)
+    paymentDueDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    paymentMethod: PaymentMethod | str | list[PaymentMethod | str] | None = Field(
+        default=None
+    )
+    paymentMethodId: str | list[str] | None = Field(default=None)
+    paymentUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
+    seller: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    discount: str | float | list[str | float] | None = Field(default=None)
-    discountCode: str | list[str] | None = Field(default=None)
 
 
 class OrderAction(TradeAction):
@@ -9544,22 +9690,22 @@ class OrderItem(StructuredValue):
     of a bought offer."""
 
     type: str = Field(default="OrderItem", alias="@type")
-    orderItemStatus: OrderStatus | str | list[OrderStatus | str] | None = Field(
-        default=None
-    )
     orderDelivery: ParcelDelivery | str | list[ParcelDelivery | str] | None = Field(
         default=None
     )
     orderItemNumber: str | list[str] | None = Field(default=None)
+    orderItemStatus: OrderStatus | str | list[OrderStatus | str] | None = Field(
+        default=None
+    )
     orderQuantity: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
     orderedItem: (
-        Product
+        OrderItem
+        | Product
         | Service
-        | OrderItem
         | str
-        | list[Product | Service | OrderItem | str]
+        | list[OrderItem | Product | Service | str]
         | None
     ) = Field(default=None)
 
@@ -9581,12 +9727,12 @@ class OwnershipInfo(StructuredValue):
     owned a certain product."""
 
     type: str = Field(default="OwnershipInfo", alias="@type")
-    ownedFrom: datetime | str | list[datetime | str] | None = Field(default=None)
-    ownedThrough: datetime | str | list[datetime | str] | None = Field(default=None)
     acquiredFrom: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    typeOfGood: Service | Product | str | list[Service | Product | str] | None = Field(
+    ownedFrom: datetime | str | list[datetime | str] | None = Field(default=None)
+    ownedThrough: datetime | str | list[datetime | str] | None = Field(default=None)
+    typeOfGood: Product | Service | str | list[Product | Service | str] | None = Field(
         default=None
     )
 
@@ -9614,32 +9760,32 @@ class ParcelDelivery(Intangible):
     """The delivery of a parcel either via the postal service or a commercial service."""
 
     type: str = Field(default="ParcelDelivery", alias="@type")
-    trackingUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    expectedArrivalFrom: datetime | date | str | list[datetime | date | str] | None = (
-        Field(default=None)
+    carrier: Organization | str | list[Organization | str] | None = Field(default=None)
+    deliveryAddress: PostalAddress | str | list[PostalAddress | str] | None = Field(
+        default=None
     )
-    partOfOrder: Order | str | list[Order | str] | None = Field(default=None)
     deliveryStatus: DeliveryEvent | str | list[DeliveryEvent | str] | None = Field(
         default=None
     )
-    itemShipped: Product | str | list[Product | str] | None = Field(default=None)
-    deliveryAddress: PostalAddress | str | list[PostalAddress | str] | None = Field(
-        default=None
+    expectedArrivalFrom: date | datetime | str | list[date | datetime | str] | None = (
+        Field(default=None)
+    )
+    expectedArrivalUntil: date | datetime | str | list[date | datetime | str] | None = (
+        Field(default=None)
     )
     hasDeliveryMethod: DeliveryMethod | str | list[DeliveryMethod | str] | None = Field(
         default=None
     )
-    trackingNumber: str | list[str] | None = Field(default=None)
-    provider: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
-    )
+    itemShipped: Product | str | list[Product | str] | None = Field(default=None)
     originAddress: PostalAddress | str | list[PostalAddress | str] | None = Field(
         default=None
     )
-    expectedArrivalUntil: datetime | date | str | list[datetime | date | str] | None = (
+    partOfOrder: Order | str | list[Order | str] | None = Field(default=None)
+    provider: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    carrier: Organization | str | list[Organization | str] | None = Field(default=None)
+    trackingNumber: str | list[str] | None = Field(default=None)
+    trackingUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
 
 
 class ParentAudience(PeopleAudience):
@@ -9675,99 +9821,114 @@ class Person(Thing):
     """A person (alive, dead, undead, or fictional)."""
 
     type: str = Field(default="Person", alias="@type")
-    deathDate: date | str | list[date | str] | None = Field(default=None)
-    telephone: str | list[str] | None = Field(default=None)
-    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
-        Field(default=None)
+    additionalName: str | list[str] | None = Field(default=None)
+    address: PostalAddress | str | list[PostalAddress | str] | None = Field(
+        default=None
     )
-    duns: str | list[str] | None = Field(default=None)
-    knowsAbout: str | AnyUrl | Thing | list[str | AnyUrl | Thing] | None = Field(
+    affiliation: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    agentInteractionStatistic: (
+        InteractionCounter | str | list[InteractionCounter | str] | None
+    ) = Field(default=None)
+    alumniOf: (
+        EducationalOrganization
+        | Organization
+        | str
+        | list[EducationalOrganization | Organization | str]
+        | None
+    ) = Field(default=None)
+    award: str | list[str] | None = Field(default=None)
+    awards: str | list[str] | None = Field(default=None)
+    birthDate: date | str | list[date | str] | None = Field(default=None)
+    birthPlace: Place | str | list[Place | str] | None = Field(default=None)
+    brand: Brand | Organization | str | list[Brand | Organization | str] | None = Field(
+        default=None
+    )
+    callSign: str | list[str] | None = Field(default=None)
+    children: Person | str | list[Person | str] | None = Field(default=None)
+    colleague: Person | AnyUrl | str | list[Person | AnyUrl | str] | None = Field(
+        default=None
+    )
+    colleagues: Person | str | list[Person | str] | None = Field(default=None)
+    contactPoint: ContactPoint | str | list[ContactPoint | str] | None = Field(
         default=None
     )
     contactPoints: ContactPoint | str | list[ContactPoint | str] | None = Field(
         default=None
     )
+    deathDate: date | str | list[date | str] | None = Field(default=None)
+    deathPlace: Place | str | list[Place | str] | None = Field(default=None)
+    duns: str | list[str] | None = Field(default=None)
+    email: str | list[str] | None = Field(default=None)
+    familyName: str | list[str] | None = Field(default=None)
+    faxNumber: str | list[str] | None = Field(default=None)
+    follows: Person | str | list[Person | str] | None = Field(default=None)
     funder: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    callSign: str | list[str] | None = Field(default=None)
-    additionalName: str | list[str] | None = Field(default=None)
-    naics: str | list[str] | None = Field(default=None)
-    deathPlace: Place | str | list[Place | str] | None = Field(default=None)
-    siblings: Person | str | list[Person | str] | None = Field(default=None)
-    sibling: Person | str | list[Person | str] | None = Field(default=None)
-    honorificSuffix: str | list[str] | None = Field(default=None)
-    address: str | PostalAddress | list[str | PostalAddress] | None = Field(
-        default=None
-    )
-    performerIn: Event | str | list[Event | str] | None = Field(default=None)
-    colleagues: Person | str | list[Person | str] | None = Field(default=None)
-    globalLocationNumber: str | list[str] | None = Field(default=None)
-    makesOffer: Offer | str | list[Offer | str] | None = Field(default=None)
-    givenName: str | list[str] | None = Field(default=None)
-    workLocation: (
-        Place | ContactPoint | str | list[Place | ContactPoint | str] | None
-    ) = Field(default=None)
-    hasOccupation: Occupation | str | list[Occupation | str] | None = Field(
-        default=None
-    )
-    seeks: Demand | str | list[Demand | str] | None = Field(default=None)
-    parents: Person | str | list[Person | str] | None = Field(default=None)
-    parent: Person | str | list[Person | str] | None = Field(default=None)
-    gender: str | GenderType | list[str | GenderType] | None = Field(default=None)
-    homeLocation: (
-        Place | ContactPoint | str | list[Place | ContactPoint | str] | None
-    ) = Field(default=None)
-    taxID: str | list[str] | None = Field(default=None)
-    publishingPrinciples: (
-        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
-    ) = Field(default=None)
-    hasOfferCatalog: OfferCatalog | str | list[OfferCatalog | str] | None = Field(
-        default=None
-    )
-    weight: (
-        QuantitativeValue | Mass | str | list[QuantitativeValue | Mass | str] | None
-    ) = Field(default=None)
     funding: Grant | str | list[Grant | str] | None = Field(default=None)
-    email: str | list[str] | None = Field(default=None)
-    birthPlace: Place | str | list[Place | str] | None = Field(default=None)
-    knowsLanguage: str | Language | list[str | Language] | None = Field(default=None)
-    hasCredential: Credential | str | list[Credential | str] | None = Field(
-        default=None
-    )
-    contactPoint: ContactPoint | str | list[ContactPoint | str] | None = Field(
-        default=None
-    )
+    gender: GenderType | str | list[GenderType | str] | None = Field(default=None)
+    givenName: str | list[str] | None = Field(default=None)
+    globalLocationNumber: str | list[str] | None = Field(default=None)
     hasCertification: Certification | str | list[Certification | str] | None = Field(
         default=None
     )
-    vatID: str | list[str] | None = Field(default=None)
-    familyName: str | list[str] | None = Field(default=None)
-    awards: str | list[str] | None = Field(default=None)
+    hasCredential: Credential | str | list[Credential | str] | None = Field(
+        default=None
+    )
+    hasOccupation: Occupation | str | list[Occupation | str] | None = Field(
+        default=None
+    )
+    hasOfferCatalog: OfferCatalog | str | list[OfferCatalog | str] | None = Field(
+        default=None
+    )
+    hasPOS: Place | str | list[Place | str] | None = Field(default=None)
+    height: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
+    ) = Field(default=None)
+    homeLocation: (
+        ContactPoint | Place | str | list[ContactPoint | Place | str] | None
+    ) = Field(default=None)
+    honorificPrefix: str | list[str] | None = Field(default=None)
+    honorificSuffix: str | list[str] | None = Field(default=None)
     interactionStatistic: (
         InteractionCounter | str | list[InteractionCounter | str] | None
     ) = Field(default=None)
-    jobTitle: str | DefinedTerm | list[str | DefinedTerm] | None = Field(default=None)
-    relatedTo: Person | str | list[Person | str] | None = Field(default=None)
-    spouse: Person | str | list[Person | str] | None = Field(default=None)
-    nationality: Country | str | list[Country | str] | None = Field(default=None)
-    birthDate: date | str | list[date | str] | None = Field(default=None)
+    isicV4: str | list[str] | None = Field(default=None)
+    jobTitle: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    knows: Person | str | list[Person | str] | None = Field(default=None)
+    knowsAbout: str | Thing | AnyUrl | list[str | Thing | AnyUrl] | None = Field(
+        default=None
+    )
+    knowsLanguage: Language | str | list[Language | str] | None = Field(default=None)
+    lifeEvent: Event | str | list[Event | str] | None = Field(default=None)
+    makesOffer: Offer | str | list[Offer | str] | None = Field(default=None)
     memberOf: (
-        ProgramMembership
+        MemberProgramTier
         | Organization
-        | MemberProgramTier
+        | ProgramMembership
         | str
-        | list[ProgramMembership | Organization | MemberProgramTier | str]
+        | list[MemberProgramTier | Organization | ProgramMembership | str]
         | None
     ) = Field(default=None)
-    alumniOf: (
-        Organization
-        | EducationalOrganization
+    naics: str | list[str] | None = Field(default=None)
+    nationality: Country | str | list[Country | str] | None = Field(default=None)
+    netWorth: (
+        MonetaryAmount
+        | PriceSpecification
         | str
-        | list[Organization | EducationalOrganization | str]
+        | list[MonetaryAmount | PriceSpecification | str]
         | None
     ) = Field(default=None)
-    follows: Person | str | list[Person | str] | None = Field(default=None)
+    owns: Thing | str | list[Thing | str] | None = Field(default=None)
+    parent: Person | str | list[Person | str] | None = Field(default=None)
+    parents: Person | str | list[Person | str] | None = Field(default=None)
+    performerIn: Event | str | list[Event | str] | None = Field(default=None)
     pronouns: (
         DefinedTerm
         | StructuredValue
@@ -9775,43 +9936,28 @@ class Person(Thing):
         | list[DefinedTerm | StructuredValue | str]
         | None
     ) = Field(default=None)
-    lifeEvent: Event | str | list[Event | str] | None = Field(default=None)
-    netWorth: (
-        PriceSpecification
-        | MonetaryAmount
-        | str
-        | list[PriceSpecification | MonetaryAmount | str]
-        | None
+    publishingPrinciples: (
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
-    honorificPrefix: str | list[str] | None = Field(default=None)
+    relatedTo: Person | str | list[Person | str] | None = Field(default=None)
+    seeks: Demand | str | list[Demand | str] | None = Field(default=None)
+    sibling: Person | str | list[Person | str] | None = Field(default=None)
+    siblings: Person | str | list[Person | str] | None = Field(default=None)
+    skills: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
+    sponsor: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    spouse: Person | str | list[Person | str] | None = Field(default=None)
+    taxID: str | list[str] | None = Field(default=None)
+    telephone: str | list[str] | None = Field(default=None)
+    vatID: str | list[str] | None = Field(default=None)
+    weight: (
+        Mass | QuantitativeValue | str | list[Mass | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    workLocation: (
+        ContactPoint | Place | str | list[ContactPoint | Place | str] | None
+    ) = Field(default=None)
     worksFor: Organization | str | list[Organization | str] | None = Field(default=None)
-    children: Person | str | list[Person | str] | None = Field(default=None)
-    brand: Organization | Brand | str | list[Organization | Brand | str] | None = Field(
-        default=None
-    )
-    award: str | list[str] | None = Field(default=None)
-    skills: str | DefinedTerm | list[str | DefinedTerm] | None = Field(default=None)
-    height: (
-        QuantitativeValue
-        | Distance
-        | str
-        | list[QuantitativeValue | Distance | str]
-        | None
-    ) = Field(default=None)
-    colleague: Person | AnyUrl | str | list[Person | AnyUrl | str] | None = Field(
-        default=None
-    )
-    faxNumber: str | list[str] | None = Field(default=None)
-    agentInteractionStatistic: (
-        InteractionCounter | str | list[InteractionCounter | str] | None
-    ) = Field(default=None)
-    isicV4: str | list[str] | None = Field(default=None)
-    knows: Person | str | list[Person | str] | None = Field(default=None)
-    hasPOS: Place | str | list[Place | str] | None = Field(default=None)
-    affiliation: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
-    owns: Thing | str | list[Thing | str] | None = Field(default=None)
 
 
 class Patient(Person, MedicalAudience):
@@ -9838,12 +9984,12 @@ class PayAction(TradeAction):
 
     type: str = Field(default="PayAction", alias="@type")
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
 
@@ -10015,12 +10161,12 @@ class PodcastSeries(CreativeWorkSeries):
     download and listen to."""
 
     type: str = Field(default="PodcastSeries", alias="@type")
-    webFeed: AnyUrl | DataFeed | str | list[AnyUrl | DataFeed | str] | None = Field(
+    actor: (
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
+    ) = Field(default=None)
+    webFeed: DataFeed | AnyUrl | str | list[DataFeed | AnyUrl | str] | None = Field(
         default=None
     )
-    actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
-    ) = Field(default=None)
 
 
 class PoliceStation(EmergencyService, CivicStructure):
@@ -10051,15 +10197,15 @@ class PostalAddress(ContactPoint):
     """The mailing address."""
 
     type: str = Field(default="PostalAddress", alias="@type")
-    addressRegion: str | AdministrativeArea | list[str | AdministrativeArea] | None = (
+    addressCountry: Country | str | list[Country | str] | None = Field(default=None)
+    addressLocality: str | list[str] | None = Field(default=None)
+    addressRegion: AdministrativeArea | str | list[AdministrativeArea | str] | None = (
         Field(default=None)
     )
-    postalCode: str | list[str] | None = Field(default=None)
-    addressLocality: str | list[str] | None = Field(default=None)
-    postOfficeBoxNumber: str | list[str] | None = Field(default=None)
-    streetAddress: str | list[str] | None = Field(default=None)
     extendedAddress: str | list[str] | None = Field(default=None)
-    addressCountry: Country | str | list[Country | str] | None = Field(default=None)
+    postOfficeBoxNumber: str | list[str] | None = Field(default=None)
+    postalCode: str | list[str] | None = Field(default=None)
+    streetAddress: str | list[str] | None = Field(default=None)
 
 
 class PostalCodeRangeSpecification(StructuredValue):
@@ -10145,9 +10291,9 @@ class ProductGroup(Product):
     mechanism; neither are the following specific properties variesBy, hasVariant, url."""
 
     type: str = Field(default="ProductGroup", alias="@type")
+    hasVariant: Product | str | list[Product | str] | None = Field(default=None)
     productGroupID: str | list[str] | None = Field(default=None)
     variesBy: DefinedTerm | str | list[DefinedTerm | str] | None = Field(default=None)
-    hasVariant: Product | str | list[Product | str] | None = Field(default=None)
 
 
 class ProductModel(Product):
@@ -10156,10 +10302,10 @@ class ProductModel(Product):
 
     type: str = Field(default="ProductModel", alias="@type")
     isVariantOf: (
-        ProductModel
-        | ProductGroup
+        ProductGroup
+        | ProductModel
         | str
-        | list[ProductModel | ProductGroup | str]
+        | list[ProductGroup | ProductModel | str]
         | None
     ) = Field(default=None)
     predecessorOf: ProductModel | str | list[ProductModel | str] | None = Field(
@@ -10193,33 +10339,33 @@ class ProgramMembership(Intangible):
     clubs (e.g. "AAA"), purchase clubs ("Safeway Club"), etc."""
 
     type: str = Field(default="ProgramMembership", alias="@type")
-    members: Person | Organization | str | list[Person | Organization | str] | None = (
-        Field(default=None)
-    )
     hostingOrganization: Organization | str | list[Organization | str] | None = Field(
-        default=None
-    )
-    programName: str | list[str] | None = Field(default=None)
-    program: MemberProgram | str | list[MemberProgram | str] | None = Field(
         default=None
     )
     member: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
+    members: Organization | Person | str | list[Organization | Person | str] | None = (
+        Field(default=None)
+    )
+    membershipNumber: str | list[str] | None = Field(default=None)
     membershipPointsEarned: (
         float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
-    membershipNumber: str | list[str] | None = Field(default=None)
+    program: MemberProgram | str | list[MemberProgram | str] | None = Field(
+        default=None
+    )
+    programName: str | list[str] | None = Field(default=None)
 
 
 class PronounceableText(Text):
     """Data type: PronounceableText."""
 
     type: str = Field(default="PronounceableText", alias="@type")
+    inLanguage: Language | str | list[Language | str] | None = Field(default=None)
     phoneticText: str | list[str] | None = Field(default=None)
-    textValue: str | list[str] | None = Field(default=None)
     speechToTextMarkup: str | list[str] | None = Field(default=None)
-    inLanguage: str | Language | list[str | Language] | None = Field(default=None)
+    textValue: str | list[str] | None = Field(default=None)
 
 
 class Property(Intangible):
@@ -10228,33 +10374,33 @@ class Property(Intangible):
 
     type: str = Field(default="Property", alias="@type")
     domainIncludes: Class | str | list[Class | str] | None = Field(default=None)
+    inverseOf: Property | str | list[Property | str] | None = Field(default=None)
+    rangeIncludes: Class | str | list[Class | str] | None = Field(default=None)
     supersededBy: (
-        Enumeration
+        Class
+        | Enumeration
         | Property
-        | Class
         | str
-        | list[Enumeration | Property | Class | str]
+        | list[Class | Enumeration | Property | str]
         | None
     ) = Field(default=None)
-    rangeIncludes: Class | str | list[Class | str] | None = Field(default=None)
-    inverseOf: Property | str | list[Property | str] | None = Field(default=None)
 
 
 class PropertyValueSpecification(Intangible):
     """A Property value specification."""
 
     type: str = Field(default="PropertyValueSpecification", alias="@type")
-    valueMaxLength: float | str | list[float | str] | None = Field(default=None)
-    stepValue: float | str | list[float | str] | None = Field(default=None)
-    valueName: str | list[str] | None = Field(default=None)
-    readonlyValue: bool | str | list[bool | str] | None = Field(default=None)
-    valueMinLength: float | str | list[float | str] | None = Field(default=None)
-    valueRequired: bool | str | list[bool | str] | None = Field(default=None)
-    multipleValues: bool | str | list[bool | str] | None = Field(default=None)
     defaultValue: str | Thing | list[str | Thing] | None = Field(default=None)
-    valuePattern: str | list[str] | None = Field(default=None)
     maxValue: float | str | list[float | str] | None = Field(default=None)
     minValue: float | str | list[float | str] | None = Field(default=None)
+    multipleValues: bool | str | list[bool | str] | None = Field(default=None)
+    readonlyValue: bool | str | list[bool | str] | None = Field(default=None)
+    stepValue: float | str | list[float | str] | None = Field(default=None)
+    valueMaxLength: float | str | list[float | str] | None = Field(default=None)
+    valueMinLength: float | str | list[float | str] | None = Field(default=None)
+    valueName: str | list[str] | None = Field(default=None)
+    valuePattern: str | list[str] | None = Field(default=None)
+    valueRequired: bool | str | list[bool | str] | None = Field(default=None)
 
 
 class Protein(BioChemEntity):
@@ -10297,10 +10443,10 @@ class PublicationVolume(CreativeWork):
     relationships-and-periodicals/)."""
 
     type: str = Field(default="PublicationVolume", alias="@type")
-    pagination: str | list[str] | None = Field(default=None)
-    volumeNumber: int | str | list[int | str] | None = Field(default=None)
     pageEnd: int | str | list[int | str] | None = Field(default=None)
     pageStart: int | str | list[int | str] | None = Field(default=None)
+    pagination: str | list[str] | None = Field(default=None)
+    volumeNumber: int | str | list[int | str] | None = Field(default=None)
 
 
 class PurchaseType(Enumeration):
@@ -10321,17 +10467,17 @@ class Question(Comment):
     Frequently Asked Questions (FAQ) document."""
 
     type: str = Field(default="Question", alias="@type")
-    acceptedAnswer: ItemList | Answer | str | list[ItemList | Answer | str] | None = (
+    acceptedAnswer: Answer | ItemList | str | list[Answer | ItemList | str] | None = (
         Field(default=None)
     )
     answerCount: int | str | list[int | str] | None = Field(default=None)
-    suggestedAnswer: ItemList | Answer | str | list[ItemList | Answer | str] | None = (
-        Field(default=None)
-    )
     eduQuestionType: str | list[str] | None = Field(default=None)
     parentItem: (
-        CreativeWork | Comment | str | list[CreativeWork | Comment | str] | None
+        Comment | CreativeWork | str | list[Comment | CreativeWork | str] | None
     ) = Field(default=None)
+    suggestedAnswer: Answer | ItemList | str | list[Answer | ItemList | str] | None = (
+        Field(default=None)
+    )
 
 
 class Quiz(LearningResource):
@@ -10401,33 +10547,33 @@ class RadioSeries(CreativeWorkSeries):
     """CreativeWorkSeries dedicated to radio broadcast and associated online delivery."""
 
     type: str = Field(default="RadioSeries", alias="@type")
-    episodes: Episode | str | list[Episode | str] | None = Field(default=None)
-    numberOfSeasons: int | str | list[int | str] | None = Field(default=None)
+    actor: (
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
+    ) = Field(default=None)
+    actors: Person | str | list[Person | str] | None = Field(default=None)
     containsSeason: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = (
         Field(default=None)
     )
-    actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
-    ) = Field(default=None)
-    season: (
-        AnyUrl
-        | CreativeWorkSeason
-        | str
-        | list[AnyUrl | CreativeWorkSeason | str]
-        | None
-    ) = Field(default=None)
+    director: Person | str | list[Person | str] | None = Field(default=None)
     directors: Person | str | list[Person | str] | None = Field(default=None)
-    productionCompany: Organization | str | list[Organization | str] | None = Field(
+    episode: Episode | str | list[Episode | str] | None = Field(default=None)
+    episodes: Episode | str | list[Episode | str] | None = Field(default=None)
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
         default=None
     )
     numberOfEpisodes: int | str | list[int | str] | None = Field(default=None)
-    seasons: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = Field(
+    numberOfSeasons: int | str | list[int | str] | None = Field(default=None)
+    productionCompany: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
-    actors: Person | str | list[Person | str] | None = Field(default=None)
-    episode: Episode | str | list[Episode | str] | None = Field(default=None)
-    director: Person | str | list[Person | str] | None = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
+    season: (
+        CreativeWorkSeason
+        | AnyUrl
+        | str
+        | list[CreativeWorkSeason | AnyUrl | str]
+        | None
+    ) = Field(default=None)
+    seasons: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = Field(
         default=None
     )
     trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
@@ -10459,14 +10605,14 @@ class RealEstateListing(WebPage):
     """
 
     type: str = Field(default="RealEstateListing", alias="@type")
-    datePosted: datetime | date | str | list[datetime | date | str] | None = Field(
+    datePosted: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
     leaseLength: (
-        QuantitativeValue
-        | timedelta
+        timedelta
+        | QuantitativeValue
         | str
-        | list[QuantitativeValue | timedelta | str]
+        | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
 
@@ -10483,11 +10629,11 @@ class ReceiveAction(TransferAction):
         default=None
     )
     sender: (
-        Organization
+        Audience
+        | Organization
         | Person
-        | Audience
         | str
-        | list[Organization | Person | Audience | str]
+        | list[Audience | Organization | Person | str]
         | None
     ) = Field(default=None)
 
@@ -10498,26 +10644,26 @@ class Recipe(HowTo):
     more detail."""
 
     type: str = Field(default="Recipe", alias="@type")
-    cookingMethod: str | list[str] | None = Field(default=None)
-    recipeInstructions: (
-        CreativeWork | str | ItemList | list[CreativeWork | str | ItemList] | None
-    ) = Field(default=None)
-    recipeCategory: str | list[str] | None = Field(default=None)
     cookTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    suitableForDiet: (
-        Diet | RestrictedDiet | str | list[Diet | RestrictedDiet | str] | None
-    ) = Field(default=None)
-    recipeIngredient: (
-        str | ItemList | PropertyValue | list[str | ItemList | PropertyValue] | None
-    ) = Field(default=None)
-    recipeYield: str | QuantitativeValue | list[str | QuantitativeValue] | None = Field(
-        default=None
-    )
+    cookingMethod: str | list[str] | None = Field(default=None)
     ingredients: str | list[str] | None = Field(default=None)
     nutrition: NutritionInformation | str | list[NutritionInformation | str] | None = (
         Field(default=None)
     )
+    recipeCategory: str | list[str] | None = Field(default=None)
     recipeCuisine: str | list[str] | None = Field(default=None)
+    recipeIngredient: (
+        ItemList | PropertyValue | str | list[ItemList | PropertyValue | str] | None
+    ) = Field(default=None)
+    recipeInstructions: (
+        CreativeWork | ItemList | str | list[CreativeWork | ItemList | str] | None
+    ) = Field(default=None)
+    recipeYield: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
+    suitableForDiet: (
+        Diet | RestrictedDiet | str | list[Diet | RestrictedDiet | str] | None
+    ) = Field(default=None)
 
 
 class Recommendation(Review):
@@ -10529,12 +10675,12 @@ class Recommendation(Review):
 
     type: str = Field(default="Recommendation", alias="@type")
     category: (
-        str
-        | AnyUrl
-        | Thing
+        CategoryCode
         | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
+        | str
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
         | None
     ) = Field(default=None)
 
@@ -10597,25 +10743,25 @@ class RentalCarReservation(Reservation):
     confirmations of reservations."""
 
     type: str = Field(default="RentalCarReservation", alias="@type")
-    dropoffTime: datetime | str | list[datetime | str] | None = Field(default=None)
-    pickupTime: datetime | str | list[datetime | str] | None = Field(default=None)
     dropoffLocation: Place | str | list[Place | str] | None = Field(default=None)
+    dropoffTime: datetime | str | list[datetime | str] | None = Field(default=None)
     pickupLocation: Place | str | list[Place | str] | None = Field(default=None)
+    pickupTime: datetime | str | list[datetime | str] | None = Field(default=None)
 
 
 class RepaymentSpecification(StructuredValue):
     """A structured value representing repayment."""
 
     type: str = Field(default="RepaymentSpecification", alias="@type")
+    downPayment: (
+        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+    ) = Field(default=None)
     earlyPrepaymentPenalty: MonetaryAmount | str | list[MonetaryAmount | str] | None = (
         Field(default=None)
     )
     loanPaymentAmount: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
-    downPayment: (
-        float | MonetaryAmount | str | list[float | MonetaryAmount | str] | None
-    ) = Field(default=None)
     loanPaymentFrequency: float | str | list[float | str] | None = Field(default=None)
     numberOfLoanPayments: float | str | list[float | str] | None = Field(default=None)
 
@@ -10768,12 +10914,12 @@ class ReturnAction(TransferAction):
 
     type: str = Field(default="ReturnAction", alias="@type")
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
 
@@ -10828,11 +10974,11 @@ class RsvpAction(InformAction):
     event."""
 
     type: str = Field(default="RsvpAction", alias="@type")
-    comment: Comment | str | list[Comment | str] | None = Field(default=None)
-    rsvpResponse: RsvpResponseType | str | list[RsvpResponseType | str] | None = Field(
+    additionalNumberOfGuests: float | str | list[float | str] | None = Field(
         default=None
     )
-    additionalNumberOfGuests: float | str | list[float | str] | None = Field(
+    comment: Comment | str | list[Comment | str] | None = Field(default=None)
+    rsvpResponse: RsvpResponseType | str | list[RsvpResponseType | str] | None = Field(
         default=None
     )
 
@@ -10877,27 +11023,10 @@ class Schedule(Intangible):
     limited calendar of events."""
 
     type: str = Field(default="Schedule", alias="@type")
-    endTime: datetime | time | str | list[datetime | time | str] | None = Field(
-        default=None
-    )
+    byDay: DayOfWeek | str | list[DayOfWeek | str] | None = Field(default=None)
     byMonth: int | str | list[int | str] | None = Field(default=None)
     byMonthDay: int | str | list[int | str] | None = Field(default=None)
-    repeatFrequency: str | timedelta | list[str | timedelta] | None = Field(
-        default=None
-    )
-    exceptDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    scheduleTimezone: str | list[str] | None = Field(default=None)
-    endDate: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    byDay: str | DayOfWeek | list[str | DayOfWeek] | None = Field(default=None)
     byMonthWeek: int | str | list[int | str] | None = Field(default=None)
-    startDate: date | datetime | str | list[date | datetime | str] | None = Field(
-        default=None
-    )
-    repeatCount: int | str | list[int | str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -10905,6 +11034,23 @@ class Schedule(Intangible):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
+    endDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    endTime: datetime | time | str | list[datetime | time | str] | None = Field(
+        default=None
+    )
+    exceptDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
+    repeatCount: int | str | list[int | str] | None = Field(default=None)
+    repeatFrequency: timedelta | str | list[timedelta | str] | None = Field(
+        default=None
+    )
+    scheduleTimezone: str | list[str] | None = Field(default=None)
+    startDate: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
     startTime: datetime | time | str | list[datetime | time | str] | None = Field(
         default=None
     )
@@ -10934,9 +11080,9 @@ class ScreeningEvent(Event):
     """A screening of a movie or other video."""
 
     type: str = Field(default="ScreeningEvent", alias="@type")
-    workPresented: Movie | str | list[Movie | str] | None = Field(default=None)
-    subtitleLanguage: str | Language | list[str | Language] | None = Field(default=None)
+    subtitleLanguage: Language | str | list[Language | str] | None = Field(default=None)
     videoFormat: str | list[str] | None = Field(default=None)
+    workPresented: Movie | str | list[Movie | str] | None = Field(default=None)
 
 
 class Sculpture(CreativeWork):
@@ -10982,9 +11128,9 @@ class Seat(Intangible):
 
     type: str = Field(default="Seat", alias="@type")
     seatNumber: str | list[str] | None = Field(default=None)
-    seatSection: str | list[str] | None = Field(default=None)
     seatRow: str | list[str] | None = Field(default=None)
-    seatingType: str | QualitativeValue | list[str | QualitativeValue] | None = Field(
+    seatSection: str | list[str] | None = Field(default=None)
+    seatingType: QualitativeValue | str | list[QualitativeValue | str] | None = Field(
         default=None
     )
 
@@ -10995,7 +11141,7 @@ class SeekToAction(Action):
 
     type: str = Field(default="SeekToAction", alias="@type")
     startOffset: (
-        float | HyperTocEntry | str | list[float | HyperTocEntry | str] | None
+        HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
     ) = Field(default=None)
 
 
@@ -11011,11 +11157,11 @@ class SellAction(TradeAction):
     BuyAction."""
 
     type: str = Field(default="SellAction", alias="@type")
-    warrantyPromise: WarrantyPromise | str | list[WarrantyPromise | str] | None = Field(
-        default=None
-    )
     buyer: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
+    )
+    warrantyPromise: WarrantyPromise | str | list[WarrantyPromise | str] | None = Field(
+        default=None
     )
 
 
@@ -11031,12 +11177,12 @@ class SendAction(TransferAction):
         default=None
     )
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
 
@@ -11055,22 +11201,22 @@ class ServiceChannel(Intangible):
     phone number."""
 
     type: str = Field(default="ServiceChannel", alias="@type")
-    availableLanguage: str | Language | list[str | Language] | None = Field(
+    availableLanguage: Language | str | list[Language | str] | None = Field(
         default=None
     )
-    serviceSmsNumber: ContactPoint | str | list[ContactPoint | str] | None = Field(
-        default=None
-    )
+    processingTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
+    providesService: Service | str | list[Service | str] | None = Field(default=None)
+    serviceLocation: Place | str | list[Place | str] | None = Field(default=None)
     servicePhone: ContactPoint | str | list[ContactPoint | str] | None = Field(
         default=None
     )
     servicePostalAddress: PostalAddress | str | list[PostalAddress | str] | None = (
         Field(default=None)
     )
-    serviceLocation: Place | str | list[Place | str] | None = Field(default=None)
+    serviceSmsNumber: ContactPoint | str | list[ContactPoint | str] | None = Field(
+        default=None
+    )
     serviceUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    providesService: Service | str | list[Service | str] | None = Field(default=None)
-    processingTime: timedelta | str | list[timedelta | str] | None = Field(default=None)
 
 
 class ServicePeriod(StructuredValue):
@@ -11078,7 +11224,6 @@ class ServicePeriod(StructuredValue):
     business days. This is used e.g. in shipping for handling times or transit time."""
 
     type: str = Field(default="ServicePeriod", alias="@type")
-    cutoffTime: time | str | list[time | str] | None = Field(default=None)
     businessDays: (
         DayOfWeek
         | OpeningHoursSpecification
@@ -11086,6 +11231,7 @@ class ServicePeriod(StructuredValue):
         | list[DayOfWeek | OpeningHoursSpecification | str]
         | None
     ) = Field(default=None)
+    cutoffTime: time | str | list[time | str] | None = Field(default=None)
     duration: (
         timedelta
         | QuantitativeValue
@@ -11115,40 +11261,36 @@ class ShippingConditions(StructuredValue):
     ShippingConditions to apply."""
 
     type: str = Field(default="ShippingConditions", alias="@type")
-    doesNotShip: bool | str | list[bool | str] | None = Field(default=None)
-    width: (
-        QuantitativeValue
-        | Distance
-        | str
-        | list[QuantitativeValue | Distance | str]
-        | None
-    ) = Field(default=None)
     depth: (
-        QuantitativeValue
-        | Distance
+        Distance
+        | QuantitativeValue
         | str
-        | list[QuantitativeValue | Distance | str]
+        | list[Distance | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    weight: (
-        QuantitativeValue | Mass | str | list[QuantitativeValue | Mass | str] | None
+    doesNotShip: bool | str | list[bool | str] | None = Field(default=None)
+    height: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
+    numItems: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+        default=None
+    )
     orderValue: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
-    numItems: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
+    seasonalOverride: (
+        OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
+    ) = Field(default=None)
+    shippingDestination: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
         default=None
     )
     shippingOrigin: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
         default=None
     )
-    transitTime: (
-        QuantitativeValue
-        | ServicePeriod
-        | str
-        | list[QuantitativeValue | ServicePeriod | str]
-        | None
-    ) = Field(default=None)
     shippingRate: (
         MonetaryAmount
         | ShippingRateSettings
@@ -11156,17 +11298,21 @@ class ShippingConditions(StructuredValue):
         | list[MonetaryAmount | ShippingRateSettings | str]
         | None
     ) = Field(default=None)
-    shippingDestination: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
-        default=None
-    )
-    seasonalOverride: (
-        OpeningHoursSpecification | str | list[OpeningHoursSpecification | str] | None
-    ) = Field(default=None)
-    height: (
+    transitTime: (
         QuantitativeValue
-        | Distance
+        | ServicePeriod
         | str
-        | list[QuantitativeValue | Distance | str]
+        | list[QuantitativeValue | ServicePeriod | str]
+        | None
+    ) = Field(default=None)
+    weight: (
+        Mass | QuantitativeValue | str | list[Mass | QuantitativeValue | str] | None
+    ) = Field(default=None)
+    width: (
+        Distance
+        | QuantitativeValue
+        | str
+        | list[Distance | QuantitativeValue | str]
         | None
     ) = Field(default=None)
 
@@ -11176,6 +11322,13 @@ class ShippingDeliveryTime(StructuredValue):
     shipping."""
 
     type: str = Field(default="ShippingDeliveryTime", alias="@type")
+    businessDays: (
+        DayOfWeek
+        | OpeningHoursSpecification
+        | str
+        | list[DayOfWeek | OpeningHoursSpecification | str]
+        | None
+    ) = Field(default=None)
     cutoffTime: time | str | list[time | str] | None = Field(default=None)
     handlingTime: (
         QuantitativeValue
@@ -11191,13 +11344,6 @@ class ShippingDeliveryTime(StructuredValue):
         | list[QuantitativeValue | ServicePeriod | str]
         | None
     ) = Field(default=None)
-    businessDays: (
-        DayOfWeek
-        | OpeningHoursSpecification
-        | str
-        | list[DayOfWeek | OpeningHoursSpecification | str]
-        | None
-    ) = Field(default=None)
 
 
 class ShippingRateSettings(StructuredValue):
@@ -11208,7 +11354,7 @@ class ShippingRateSettings(StructuredValue):
     values for shippingLabel."""
 
     type: str = Field(default="ShippingRateSettings", alias="@type")
-    orderPercentage: float | str | list[float | str] | None = Field(default=None)
+    doesNotShip: bool | str | list[bool | str] | None = Field(default=None)
     freeShippingThreshold: (
         DeliveryChargeSpecification
         | MonetaryAmount
@@ -11216,9 +11362,11 @@ class ShippingRateSettings(StructuredValue):
         | list[DeliveryChargeSpecification | MonetaryAmount | str]
         | None
     ) = Field(default=None)
-    doesNotShip: bool | str | list[bool | str] | None = Field(default=None)
     isUnlabelledFallback: bool | str | list[bool | str] | None = Field(default=None)
-    weightPercentage: float | str | list[float | str] | None = Field(default=None)
+    orderPercentage: float | str | list[float | str] | None = Field(default=None)
+    shippingDestination: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
+        default=None
+    )
     shippingRate: (
         MonetaryAmount
         | ShippingRateSettings
@@ -11226,9 +11374,7 @@ class ShippingRateSettings(StructuredValue):
         | list[MonetaryAmount | ShippingRateSettings | str]
         | None
     ) = Field(default=None)
-    shippingDestination: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
-        default=None
-    )
+    weightPercentage: float | str | list[float | str] | None = Field(default=None)
 
 
 class ShippingService(StructuredValue):
@@ -11236,8 +11382,8 @@ class ShippingService(StructuredValue):
     be shipped to a customer."""
 
     type: str = Field(default="ShippingService", alias="@type")
-    validForMemberTier: (
-        MemberProgramTier | str | list[MemberProgramTier | str] | None
+    fulfillmentType: (
+        FulfillmentTypeEnumeration | str | list[FulfillmentTypeEnumeration | str] | None
     ) = Field(default=None)
     handlingTime: (
         QuantitativeValue
@@ -11246,11 +11392,11 @@ class ShippingService(StructuredValue):
         | list[QuantitativeValue | ServicePeriod | str]
         | None
     ) = Field(default=None)
-    fulfillmentType: (
-        FulfillmentTypeEnumeration | str | list[FulfillmentTypeEnumeration | str] | None
-    ) = Field(default=None)
     shippingConditions: (
         ShippingConditions | str | list[ShippingConditions | str] | None
+    ) = Field(default=None)
+    validForMemberTier: (
+        MemberProgramTier | str | list[MemberProgramTier | str] | None
     ) = Field(default=None)
 
 
@@ -11277,7 +11423,7 @@ class SingleFamilyResidence(House):
 
     type: str = Field(default="SingleFamilyResidence", alias="@type")
     numberOfRooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -11288,8 +11434,8 @@ class WebPageElement(CreativeWork):
     """A web page element, like a table or an image."""
 
     type: str = Field(default="WebPageElement", alias="@type")
-    xpath: str | list[str] | None = Field(default=None)
     cssSelector: str | list[str] | None = Field(default=None)
+    xpath: str | list[str] | None = Field(default=None)
 
 
 class SiteNavigationElement(WebPageElement):
@@ -11311,24 +11457,24 @@ class SizeSpecification(QualitativeValue):
     suggested body measurements (suggestedMeasurement)."""
 
     type: str = Field(default="SizeSpecification", alias="@type")
-    suggestedMeasurement: (
-        QuantitativeValue | str | list[QuantitativeValue | str] | None
-    ) = Field(default=None)
-    suggestedGender: str | GenderType | list[str | GenderType] | None = Field(
-        default=None
-    )
-    sizeSystem: (
-        str | SizeSystemEnumeration | list[str | SizeSystemEnumeration] | None
-    ) = Field(default=None)
-    sizeGroup: SizeGroupEnumeration | str | list[SizeGroupEnumeration | str] | None = (
-        Field(default=None)
-    )
-    suggestedAge: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
     hasMeasurement: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
+    sizeGroup: SizeGroupEnumeration | str | list[SizeGroupEnumeration | str] | None = (
+        Field(default=None)
+    )
+    sizeSystem: (
+        SizeSystemEnumeration | str | list[SizeSystemEnumeration | str] | None
+    ) = Field(default=None)
+    suggestedAge: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    suggestedGender: GenderType | str | list[GenderType | str] | None = Field(
+        default=None
+    )
+    suggestedMeasurement: (
+        QuantitativeValue | str | list[QuantitativeValue | str] | None
+    ) = Field(default=None)
 
 
 class SizeSystemEnumeration(Enumeration):
@@ -11355,19 +11501,19 @@ class SoftwareSourceCode(CreativeWork):
     snippet samples, scripts, templates."""
 
     type: str = Field(default="SoftwareSourceCode", alias="@type")
-    programmingLanguage: (
-        str | ComputerLanguage | list[str | ComputerLanguage] | None
-    ) = Field(default=None)
-    targetProduct: (
-        SoftwareApplication | str | list[SoftwareApplication | str] | None
-    ) = Field(default=None)
+    codeRepository: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     codeSampleType: str | list[str] | None = Field(default=None)
+    programmingLanguage: (
+        ComputerLanguage | str | list[ComputerLanguage | str] | None
+    ) = Field(default=None)
+    runtime: str | list[str] | None = Field(default=None)
     runtimePlatform: RuntimePlatform | str | list[RuntimePlatform | str] | None = Field(
         default=None
     )
-    runtime: str | list[str] | None = Field(default=None)
-    codeRepository: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     sampleType: str | list[str] | None = Field(default=None)
+    targetProduct: (
+        SoftwareApplication | str | list[SoftwareApplication | str] | None
+    ) = Field(default=None)
 
 
 class SolveMathAction(Action):
@@ -11393,8 +11539,8 @@ class SpeakableSpecification(Intangible):
     are expected to be used primarily as values of the speakable property."""
 
     type: str = Field(default="SpeakableSpecification", alias="@type")
-    xpath: str | list[str] | None = Field(default=None)
     cssSelector: str | list[str] | None = Field(default=None)
+    xpath: str | list[str] | None = Field(default=None)
 
 
 class SpecialAnnouncement(CreativeWork):
@@ -11475,50 +11621,26 @@ class SpecialAnnouncement(CreativeWork):
     """
 
     type: str = Field(default="SpecialAnnouncement", alias="@type")
-    datePosted: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
-    )
-    webFeed: AnyUrl | DataFeed | str | list[AnyUrl | DataFeed | str] | None = Field(
-        default=None
-    )
     announcementLocation: (
-        LocalBusiness
-        | CivicStructure
+        CivicStructure
+        | LocalBusiness
         | str
-        | list[LocalBusiness | CivicStructure | str]
+        | list[CivicStructure | LocalBusiness | str]
         | None
     ) = Field(default=None)
     category: (
-        str
-        | AnyUrl
-        | Thing
+        CategoryCode
         | PhysicalActivityCategory
-        | CategoryCode
-        | list[str | AnyUrl | Thing | PhysicalActivityCategory | CategoryCode]
+        | str
+        | Thing
+        | AnyUrl
+        | list[CategoryCode | PhysicalActivityCategory | str | Thing | AnyUrl]
         | None
     ) = Field(default=None)
-    newsUpdatesAndGuidelines: (
-        WebContent | AnyUrl | str | list[WebContent | AnyUrl | str] | None
-    ) = Field(default=None)
-    travelBans: AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None = (
-        Field(default=None)
+    datePosted: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
     )
-    gettingTestedInfo: (
-        AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None
-    ) = Field(default=None)
-    schoolClosuresInfo: (
-        WebContent | AnyUrl | str | list[WebContent | AnyUrl | str] | None
-    ) = Field(default=None)
-    publicTransportClosuresInfo: (
-        WebContent | AnyUrl | str | list[WebContent | AnyUrl | str] | None
-    ) = Field(default=None)
-    governmentBenefitsInfo: (
-        GovernmentService | str | list[GovernmentService | str] | None
-    ) = Field(default=None)
     diseasePreventionInfo: (
-        WebContent | AnyUrl | str | list[WebContent | AnyUrl | str] | None
-    ) = Field(default=None)
-    quarantineGuidelines: (
         AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None
     ) = Field(default=None)
     diseaseSpreadStatistics: (
@@ -11530,6 +11652,30 @@ class SpecialAnnouncement(CreativeWork):
         | list[Dataset | Observation | AnyUrl | WebContent | str]
         | None
     ) = Field(default=None)
+    gettingTestedInfo: (
+        AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None
+    ) = Field(default=None)
+    governmentBenefitsInfo: (
+        GovernmentService | str | list[GovernmentService | str] | None
+    ) = Field(default=None)
+    newsUpdatesAndGuidelines: (
+        AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None
+    ) = Field(default=None)
+    publicTransportClosuresInfo: (
+        AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None
+    ) = Field(default=None)
+    quarantineGuidelines: (
+        AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None
+    ) = Field(default=None)
+    schoolClosuresInfo: (
+        AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None
+    ) = Field(default=None)
+    travelBans: AnyUrl | WebContent | str | list[AnyUrl | WebContent | str] | None = (
+        Field(default=None)
+    )
+    webFeed: DataFeed | AnyUrl | str | list[DataFeed | AnyUrl | str] | None = Field(
+        default=None
+    )
 
 
 class SportingGoodsStore(Store):
@@ -11548,16 +11694,16 @@ class SportsEvent(Event):
     """Event type: Sports event."""
 
     type: str = Field(default="SportsEvent", alias="@type")
+    awayTeam: Person | SportsTeam | str | list[Person | SportsTeam | str] | None = (
+        Field(default=None)
+    )
+    competitor: Person | SportsTeam | str | list[Person | SportsTeam | str] | None = (
+        Field(default=None)
+    )
+    homeTeam: Person | SportsTeam | str | list[Person | SportsTeam | str] | None = (
+        Field(default=None)
+    )
     referee: Person | str | list[Person | str] | None = Field(default=None)
-    homeTeam: SportsTeam | Person | str | list[SportsTeam | Person | str] | None = (
-        Field(default=None)
-    )
-    awayTeam: SportsTeam | Person | str | list[SportsTeam | Person | str] | None = (
-        Field(default=None)
-    )
-    competitor: SportsTeam | Person | str | list[SportsTeam | Person | str] | None = (
-        Field(default=None)
-    )
     sport: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
 
 
@@ -11573,9 +11719,9 @@ class SportsTeam(SportsOrganization):
     """Organization: Sports team."""
 
     type: str = Field(default="SportsTeam", alias="@type")
-    gender: str | GenderType | list[str | GenderType] | None = Field(default=None)
-    coach: Person | str | list[Person | str] | None = Field(default=None)
     athlete: Person | str | list[Person | str] | None = Field(default=None)
+    coach: Person | str | list[Person | str] | None = Field(default=None)
+    gender: GenderType | str | list[GenderType | str] | None = Field(default=None)
 
 
 class SpreadsheetDigitalDocument(DigitalDocument):
@@ -11645,30 +11791,30 @@ class StatisticalVariable(ConstraintNode):
     notation of an observed measurement."""
 
     type: str = Field(default="StatisticalVariable", alias="@type")
-    populationType: Class | str | list[Class | str] | None = Field(default=None)
-    measurementQualifier: Enumeration | str | list[Enumeration | str] | None = Field(
-        default=None
-    )
     measuredProperty: Property | str | list[Property | str] | None = Field(default=None)
-    measurementTechnique: (
-        str
-        | AnyUrl
-        | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
-        | None
-    ) = Field(default=None)
     measurementDenominator: (
         StatisticalVariable | str | list[StatisticalVariable | str] | None
     ) = Field(default=None)
     measurementMethod: (
-        str
-        | AnyUrl
+        DefinedTerm
         | MeasurementMethodEnum
-        | DefinedTerm
-        | list[str | AnyUrl | MeasurementMethodEnum | DefinedTerm]
+        | str
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
+    measurementQualifier: Enumeration | str | list[Enumeration | str] | None = Field(
+        default=None
+    )
+    measurementTechnique: (
+        DefinedTerm
+        | MeasurementMethodEnum
+        | str
+        | AnyUrl
+        | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
+        | None
+    ) = Field(default=None)
+    populationType: Class | str | list[Class | str] | None = Field(default=None)
     statType: Property | str | AnyUrl | list[Property | str | AnyUrl] | None = Field(
         default=None
     )
@@ -11710,12 +11856,12 @@ class Suite(Accommodation):
     """
 
     type: str = Field(default="Suite", alias="@type")
-    numberOfRooms: (
-        QuantitativeValue | float | str | list[QuantitativeValue | float | str] | None
-    ) = Field(default=None)
     bed: BedDetails | BedType | str | list[BedDetails | BedType | str] | None = Field(
         default=None
     )
+    numberOfRooms: (
+        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+    ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
     )
@@ -11740,21 +11886,21 @@ class SuperficialAnatomy(MedicalEntity):
     underlying dislocation of the joint (the related anatomical structure)."""
 
     type: str = Field(default="SuperficialAnatomy", alias="@type")
-    significance: str | list[str] | None = Field(default=None)
     associatedPathophysiology: str | list[str] | None = Field(default=None)
     relatedAnatomy: (
-        AnatomicalSystem
-        | AnatomicalStructure
+        AnatomicalStructure
+        | AnatomicalSystem
         | str
-        | list[AnatomicalSystem | AnatomicalStructure | str]
+        | list[AnatomicalStructure | AnatomicalSystem | str]
         | None
     ) = Field(default=None)
-    relatedTherapy: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
-        default=None
-    )
     relatedCondition: MedicalCondition | str | list[MedicalCondition | str] | None = (
         Field(default=None)
     )
+    relatedTherapy: MedicalTherapy | str | list[MedicalTherapy | str] | None = Field(
+        default=None
+    )
+    significance: str | list[str] | None = Field(default=None)
 
 
 class SurgicalProcedure(MedicalProcedure):
@@ -11798,7 +11944,7 @@ class TVEpisode(Episode):
     type: str = Field(default="TVEpisode", alias="@type")
     countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
     partOfTVSeries: TVSeries | str | list[TVSeries | str] | None = Field(default=None)
-    subtitleLanguage: str | Language | list[str | Language] | None = Field(default=None)
+    subtitleLanguage: Language | str | list[Language | str] | None = Field(default=None)
     titleEIDR: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
 
 
@@ -11815,38 +11961,38 @@ class TVSeries(CreativeWorkSeries, CreativeWork):
     """CreativeWorkSeries dedicated to TV broadcast and associated online delivery."""
 
     type: str = Field(default="TVSeries", alias="@type")
-    episodes: Episode | str | list[Episode | str] | None = Field(default=None)
-    numberOfSeasons: int | str | list[int | str] | None = Field(default=None)
-    countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
+    actor: (
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
+    ) = Field(default=None)
+    actors: Person | str | list[Person | str] | None = Field(default=None)
     containsSeason: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = (
         Field(default=None)
     )
-    actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
-    ) = Field(default=None)
-    season: (
-        AnyUrl
-        | CreativeWorkSeason
-        | str
-        | list[AnyUrl | CreativeWorkSeason | str]
-        | None
-    ) = Field(default=None)
+    countryOfOrigin: Country | str | list[Country | str] | None = Field(default=None)
+    director: Person | str | list[Person | str] | None = Field(default=None)
     directors: Person | str | list[Person | str] | None = Field(default=None)
-    productionCompany: Organization | str | list[Organization | str] | None = Field(
+    episode: Episode | str | list[Episode | str] | None = Field(default=None)
+    episodes: Episode | str | list[Episode | str] | None = Field(default=None)
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
         default=None
     )
     numberOfEpisodes: int | str | list[int | str] | None = Field(default=None)
+    numberOfSeasons: int | str | list[int | str] | None = Field(default=None)
+    productionCompany: Organization | str | list[Organization | str] | None = Field(
+        default=None
+    )
+    season: (
+        CreativeWorkSeason
+        | AnyUrl
+        | str
+        | list[CreativeWorkSeason | AnyUrl | str]
+        | None
+    ) = Field(default=None)
     seasons: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = Field(
         default=None
     )
-    actors: Person | str | list[Person | str] | None = Field(default=None)
-    episode: Episode | str | list[Episode | str] | None = Field(default=None)
-    director: Person | str | list[Person | str] | None = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
-        default=None
-    )
-    trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
     titleEIDR: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
 
 
 class Table(WebPageElement):
@@ -11885,8 +12031,8 @@ class TaxiReservation(Reservation):
     partySize: (
         int | QuantitativeValue | str | list[int | QuantitativeValue | str] | None
     ) = Field(default=None)
-    pickupTime: datetime | str | list[datetime | str] | None = Field(default=None)
     pickupLocation: Place | str | list[Place | str] | None = Field(default=None)
+    pickupTime: datetime | str | list[datetime | str] | None = Field(default=None)
 
 
 class TaxiService(Service):
@@ -11906,18 +12052,18 @@ class Taxon(Thing):
     """A set of organisms asserted to represent a natural cohesive biological unit."""
 
     type: str = Field(default="Taxon", alias="@type")
-    hasDefinedTerm: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
-        default=None
-    )
-    taxonRank: (
-        AnyUrl | PropertyValue | str | list[AnyUrl | PropertyValue | str] | None
-    ) = Field(default=None)
     childTaxon: Taxon | str | AnyUrl | list[Taxon | str | AnyUrl] | None = Field(
         default=None
     )
-    parentTaxon: str | AnyUrl | Taxon | list[str | AnyUrl | Taxon] | None = Field(
+    hasDefinedTerm: DefinedTerm | str | list[DefinedTerm | str] | None = Field(
         default=None
     )
+    parentTaxon: Taxon | str | AnyUrl | list[Taxon | str | AnyUrl] | None = Field(
+        default=None
+    )
+    taxonRank: (
+        PropertyValue | str | AnyUrl | list[PropertyValue | str | AnyUrl] | None
+    ) = Field(default=None)
 
 
 class TelevisionChannel(BroadcastChannel):
@@ -11976,20 +12122,20 @@ class Ticket(Intangible):
     """Used to describe a ticket to an event, a flight, a bus ride, etc."""
 
     type: str = Field(default="Ticket", alias="@type")
-    ticketedSeat: Seat | str | list[Seat | str] | None = Field(default=None)
-    totalPrice: (
-        PriceSpecification | str | float | list[PriceSpecification | str | float] | None
-    ) = Field(default=None)
-    ticketNumber: str | list[str] | None = Field(default=None)
-    priceCurrency: str | list[str] | None = Field(default=None)
-    ticketToken: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    underName: (
-        Organization | Person | str | list[Organization | Person | str] | None
-    ) = Field(default=None)
-    issuedBy: Organization | str | list[Organization | str] | None = Field(default=None)
     dateIssued: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
+    issuedBy: Organization | str | list[Organization | str] | None = Field(default=None)
+    priceCurrency: str | list[str] | None = Field(default=None)
+    ticketNumber: str | list[str] | None = Field(default=None)
+    ticketToken: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    ticketedSeat: Seat | str | list[Seat | str] | None = Field(default=None)
+    totalPrice: (
+        float | PriceSpecification | str | list[float | PriceSpecification | str] | None
+    ) = Field(default=None)
+    underName: (
+        Organization | Person | str | list[Organization | Person | str] | None
+    ) = Field(default=None)
 
 
 class TieAction(AchieveAction):
@@ -12017,12 +12163,12 @@ class TipAction(TradeAction):
 
     type: str = Field(default="TipAction", alias="@type")
     recipient: (
-        Organization
-        | Person
+        Audience
         | ContactPoint
-        | Audience
+        | Organization
+        | Person
         | str
-        | list[Organization | Person | ContactPoint | Audience | str]
+        | list[Audience | ContactPoint | Organization | Person | str]
         | None
     ) = Field(default=None)
 
@@ -12041,10 +12187,10 @@ class TouristAttraction(Place):
     examples below)"""
 
     type: str = Field(default="TouristAttraction", alias="@type")
-    availableLanguage: str | Language | list[str | Language] | None = Field(
+    availableLanguage: Language | str | list[Language | str] | None = Field(
         default=None
     )
-    touristType: str | Audience | list[str | Audience] | None = Field(default=None)
+    touristType: Audience | str | list[Audience | str] | None = Field(default=None)
 
 
 class TouristDestination(Place):
@@ -12062,7 +12208,7 @@ class TouristDestination(Place):
     includesAttraction: (
         TouristAttraction | str | list[TouristAttraction | str] | None
     ) = Field(default=None)
-    touristType: str | Audience | list[str | Audience] | None = Field(default=None)
+    touristType: Audience | str | list[Audience | str] | None = Field(default=None)
 
 
 class TouristInformationCenter(LocalBusiness):
@@ -12079,7 +12225,7 @@ class TouristTrip(Trip):
       (See examples below.)"""
 
     type: str = Field(default="TouristTrip", alias="@type")
-    touristType: str | Audience | list[str | Audience] | None = Field(default=None)
+    touristType: Audience | str | list[Audience | str] | None = Field(default=None)
 
 
 class ToyStore(Store):
@@ -12118,16 +12264,16 @@ class TrainTrip(Trip):
     """A trip on a commercial train line."""
 
     type: str = Field(default="TrainTrip", alias="@type")
-    departurePlatform: str | list[str] | None = Field(default=None)
     arrivalPlatform: str | list[str] | None = Field(default=None)
-    trainNumber: str | list[str] | None = Field(default=None)
     arrivalStation: TrainStation | str | list[TrainStation | str] | None = Field(
         default=None
     )
-    trainName: str | list[str] | None = Field(default=None)
+    departurePlatform: str | list[str] | None = Field(default=None)
     departureStation: TrainStation | str | list[TrainStation | str] | None = Field(
         default=None
     )
+    trainName: str | list[str] | None = Field(default=None)
+    trainNumber: str | list[str] | None = Field(default=None)
 
 
 class TravelAction(MoveAction):
@@ -12155,15 +12301,15 @@ class TypeAndQuantityNode(StructuredValue):
     function of goods included in a bundle offer."""
 
     type: str = Field(default="TypeAndQuantityNode", alias="@type")
-    unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     amountOfThisGood: float | str | list[float | str] | None = Field(default=None)
     businessFunction: BusinessFunction | str | list[BusinessFunction | str] | None = (
         Field(default=None)
     )
-    unitText: str | list[str] | None = Field(default=None)
-    typeOfGood: Service | Product | str | list[Service | Product | str] | None = Field(
+    typeOfGood: Product | Service | str | list[Product | Service | str] | None = Field(
         default=None
     )
+    unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    unitText: str | list[str] | None = Field(default=None)
 
 
 class UKNonprofitType(NonprofitType):
@@ -12197,30 +12343,30 @@ class UnitPriceSpecification(PriceSpecification):
     """The price asked for a given offer by the respective organization or person."""
 
     type: str = Field(default="UnitPriceSpecification", alias="@type")
-    unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
-    billingStart: float | str | list[float | str] | None = Field(default=None)
-    referenceQuantity: (
-        QuantitativeValue | str | list[QuantitativeValue | str] | None
-    ) = Field(default=None)
-    unitText: str | list[str] | None = Field(default=None)
-    billingIncrement: float | str | list[float | str] | None = Field(default=None)
-    priceType: str | PriceTypeEnumeration | list[str | PriceTypeEnumeration] | None = (
-        Field(default=None)
-    )
     billingDuration: (
-        QuantitativeValue
+        timedelta
         | float
-        | timedelta
+        | QuantitativeValue
         | str
-        | list[QuantitativeValue | float | timedelta | str]
+        | list[timedelta | float | QuantitativeValue | str]
         | None
     ) = Field(default=None)
+    billingIncrement: float | str | list[float | str] | None = Field(default=None)
+    billingStart: float | str | list[float | str] | None = Field(default=None)
     priceComponentType: (
         PriceComponentTypeEnumeration
         | str
         | list[PriceComponentTypeEnumeration | str]
         | None
     ) = Field(default=None)
+    priceType: PriceTypeEnumeration | str | list[PriceTypeEnumeration | str] | None = (
+        Field(default=None)
+    )
+    referenceQuantity: (
+        QuantitativeValue | str | list[QuantitativeValue | str] | None
+    ) = Field(default=None)
+    unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
+    unitText: str | list[str] | None = Field(default=None)
 
 
 class UseAction(ConsumeAction):
@@ -12259,17 +12405,17 @@ class UserComments(UserInteraction):
     such as Comment."""
 
     type: str = Field(default="UserComments", alias="@type")
+    commentText: str | list[str] | None = Field(default=None)
+    commentTime: date | datetime | str | list[date | datetime | str] | None = Field(
+        default=None
+    )
     creator: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
-    )
-    commentText: str | list[str] | None = Field(default=None)
-    replyToUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    commentTime: datetime | date | str | list[datetime | date | str] | None = Field(
-        default=None
     )
     discusses: CreativeWork | str | list[CreativeWork | str] | None = Field(
         default=None
     )
+    replyToUrl: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
 
 
 class UserDownloads(UserInteraction):
@@ -12338,17 +12484,17 @@ class Vein(Vessel):
     """A type of blood vessel that specifically carries blood to the heart."""
 
     type: str = Field(default="Vein", alias="@type")
+    drainsTo: Vessel | str | list[Vessel | str] | None = Field(default=None)
+    regionDrained: (
+        AnatomicalStructure
+        | AnatomicalSystem
+        | str
+        | list[AnatomicalStructure | AnatomicalSystem | str]
+        | None
+    ) = Field(default=None)
     tributary: AnatomicalStructure | str | list[AnatomicalStructure | str] | None = (
         Field(default=None)
     )
-    regionDrained: (
-        AnatomicalSystem
-        | AnatomicalStructure
-        | str
-        | list[AnatomicalSystem | AnatomicalStructure | str]
-        | None
-    ) = Field(default=None)
-    drainsTo: Vessel | str | list[Vessel | str] | None = Field(default=None)
 
 
 class VeterinaryCare(MedicalOrganization):
@@ -12368,25 +12514,25 @@ class VideoGame(SoftwareApplication, Game):
     interface to generate visual feedback on a video device."""
 
     type: str = Field(default="VideoGame", alias="@type")
-    playMode: GamePlayMode | str | list[GamePlayMode | str] | None = Field(default=None)
-    gameTip: CreativeWork | str | list[CreativeWork | str] | None = Field(default=None)
-    gamePlatform: str | AnyUrl | Thing | list[str | AnyUrl | Thing] | None = Field(
-        default=None
-    )
     actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
     ) = Field(default=None)
-    gameServer: GameServer | str | list[GameServer | str] | None = Field(default=None)
-    directors: Person | str | list[Person | str] | None = Field(default=None)
+    actors: Person | str | list[Person | str] | None = Field(default=None)
     cheatCode: CreativeWork | str | list[CreativeWork | str] | None = Field(
         default=None
     )
-    gameEdition: str | list[str] | None = Field(default=None)
-    actors: Person | str | list[Person | str] | None = Field(default=None)
     director: Person | str | list[Person | str] | None = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
+    directors: Person | str | list[Person | str] | None = Field(default=None)
+    gameEdition: str | list[str] | None = Field(default=None)
+    gamePlatform: str | Thing | AnyUrl | list[str | Thing | AnyUrl] | None = Field(
         default=None
     )
+    gameServer: GameServer | str | list[GameServer | str] | None = Field(default=None)
+    gameTip: CreativeWork | str | list[CreativeWork | str] | None = Field(default=None)
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
+        default=None
+    )
+    playMode: GamePlayMode | str | list[GamePlayMode | str] | None = Field(default=None)
     trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
 
 
@@ -12400,54 +12546,54 @@ class VideoGameSeries(CreativeWorkSeries):
     """A video game series."""
 
     type: str = Field(default="VideoGameSeries", alias="@type")
-    episodes: Episode | str | list[Episode | str] | None = Field(default=None)
-    numberOfPlayers: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
-        Field(default=None)
-    )
-    gameLocation: (
-        Place
-        | AnyUrl
-        | PostalAddress
-        | str
-        | list[Place | AnyUrl | PostalAddress | str]
-        | None
+    actor: (
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
     ) = Field(default=None)
-    playMode: GamePlayMode | str | list[GamePlayMode | str] | None = Field(default=None)
-    numberOfSeasons: int | str | list[int | str] | None = Field(default=None)
-    gamePlatform: str | AnyUrl | Thing | list[str | AnyUrl | Thing] | None = Field(
+    actors: Person | str | list[Person | str] | None = Field(default=None)
+    characterAttribute: Thing | str | list[Thing | str] | None = Field(default=None)
+    cheatCode: CreativeWork | str | list[CreativeWork | str] | None = Field(
         default=None
     )
     containsSeason: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = (
         Field(default=None)
     )
-    actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
-    ) = Field(default=None)
-    characterAttribute: Thing | str | list[Thing | str] | None = Field(default=None)
-    season: (
-        AnyUrl
-        | CreativeWorkSeason
+    director: Person | str | list[Person | str] | None = Field(default=None)
+    directors: Person | str | list[Person | str] | None = Field(default=None)
+    episode: Episode | str | list[Episode | str] | None = Field(default=None)
+    episodes: Episode | str | list[Episode | str] | None = Field(default=None)
+    gameItem: Thing | str | list[Thing | str] | None = Field(default=None)
+    gameLocation: (
+        Place
+        | PostalAddress
+        | AnyUrl
         | str
-        | list[AnyUrl | CreativeWorkSeason | str]
+        | list[Place | PostalAddress | AnyUrl | str]
         | None
     ) = Field(default=None)
-    directors: Person | str | list[Person | str] | None = Field(default=None)
-    cheatCode: CreativeWork | str | list[CreativeWork | str] | None = Field(
+    gamePlatform: str | Thing | AnyUrl | list[str | Thing | AnyUrl] | None = Field(
         default=None
     )
-    productionCompany: Organization | str | list[Organization | str] | None = Field(
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
         default=None
     )
     numberOfEpisodes: int | str | list[int | str] | None = Field(default=None)
-    quest: Thing | str | list[Thing | str] | None = Field(default=None)
-    seasons: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = Field(
+    numberOfPlayers: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
+        Field(default=None)
+    )
+    numberOfSeasons: int | str | list[int | str] | None = Field(default=None)
+    playMode: GamePlayMode | str | list[GamePlayMode | str] | None = Field(default=None)
+    productionCompany: Organization | str | list[Organization | str] | None = Field(
         default=None
     )
-    actors: Person | str | list[Person | str] | None = Field(default=None)
-    episode: Episode | str | list[Episode | str] | None = Field(default=None)
-    director: Person | str | list[Person | str] | None = Field(default=None)
-    gameItem: Thing | str | list[Thing | str] | None = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
+    quest: Thing | str | list[Thing | str] | None = Field(default=None)
+    season: (
+        CreativeWorkSeason
+        | AnyUrl
+        | str
+        | list[CreativeWorkSeason | AnyUrl | str]
+        | None
+    ) = Field(default=None)
+    seasons: CreativeWorkSeason | str | list[CreativeWorkSeason | str] | None = Field(
         default=None
     )
     trailer: VideoObject | str | list[VideoObject | str] | None = Field(default=None)
@@ -12457,20 +12603,20 @@ class VideoObject(MediaObject):
     """A video file."""
 
     type: str = Field(default="VideoObject", alias="@type")
-    embeddedTextCaption: str | list[str] | None = Field(default=None)
-    videoQuality: str | list[str] | None = Field(default=None)
-    caption: str | MediaObject | list[str | MediaObject] | None = Field(default=None)
     actor: (
-        Person | PerformingGroup | str | list[Person | PerformingGroup | str] | None
+        PerformingGroup | Person | str | list[PerformingGroup | Person | str] | None
     ) = Field(default=None)
-    videoFrameSize: str | list[str] | None = Field(default=None)
-    directors: Person | str | list[Person | str] | None = Field(default=None)
     actors: Person | str | list[Person | str] | None = Field(default=None)
+    caption: MediaObject | str | list[MediaObject | str] | None = Field(default=None)
     director: Person | str | list[Person | str] | None = Field(default=None)
-    transcript: str | list[str] | None = Field(default=None)
-    musicBy: Person | MusicGroup | str | list[Person | MusicGroup | str] | None = Field(
+    directors: Person | str | list[Person | str] | None = Field(default=None)
+    embeddedTextCaption: str | list[str] | None = Field(default=None)
+    musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
         default=None
     )
+    transcript: str | list[str] | None = Field(default=None)
+    videoFrameSize: str | list[str] | None = Field(default=None)
+    videoQuality: str | list[str] | None = Field(default=None)
 
 
 class VideoObjectSnapshot(VideoObject):
@@ -12621,7 +12767,7 @@ class WebAPI(Service):
 
     type: str = Field(default="WebAPI", alias="@type")
     documentation: (
-        AnyUrl | CreativeWork | str | list[AnyUrl | CreativeWork | str] | None
+        CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
 
 
@@ -12667,12 +12813,12 @@ class WorkBasedProgram(EducationalOccupationalProgram):
     educational programs."""
 
     type: str = Field(default="WorkBasedProgram", alias="@type")
-    trainingSalary: (
-        MonetaryAmountDistribution | str | list[MonetaryAmountDistribution | str] | None
-    ) = Field(default=None)
     occupationalCategory: CategoryCode | str | list[CategoryCode | str] | None = Field(
         default=None
     )
+    trainingSalary: (
+        MonetaryAmountDistribution | str | list[MonetaryAmountDistribution | str] | None
+    ) = Field(default=None)
 
 
 class WorkersUnion(Organization):
@@ -12687,8 +12833,8 @@ class WriteAction(CreateAction):
     """The act of authoring written creative content."""
 
     type: str = Field(default="WriteAction", alias="@type")
+    inLanguage: Language | str | list[Language | str] | None = Field(default=None)
     language: Language | str | list[Language | str] | None = Field(default=None)
-    inLanguage: str | Language | list[str | Language] | None = Field(default=None)
 
 
 class XPathType(Text):
@@ -12715,41 +12861,3 @@ class _3DModel(MediaObject):
 
     type: str = Field(default="3DModel", alias="@type")
     isResizable: bool | str | list[bool | str] | None = Field(default=None)
-
-
-# ---------------------------------------------------------------------------
-# Add a strict mode
-# ---------------------------------------------------------------------------
-
-
-@cache
-def make_strict(cls):
-    """Allows creating a strict version of the pydantic models that forbid extra parameters."""
-    return type(
-        f"Strict{cls.__name__}",
-        (cls,),
-        {"model_config": ConfigDict(**{**cls.model_config, "extra": "forbid"})},
-    )
-
-
-# ---------------------------------------------------------------------------
-# Dynamic lookup
-# ---------------------------------------------------------------------------
-
-
-def rebuild_all_models():
-    import sys
-
-    module = sys.modules[__name__]
-
-    models = [
-        obj
-        for obj in module.__dict__.values()
-        if isinstance(obj, type)
-        and issubclass(obj, BaseModel)
-        and obj is not BaseModel
-        and not getattr(obj, "__pydantic_generic_metadata__", None)
-    ]
-
-    for m in models:
-        m.model_rebuild(force=True)

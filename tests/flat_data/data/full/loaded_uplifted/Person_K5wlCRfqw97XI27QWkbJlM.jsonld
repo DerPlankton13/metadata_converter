@@ -1,0 +1,31 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_K5wlCRfqw97XI27QWkbJlM.jsonld",
+  "name": "Peter Lustig",
+  "identifier": {
+    "@type": "PropertyValue",
+    "url": "https://orcid.org/0000-0001-0004-1234",
+    "alternateName": "ORCID",
+    "name": "Open Researcher and Contributor ID",
+    "value": "0000-0001-0004-1234",
+    "propertyID": "https://registry.identifiers.org/registry/orcid"
+  },
+  "givenName": "Peter",
+  "email": "p.lustig@institude.com",
+  "familyName": "Lustig",
+  "affiliation": {
+    "@type": "Organization",
+    "name": "Löwenzahn"
+  },
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://example.com/super-funding-agency.jsonld"
+  },
+  "memberOf": {
+    "@type": "Project",
+    "@id": "https://example.com/super-funded-project.jsonld"
+  }
+}

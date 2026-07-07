@@ -1,0 +1,29 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Dataset",
+  "@id": "Dataset_jirnMOdaI19BVLwCsPEMJJ.jsonld",
+  "description": "file description 5",
+  "name": "file5.xyz",
+  "encodingFormat": "xyz",
+  "comment": "file comment 5",
+  "about": [
+    {
+      "@type": "Product",
+      "@id": "Product_SAMEA118673891.jsonld"
+    },
+    {
+      "@type": "Product",
+      "@id": "Product_SAMEA118673815.jsonld"
+    }
+  ],
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://example.com/super-funding-agency.jsonld"
+  },
+  "sourceOrganisation": {
+    "@type": "Project",
+    "@id": "https://example.com/super-funded-project.jsonld"
+  }
+}

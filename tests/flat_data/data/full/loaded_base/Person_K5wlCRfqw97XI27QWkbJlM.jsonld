@@ -1,0 +1,16 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_K5wlCRfqw97XI27QWkbJlM.jsonld",
+  "name": "Peter Lustig",
+  "identifier": "0000-0001-0004-1234",
+  "givenName": "Peter",
+  "email": "p.lustig@institude.com",
+  "familyName": "Lustig",
+  "affiliation": {
+    "@type": "Organization",
+    "name": "Löwenzahn"
+  }
+}

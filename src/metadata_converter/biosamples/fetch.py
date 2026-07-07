@@ -1,10 +1,21 @@
+import time
+from pathlib import Path
+
 import requests
 
+from metadata_converter.utils.io import write_json
 
-def fetch_metadata(url: str) -> dict:
-    response = requests.get(url, timeout=10)
-    response.raise_for_status()
-    return response.json()
+
+def fetch_metadata(url: str, session: requests.Session) -> dict:
+    for attempt in range(4):
+        try:
+            response = session.get(url, timeout=10)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException:
+            if attempt == 3:
+                raise
+            time.sleep(2**attempt)
 
 
 def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dict:
@@ -22,10 +33,15 @@ def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dic
     return structured_metadata
 
 
-def get_metadata(sample_id: str) -> dict:
+def sample_source_urls(sample_id: str) -> list[str]:
+    """The two source URLs a sample is fused from: structured (.ldjson) and unstructured (.json)."""
+    base = f"https://www.ebi.ac.uk/biosamples/samples/{sample_id}"
+    return [f"{base}.ldjson", f"{base}.json"]
 
-    base_url = f"https://www.ebi.ac.uk/biosamples/samples/{sample_id}"
-    structured_metadata = fetch_metadata(base_url + ".ldjson")
-    unstructured_metadata = fetch_metadata(base_url + ".json")
 
-    return fuse_metadata(structured_metadata, unstructured_metadata)
+def get_metadata(sample_id: str, session: requests.Session, fetched_path: Path) -> None:
+    ldjson_url, json_url = sample_source_urls(sample_id)
+    structured = fetch_metadata(ldjson_url, session)
+    unstructured = fetch_metadata(json_url, session)
+    write_json(structured, fetched_path / f"{sample_id}.ldjson")
+    write_json(unstructured, fetched_path / f"{sample_id}.json")

@@ -1,0 +1,16 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_eEGQnHcb3QsvEgnwdPESMn.jsonld",
+  "name": "Bob Builder",
+  "identifier": "0000-0001-0003-1234",
+  "givenName": "Bob",
+  "email": "b.builder@institude.com",
+  "familyName": "Builder",
+  "affiliation": {
+    "@type": "Organization",
+    "name": "Construction Institute"
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "DataCatalog",
+  "@id": "DataCatalog_HY3WhP9s4N4Z7cad27CMCE.jsonld",
+  "description": "A minimal test dataset.",
+  "name": "Demo Catalog",
+  "creator": {
+    "@type": "Person",
+    "@id": "Person_t_MQAAnz8ChqKeEtrIu_t9.jsonld"
+  }
+}

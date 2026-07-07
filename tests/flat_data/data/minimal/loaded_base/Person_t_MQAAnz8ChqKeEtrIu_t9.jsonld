@@ -1,0 +1,8 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_t_MQAAnz8ChqKeEtrIu_t9.jsonld",
+  "name": "Ada Lovelace"
+}

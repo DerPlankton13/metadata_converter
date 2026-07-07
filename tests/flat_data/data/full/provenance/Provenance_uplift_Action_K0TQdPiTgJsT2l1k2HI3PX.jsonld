@@ -1,0 +1,17 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "DigitalDocument",
+  "@id": "Provenance_uplift_Action_K0TQdPiTgJsT2l1k2HI3PX.jsonld",
+  "about": {
+    "@type": "Thing",
+    "@id": "Action_K0TQdPiTgJsT2l1k2HI3PX.jsonld"
+  },
+  "isBasedOn": {
+    "@type": "CreativeWork",
+    "@id": "Action_K0TQdPiTgJsT2l1k2HI3PX.jsonld"
+  },
+  "description": "stage: uplift",
+  "dateCreated": "2026-07-01T12:00:00Z"
+}

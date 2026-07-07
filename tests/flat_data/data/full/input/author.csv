@@ -1,0 +1,4 @@
+author:pid,author:type,author:first-name,author:last-name,author:email,author:affiliation,author:contribution,author:is-dataset-author
+0000-0001-0002-1234,individual author,Ada,Lovelace,a.lovelace@institue.com,Super Computer Institute,Analysis,1
+0000-0001-0003-1234,individual author,Bob,Builder,b.builder@institude.com,Construction Institute,Device Construction,0
+0000-0001-0004-1234,individual author,Peter,Lustig,p.lustig@institude.com,Löwenzahn,Science Communication,1

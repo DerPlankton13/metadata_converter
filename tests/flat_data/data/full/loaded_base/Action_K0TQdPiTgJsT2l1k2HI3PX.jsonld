@@ -1,0 +1,30 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Action",
+  "@id": "Action_K0TQdPiTgJsT2l1k2HI3PX.jsonld",
+  "description": "description method 1",
+  "name": "Metabarcodes from Helgoland Samples",
+  "identifier": "Metabarcoding",
+  "object": [
+    {
+      "@type": "Product",
+      "identifier": "SAMEA118673815"
+    },
+    {
+      "@type": "Product",
+      "identifier": "SAMEA118673891"
+    }
+  ],
+  "agent": [
+    {
+      "@type": "Person",
+      "identifier": "0000-0001-0002-1234"
+    },
+    {
+      "@type": "Person",
+      "identifier": "0000-0001-0004-1234"
+    }
+  ]
+}

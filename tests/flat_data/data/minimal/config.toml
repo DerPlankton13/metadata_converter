@@ -1,0 +1,23 @@
+# Load config for the minimal flat_data integration-test scenario.
+# Paths below are placeholders — the test overrides them with tmp_path locations.
+source_type = "flat_data"
+output_dir = "loaded_base"
+
+[extractor]
+input = "input.xlsx"
+sheet_name = ["author", "dataset"]
+header = 0
+
+[cleaning]
+
+[mapping.author]
+type = "Person"
+id = "@id"
+name = "author:name"
+
+[mapping.dataset]
+type = "DataCatalog"
+id = "@id"
+name = "dataset:title"
+description = "dataset:description"
+creator = { type = "Person", id = { from_sheet = "author", filter_column = "author:is-dataset-author", filter_value = 1 } }

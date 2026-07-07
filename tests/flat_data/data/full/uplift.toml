@@ -1,0 +1,93 @@
+source_type = "flat_data"
+input_dir = ["loaded_base", "biosamples_loaded_uplifted"]
+output_dir = "loaded_uplifted"
+provenance_dir = "provenance"
+
+# ===================================================================
+# Links properties
+# ===================================================================
+# Action.agent → Person
+[[links]]
+on_type = "Action"
+target_property = "agent"
+match_value = "agent.identifier"
+in_type = "Person"
+in_property = "identifier"
+
+# Action.object → Product
+[[links]]
+on_type = "Action"
+target_property = "object"
+match_value = "object.identifier"
+in_type = "Product"
+in_property = "identifier"
+ref_id_template = "Product_{identifier}.jsonld"
+
+# Action.result → Dataset
+[[links]]
+on_type = "Action"
+target_property = "result"
+match_value = "identifier"
+in_type = "Dataset"
+in_additional_property = "file:analysis"
+
+# Dataset.about → Product
+[[links]]
+on_type = "Dataset"
+target_property = "about"
+match_value = "about.identifier"
+in_type = "Product"
+in_property = "identifier"
+ref_id_template = "Product_{identifier}.jsonld"
+
+[[enrichments]]
+on_type = "Person"
+target_property = "identifier"
+enrich_as = "Orcid"
+
+# ===================================================================
+# Add funding information
+# ===================================================================
+[[additions]]
+on_type = "DataCatalog"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[additions]]
+on_type = "DataCatalog"
+target_property = "sourceOrganisation"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"
+
+[[additions]]
+on_type = "Dataset"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[additions]]
+on_type = "Dataset"
+target_property = "sourceOrganisation"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"
+
+[[additions]]
+on_type = "Person"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[additions]]
+on_type = "Person"
+target_property = "memberOf"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"
+
+# ===================================================================
+# Remove properties that were used for the linking
+# ===================================================================
+[[removals]]
+on_type = "Dataset"
+target_property = "additionalProperty"
+where = { property = "description", contains = "Helper Property for" }

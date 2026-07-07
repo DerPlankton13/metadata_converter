@@ -8,7 +8,6 @@ requires-python = ">=3.12"
 dependencies = [
     "beautifulsoup4>=4.14.3",
     "ipython>=9.11.0",
-    "nanoid>=2.0.0",
     "openpyxl>=3.1.5",
     "pandas>=3.0.1",
     "pydantic>=2.12.5",
@@ -23,6 +22,7 @@ dev = [
     "ipykernel>=7.2.0",
     "py-spy>=0.4.2",
     "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
     "ruff>=0.15.5",
 ]
 
@@ -35,7 +35,15 @@ build-backend = "hatchling.build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# Put the project root on sys.path so `from tests.…` imports resolve under a bare
+# `pytest` invocation (plain `pytest` does not add the CWD the way `python -m pytest` does).
+pythonpath = ["."]
 
 
 [tool.ruff]
 line-length = 88
+
+[tool.ruff.lint.per-file-ignores]
+# SchemaOrgBase in the generator references PropertyValue — a name that exists only
+# in the generated output module, where it resolves as a forward reference.
+"src/metadata_converter/schema_org_models/schema_org_model_generator.py" = ["F821"]

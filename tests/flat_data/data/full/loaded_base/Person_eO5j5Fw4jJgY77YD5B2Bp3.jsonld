@@ -1,0 +1,16 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_eO5j5Fw4jJgY77YD5B2Bp3.jsonld",
+  "name": "Ada Lovelace",
+  "identifier": "0000-0001-0002-1234",
+  "givenName": "Ada",
+  "email": "a.lovelace@institue.com",
+  "familyName": "Lovelace",
+  "affiliation": {
+    "@type": "Organization",
+    "name": "Super Computer Institute"
+  }
+}
