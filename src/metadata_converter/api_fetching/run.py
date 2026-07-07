@@ -8,11 +8,23 @@ from metadata_converter import get_schema
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.config import ApiFetchingConfig
 from metadata_converter.load import load_to_jsonld
+from metadata_converter.utils.hashing import content_hash
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
 logger = logging.getLogger(__name__)
+
+
+def hashed_id(jsonld: dict) -> str:
+    """Content-hash-based ``@id`` fallback: ``<schema_type>_<hash>.jsonld``.
+
+    Mirrors ``flat_data.transform.add_columns.add_id`` — used when a fetched
+    record's JSON-LD has no ``@id`` of its own (e.g. SEANOE's scraped landing
+    pages), so records still get a deterministic filename/id.
+    """
+    schema_type = jsonld.get("@type", "Unknown").split("/")[-1]
+    return f"{schema_type}_{content_hash(jsonld)}.jsonld"
 
 
 def fetch_api_data(config: ApiFetchingConfig) -> None:
@@ -40,9 +52,8 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
                 )
             else:
                 source_url = record.url
-            write_provenance_file(
-                jsonld["@id"], config.provenance_dir, source_url, "load"
-            )
+            record_id = jsonld.get("@id") or hashed_id(jsonld)
+            write_provenance_file(record_id, config.provenance_dir, source_url, "load")
 
     logger.info("API fetch complete. Output: %s", fetched_path)
 
@@ -65,6 +76,11 @@ def load_api_data(config: ApiFetchingConfig) -> None:
                 jsonld = json.load(f)
             schema_type = jsonld["@type"].split("/")[-1]
             schema = get_schema(schema_type)(**jsonld)
+            # loading to graph space means, that we ensure proper @id's.
+            # Todo: Think about whether this should be ensured in the load_to_jsonld
+            #  function and if we maybe want to overwrite existing @id
+            if schema.id is None:
+                schema.id = hashed_id(jsonld)
             load_to_jsonld(schema, output_dir=config.output_dir)
         except Exception as e:
             logger.error("Failed to load %s", fetched_file.name)
