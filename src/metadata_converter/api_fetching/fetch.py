@@ -357,15 +357,23 @@ def query_seanoe(
     records: list[Record] = []
     logger.info("SEANOE: %d record(s) found", total)
 
+    def localized(value) -> str:
+        """SEANOE returns some text fields as {lang_code: text} dicts (keyed by
+        the requested "languageEnum") rather than plain strings."""
+        if isinstance(value, dict):
+            return value.get("en") or next(iter(value.values()), "")
+        return value
+
     def parse(entries: list[dict]) -> None:
         for entry in entries:
             doc_id = str(entry.get("docId", ""))
+            title = localized(entry.get("title", entry.get("name", "(no title)")))
             records.append(
                 Record(
                     doi=f"10.17882/{doc_id}" if doc_id else None,
-                    title=entry.get("title", entry.get("name", "(no title)")),
+                    title=title,
                     publisher="SEANOE",
-                    url=entry.get("url", ""),
+                    url=entry.get("url") or entry.get("absoluteUrlLandingPage", ""),
                     source_id=doc_id,
                 )
             )
