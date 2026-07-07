@@ -1,4 +1,4 @@
-[flat_data]
+source_type = "flat_data"
 input_dir = ["loaded_base", "biosamples_loaded_uplifted"]
 output_dir = "loaded_uplifted"
 provenance_dir = "provenance"
@@ -7,7 +7,7 @@ provenance_dir = "provenance"
 # Links properties
 # ===================================================================
 # Action.agent → Person
-[[flat_data.links]]
+[[links]]
 on_type = "Action"
 target_property = "agent"
 match_value = "agent.identifier"
@@ -15,7 +15,7 @@ in_type = "Person"
 in_property = "identifier"
 
 # Action.object → Product
-[[flat_data.links]]
+[[links]]
 on_type = "Action"
 target_property = "object"
 match_value = "object.identifier"
@@ -24,7 +24,7 @@ in_property = "identifier"
 ref_id_template = "Product_{identifier}.jsonld"
 
 # Action.result → Dataset
-[[flat_data.links]]
+[[links]]
 on_type = "Action"
 target_property = "result"
 match_value = "identifier"
@@ -32,7 +32,7 @@ in_type = "Dataset"
 in_additional_property = "file:analysis"
 
 # Dataset.about → Product
-[[flat_data.links]]
+[[links]]
 on_type = "Dataset"
 target_property = "about"
 match_value = "about.identifier"
@@ -40,7 +40,7 @@ in_type = "Product"
 in_property = "identifier"
 ref_id_template = "Product_{identifier}.jsonld"
 
-[[flat_data.enrichments]]
+[[enrichments]]
 on_type = "Person"
 target_property = "identifier"
 enrich_as = "Orcid"
@@ -48,37 +48,37 @@ enrich_as = "Orcid"
 # ===================================================================
 # Add funding information
 # ===================================================================
-[[flat_data.additions]]
+[[additions]]
 on_type = "DataCatalog"
 target_property = "funding"
 value.type = "MonetaryGrant"
 value.id = "https://example.com/super-funding-agency.jsonld"
 
-[[flat_data.additions]]
+[[additions]]
 on_type = "DataCatalog"
 target_property = "sourceOrganisation"
 value.type = "Project"
 value.id = "https://example.com/super-funded-project.jsonld"
 
-[[flat_data.additions]]
+[[additions]]
 on_type = "Dataset"
 target_property = "funding"
 value.type = "MonetaryGrant"
 value.id = "https://example.com/super-funding-agency.jsonld"
 
-[[flat_data.additions]]
+[[additions]]
 on_type = "Dataset"
 target_property = "sourceOrganisation"
 value.type = "Project"
 value.id = "https://example.com/super-funded-project.jsonld"
 
-[[flat_data.additions]]
+[[additions]]
 on_type = "Person"
 target_property = "funding"
 value.type = "MonetaryGrant"
 value.id = "https://example.com/super-funding-agency.jsonld"
 
-[[flat_data.additions]]
+[[additions]]
 on_type = "Person"
 target_property = "memberOf"
 value.type = "Project"
@@ -87,7 +87,7 @@ value.id = "https://example.com/super-funded-project.jsonld"
 # ===================================================================
 # Remove properties that were used for the linking
 # ===================================================================
-[[flat_data.removals]]
+[[removals]]
 on_type = "Dataset"
 target_property = "additionalProperty"
 where = { property = "description", contains = "Helper Property for" }

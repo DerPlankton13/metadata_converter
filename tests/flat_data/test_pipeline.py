@@ -103,7 +103,7 @@ def test_load_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
 def test_uplift_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     output_dir = tmp_path / "loaded_uplifted"
 
-    cfg = load_uplift_config(str(scenario_dir / "uplift.toml")).flat_data
+    cfg = load_uplift_config(str(scenario_dir / "uplift.toml"))
     cfg.input_dir = [scenario_dir / d for d in cfg.input_dir]
     cfg.output_dir = output_dir
     cfg.provenance_dir = tmp_path / "provenance"
