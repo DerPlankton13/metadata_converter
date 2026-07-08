@@ -7,14 +7,31 @@ from metadata_converter.utils.hashing import get_type, hashed_id
 from metadata_converter.utils.io import write_json
 
 
-def load_to_jsonld(schema: SchemaOrgBase, output_dir: Path) -> None:
-    """Serialise a schema.org model to standardised JSON-LD and write it to `output_dir`."""
+def load_to_jsonld(schema: SchemaOrgBase, output_dir: Path, keep_id: bool = False) -> None:
+    """Serialise a schema.org model to standardised JSON-LD and write it to `output_dir`.
+
+    Parameters
+    ----------
+    schema
+        The schema.org model to serialise.
+    output_dir
+        Directory to write the resulting `.jsonld` file into.
+    keep_id
+        If `False` (default), `standardise_id` replaces the model's `@id` with a
+        content hash unless it already follows that convention. Pass `True` to
+        write the `@id` as-is instead — for entities whose `@id` was already
+        standardised at an earlier stage (e.g. re-exporting an entity after
+        uplift refines it in place), so it isn't rehashed based on content that
+        has since changed, which would orphan cross-references other entities
+        already resolved against the original id.
+    """
     if isinstance(output_dir, str):
         output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
     jsonld = schema.model_dump(by_alias=True, exclude_none=True)
-    jsonld = standardise_id(jsonld)
+    if not keep_id:
+        jsonld = standardise_id(jsonld)
     jsonld = {"@context": {"@vocab": "https://schema.org/"}, **jsonld}
 
     write_json(jsonld, output_dir / generate_filename(jsonld))
