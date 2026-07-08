@@ -42,8 +42,9 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
                 )
             else:
                 source_url = record.url
-            record_id = jsonld.get("@id") or hashed_id(jsonld)
-            write_provenance_file(record_id, config.provenance_dir, source_url, "load")
+            write_provenance_file(
+                fetched_file.name, config.provenance_dir, source_url, "fetch"
+            )
 
     logger.info("API fetch complete. Output: %s", fetched_path)
 
@@ -71,6 +72,10 @@ def load_api_data(config: ApiFetchingConfig) -> None:
             jsonld = standardise_id(jsonld)
             schema = get_schema(schema_type)(**jsonld)
             load_to_jsonld(schema, output_dir=config.output_dir)
+            if config.provenance_dir is not None:
+                write_provenance_file(
+                    schema.id, config.provenance_dir, fetched_file.name, "load"
+                )
         except Exception as e:
             logger.error("Failed to load %s", fetched_file.name)
             log_validation_error(e, logger)
