@@ -9,7 +9,7 @@ from metadata_converter.api_fetching.config import ApiFetchingConfig
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.utils.hashing import hashed_id
+from metadata_converter.utils.hashing import standardise_id
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
@@ -67,6 +67,8 @@ def load_api_data(config: ApiFetchingConfig) -> None:
             for fixer_name in config.fixers:
                 jsonld = FIXERS[fixer_name](jsonld)
             schema_type = jsonld["@type"].split("/")[-1]
+            # Standardise now so schema.id below reflects the real final id for provenance.
+            jsonld = standardise_id(jsonld)
             schema = get_schema(schema_type)(**jsonld)
             load_to_jsonld(schema, output_dir=config.output_dir)
         except Exception as e:
