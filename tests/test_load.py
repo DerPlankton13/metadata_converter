@@ -1,4 +1,5 @@
 import json
+import re
 
 import pytest
 
@@ -122,7 +123,7 @@ def test_standardise_context_missing_sets_default_vocab():
     assert result["@context"] == {"@vocab": "https://schema.org/"}
 
 
-def test_standardise_context_already_normalised_unchanged():
+def test_standardise_context_already_canonical_is_noop():
     jsonld = {"@context": {"@vocab": "https://schema.org/"}}
 
     result = standardise_context(jsonld)
@@ -147,50 +148,21 @@ def test_standardise_context_schema_org_string_variants_normalised(context_value
     assert result["@context"] == {"@vocab": "https://schema.org/"}
 
 
-def test_standardise_context_non_schema_string_becomes_list_with_vocab():
+def test_standardise_context_schema_org_per_term_string_raises():
+    jsonld = {"@context": "http://schema.org/name"}
+
+    with pytest.raises(ValueError, match="http://schema.org/name"):
+        standardise_context(jsonld)
+
+
+def test_standardise_context_unrelated_string_raises():
     jsonld = {"@context": "https://example.org/context.jsonld"}
 
-    result = standardise_context(jsonld)
-
-    assert result["@context"] == [
-        "https://example.org/context.jsonld",
-        {"@vocab": "https://schema.org/"},
-    ]
+    with pytest.raises(ValueError, match="https://example.org/context.jsonld"):
+        standardise_context(jsonld)
 
 
-def test_standardise_context_dict_schema_org_key_replaced_others_kept():
-    jsonld = {"@context": {"schema": "http://schema.org", "foo": "bar"}}
-
-    result = standardise_context(jsonld)
-
-    assert result["@context"] == {"@vocab": "https://schema.org/", "foo": "bar"}
-
-
-def test_standardise_context_dict_no_schema_org_adds_vocab():
-    jsonld = {"@context": {"foo": "bar"}}
-
-    result = standardise_context(jsonld)
-
-    assert result["@context"] == {"foo": "bar", "@vocab": "https://schema.org/"}
-
-
-def test_standardise_context_per_term_iris_unchanged():
-    jsonld = {
-        "@context": {
-            "name": "http://schema.org/name",
-            "image": {"@id": "http://schema.org/image", "@type": "@id"},
-        }
-    }
-
-    result = standardise_context(jsonld)
-
-    assert result["@context"] == {
-        "name": "http://schema.org/name",
-        "image": {"@id": "http://schema.org/image", "@type": "@id"},
-    }
-
-
-def test_standardise_context_list_schema_org_string_and_dict_merged():
+def test_standardise_context_list_string_and_dict_merged():
     jsonld = {
         "@context": [
             "http://schema.org",
@@ -208,3 +180,46 @@ def test_standardise_context_list_schema_org_string_and_dict_merged():
         "OBI": "http://purl.obolibrary.org/obo/OBI_",
         "biosample": "http://identifiers.org/biosample/",
     }
+
+
+def test_standardise_context_list_extra_dicts_all_merged():
+    jsonld = {"@context": ["http://schema.org", {"foo": "bar"}, {"baz": "qux"}]}
+
+    result = standardise_context(jsonld)
+
+    assert result["@context"] == {"@vocab": "https://schema.org/", "foo": "bar", "baz": "qux"}
+
+
+def test_standardise_context_list_wrong_order_raises():
+    jsonld = {"@context": [{"foo": "bar"}, "http://schema.org"]}
+
+    with pytest.raises(ValueError, match=re.escape("[{'foo': 'bar'}, 'http://schema.org']")):
+        standardise_context(jsonld)
+
+
+def test_standardise_context_list_second_element_not_dict_raises():
+    jsonld = {"@context": ["http://schema.org", "http://example.org"]}
+
+    with pytest.raises(ValueError, match=re.escape("['http://schema.org', 'http://example.org']")):
+        standardise_context(jsonld)
+
+
+def test_standardise_context_list_first_element_not_schema_org_raises():
+    jsonld = {"@context": ["http://example.org", {"foo": "bar"}]}
+
+    with pytest.raises(ValueError, match=re.escape("['http://example.org', {'foo': 'bar'}]")):
+        standardise_context(jsonld)
+
+
+def test_standardise_context_unrelated_dict_raises():
+    jsonld = {"@context": {"foo": "bar"}}
+
+    with pytest.raises(ValueError, match=re.escape("{'foo': 'bar'}")):
+        standardise_context(jsonld)
+
+
+def test_standardise_context_dict_with_schema_org_key_raises():
+    jsonld = {"@context": {"schema": "http://schema.org"}}
+
+    with pytest.raises(ValueError, match=re.escape("{'schema': 'http://schema.org'}")):
+        standardise_context(jsonld)
