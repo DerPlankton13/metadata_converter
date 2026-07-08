@@ -36,4 +36,4 @@ def write_provenance_file(
         description=f"stage: {stage}",
         dateCreated=datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
     )
-    load_to_jsonld(provenance, provenance_path, keep_id=True)
+    load_to_jsonld(provenance, provenance_path)

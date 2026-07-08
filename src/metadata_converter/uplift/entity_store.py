@@ -75,19 +75,12 @@ class EntityStore:
         return self.by_type.get(type_name, [])
 
     def write(self, output_dir: Path) -> None:
-        """Export every held entity to ``output_dir`` via ``load_to_jsonld``.
-
-        Uses ``keep_id=True``: uplift refines an already-loaded entity in place,
-        so its ``@id`` was already standardised at load time. Rehashing it here
-        would change it based on post-uplift content (e.g. after linking adds a
-        reference), orphaning any cross-reference other entities just resolved
-        against the pre-uplift id.
-        """
+        """Export every held entity to ``output_dir`` via ``load_to_jsonld``."""
         output_dir.mkdir(parents=True, exist_ok=True)
         written = 0
         for models in self.by_type.values():
             for model in models:
-                load_to_jsonld(model, output_dir, keep_id=True)
+                load_to_jsonld(model, output_dir)
                 written += 1
         logger.info("Wrote %d uplifted file(s) to %s", written, output_dir)
 
