@@ -3,6 +3,8 @@
 import base64
 import hashlib
 import json
+import re
+from typing import Any
 
 
 def content_hash(data: dict) -> str:
@@ -50,3 +52,39 @@ def hashed_id(jsonld: dict) -> str:
     pages), so records still get a deterministic filename/id.
     """
     return f"{get_type(jsonld)}_{content_hash(jsonld)}.jsonld"
+
+
+def standardise_id(jsonld: dict) -> dict:
+    """Replace a non-hashed `@id` with a content hash, preserving the original as `identifier`.
+
+    Mutates and returns `jsonld` in place.
+    """
+    current_id = jsonld.get("@id")
+    if not is_hashed_id(current_id, get_type(jsonld)):
+        jsonld["@id"] = hashed_id({k: v for k, v in jsonld.items() if k != "@id"})
+        if current_id is not None and not (
+            in_property(jsonld.get("identifier"), current_id)
+            or in_property(jsonld.get("url"), current_id)
+        ):
+            jsonld["identifier"] = current_id
+    return jsonld
+
+
+def is_hashed_id(current_id: str, schema_type: str) -> bool:
+    """Check whether `current_id` already follows the `<schema_type>_<hash>.jsonld` convention."""
+    if current_id is None:
+        return False
+    file_name = current_id.split("/")[-1].removesuffix(".jsonld")
+    pattern = rf"{re.escape(schema_type)}_[A-Za-z0-9_-]{{22}}"
+    return re.fullmatch(pattern, file_name) is not None
+
+
+def in_property(prop: Any, value: Any) -> bool:
+    """Check whether `value` equals `prop` or is contained in it when `prop` is a list."""
+    if prop is None:
+        return False
+    if not isinstance(prop, list):
+        prop = [prop]
+    if value in prop:
+        return True
+    return False
