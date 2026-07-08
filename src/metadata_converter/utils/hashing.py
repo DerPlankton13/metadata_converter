@@ -35,3 +35,18 @@ def content_hash(data: dict) -> str:
     canonical = json.dumps(filtered, sort_keys=True, default=str)
     digest = hashlib.sha256(canonical.encode()).digest()
     return base64.urlsafe_b64encode(digest)[:22].decode()
+
+
+def get_type(jsonld: dict) -> str:
+    """Return the bare schema.org type name from a JSON-LD dict's ``@type``, or ``"Unknown"``."""
+    return jsonld.get("@type", "Unknown").split("/")[-1]
+
+
+def hashed_id(jsonld: dict) -> str:
+    """Content-hash-based ``@id`` fallback: ``<schema_type>_<hash>.jsonld``.
+
+    Mirrors ``flat_data.transform.add_columns.add_id`` — used when a fetched
+    record's JSON-LD has no ``@id`` of its own (e.g. SEANOE's scraped landing
+    pages), so records still get a deterministic filename/id.
+    """
+    return f"{get_type(jsonld)}_{content_hash(jsonld)}.jsonld"
