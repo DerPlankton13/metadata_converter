@@ -29,7 +29,7 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 )
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.io import write_json
-from metadata_converter.utils.jsonld import expand_curie
+from metadata_converter.utils.jsonld import expand_curie, standardise_id
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
@@ -173,13 +173,15 @@ def load_biosamples(config: BiosamplesConfig):
             with json_path.open() as f:
                 unstructured = json.load(f)
             sample = load_sample(structured, unstructured)
-            sample = standardise_context(sample)
         except Exception as e:
             logger.error("Failed to load %s: %s", sample_id, e)
             failures += 1
             continue
 
-        write_json(sample, config.output_dir / f"{sample_id}.jsonld")
+        sample = standardise_context(sample)
+        sample = standardise_id(sample)
+
+        write_json(sample, config.output_dir / sample["@id"])
         if config.provenance_dir is not None:
             structured_id = expand_curie(structured["@id"], structured["@context"])
             write_provenance_file(

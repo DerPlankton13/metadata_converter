@@ -516,6 +516,7 @@ def write_fetched_sample(fetched_dir, sample_id):
     """A minimal fetched .ldjson/.json pair for `sample_id`, fusable without error."""
     structured = {
         "@id": f"biosample:{sample_id}",
+        "@type": "DataRecord",
         "@context": [
             "http://schema.org",
             {"biosample": "http://identifiers.org/biosample/"},
@@ -538,13 +539,20 @@ def test_load_biosamples_writes_provenance(tmp_path, monkeypatch):
     load_biosamples(config)
 
     provenance = json.loads(
-        (tmp_path / "provenance" / "Provenance_load_biosample:SAMEA1.jsonld").read_text()
+        (
+            tmp_path
+            / "provenance"
+            / "Provenance_load_DataRecord_y7Tjtka_D6dY1o-1Xmlvul.jsonld"
+        ).read_text()
     )
     assert provenance == {
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "DigitalDocument",
-        "@id": "Provenance_load_biosample:SAMEA1",
-        "about": {"@type": "Thing", "@id": "biosample:SAMEA1"},
+        "@id": "Provenance_load_DataRecord_y7Tjtka_D6dY1o-1Xmlvul.jsonld",
+        "about": {
+            "@type": "Thing",
+            "@id": "DataRecord_y7Tjtka_D6dY1o-1Xmlvul.jsonld",
+        },
         "isBasedOn": [
             {
                 "@type": "CreativeWork",

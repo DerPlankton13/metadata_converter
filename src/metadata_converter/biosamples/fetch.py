@@ -1,3 +1,4 @@
+import copy
 import os
 import time
 from pathlib import Path
@@ -22,9 +23,10 @@ def fetch_metadata(url: str, session: requests.Session) -> dict:
 
 
 def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dict:
+    fused = copy.deepcopy(structured_metadata)
     characteristics = unstructured_metadata.get("characteristics", {})
 
-    for prop in structured_metadata["mainEntity"]["additionalProperty"]:
+    for prop in fused["mainEntity"]["additionalProperty"]:
         name = prop["name"]
         if name in characteristics and "unit" in characteristics[name][0]:
             if len(characteristics[name]) > 1:
@@ -33,7 +35,7 @@ def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dic
                 )
             prop["unitText"] = characteristics[name][0]["unit"]
 
-    return structured_metadata
+    return fused
 
 
 def sample_source_urls(sample_id: str) -> list[str]:
