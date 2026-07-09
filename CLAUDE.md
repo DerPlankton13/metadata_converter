@@ -179,8 +179,8 @@ There are three source types plus a separate uplift config:
   endpoint or HTML scraping.
 - **uplift config** — no `source_type`; used with `converter uplift` to post-process already-loaded JSON-LD via
   declarative rules. Operations: **link** (resolve cross-references), **enrich** (wrap a scalar in a custom
-  PropertyValue subclass), **remove** (filter scaffolding items out of a list), and **add** (set a fixed value). See
-  the generic uplift subsection below.
+  PropertyValue subclass), **add** (set a fixed value), **rename** (move a property's value to a different name), and
+  **remove** (filter scaffolding items out of a list). See the generic uplift subsection below.
 
 ### Where each transformation belongs
 
@@ -314,15 +314,20 @@ in a fixed order, then writes every entity to `output_dir`:
 2. **`EnrichmentApplier`** (`enrichment.py`) — `EnrichmentRule`: wrap a scalar in a custom PropertyValue subclass
    (`enrich_as`, e.g. `Orcid`); the class's validators fill the enriched fields. One value per entity (a multi-value
    list raises — an entity carries at most one identifier of a given type).
-3. **`AddApplier`** — `AdditionRule`: set a property to a fixed constant value (planned).
-4. **`RemoveApplier`** (`remove.py`) — `RemovalRule`: filter items out of a list-valued property by a `where` predicate
+3. **`AddApplier`** (`add.py`) — `AdditionRule`: set a property to a fixed constant value (a literal, or a node built
+   recursively from a `type`-tagged mapping) on every entity of a type, overwriting any existing value.
+4. **`RenameApplier`** (`rename.py`) — `RenameRule`: move a property's value from `source_property` to
+   `target_property` on every entity of a type (overwriting any existing value there), clearing `source_property`;
+   entities with no value at `source_property` are left untouched.
+5. **`RemoveApplier`** (`remove.py`) — `RemovalRule`: filter items out of a list-valued property by a `where` predicate
    (`equals`/`contains` on a possibly nested subproperty, string-form, case-sensitive); runs last to scrub linking
    scaffolding.
 
 `select.py` holds the shared `select_values` dot-selector (auto-unwraps PropertyValue `.value`) and `render_ref_id`.
 A config validator rejects two rules across links/enrichments/additions targeting the same `(on_type, target_property)`;
-removals are exempt (they legitimately refine other rules' output). Output convention throughout: collapse to the
-shortest shape — 0 → `None`, 1 → scalar, ≥2 → list.
+renames and removals are exempt (renames move a value elsewhere rather than duplicating a target, and removals
+legitimately refine other rules' output). Output convention throughout: collapse to the shortest shape — 0 → `None`,
+1 → scalar, ≥2 → list.
 
 ### Metadata-collector workflow (`src/metadata_converter/api_fetching/`)
 
