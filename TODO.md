@@ -28,7 +28,8 @@ now since the only consumer is the paper itself; revisit if a second consumer
 appears.
 
 ### Unify the two schema-building paradigms
-`flat_data` builds Pydantic models incrementally via `instantiate_schema()`.
+`flat_data` builds Pydantic models incrementally via `instantiate()`
+(`flat_data/transform/schema_builder.py`).
 `biosamples/uplifting.py` builds plain `dict`s and validates once at the end via
 `Product(**product_dict)`. `api_fetching/fetch.py` also returns raw `dict`s
 (`Record` is a `BaseModel` but the JSON-LD it loads is never validated until
@@ -43,15 +44,6 @@ requires touching `config.py`, the workflow's `run.py`, *and* `main.py`. A
 `{(phase, ConfigType): handler}` registry would localize this so each workflow
 owns its dispatch in one place.
 
-### Reconsider whether `uplifting` is its own workflow_type
-`UpliftingConfig` is part of the discriminated `Config` union, but its three
-sub-fields (`biosamples`, `api_fetching`, `flat_data`) make it a thin wrapper
-that bundles per-source uplift configs. Each workflow could carry its uplift
-config inline so the CLI becomes `converter uplift <source.toml>` instead of
-`converter uplift <uplift_config.toml>`. Tradeoff: per-source configs grow; the
-top-level `Config` union shrinks; the conceptual "uplifting is a separate
-workflow" goes away.
-
 ### Extract the failure-counting loop pattern
 Four near-identical loops in `biosamples/run.py:fetch_biosamples`,
 `biosamples/run.py:load_biosamples`, `biosamples/run.py:uplift_biosamples`,
@@ -61,23 +53,27 @@ shared helper (`process_with_failures(items, fn, *, desc, unit, log_prefix)`)
 would collapse ~80 lines.
 
 ### Replace the magic `"Literal:"` prefix in flat_data mappings
-`src/metadata_converter/flat_data/transform.py:308` defines `LITERAL_PREFIX =
-"Literal:"`. Mapping values that start with this string are treated as constant
+`src/metadata_converter/flat_data/transform/schema_builder.py:50` defines
+`LITERAL_PREFIX = "Literal:"`. Mapping values that start with this string are treated as constant
 text rather than column lookups. An explicit form like
 `{"literal": "some text"}` would be self-documenting and remove the magic.
 Backwards-incompatible — would need to update every TOML config.
 
-### Tighten `_to_lookup_key` or fix the underlying union typing
-`src/metadata_converter/flat_data/uplifting.py:_to_lookup_key` contains a
-workaround for Pydantic coercing `int 1` to `float 1.0` in certain union
-fields:
+### Tighten the `float.is_integer()` workaround or fix the underlying union typing
+`src/metadata_converter/utils/lookup_key.py:to_lookup_key` (already extracted
+out of `flat_data`, as this item originally proposed) contains a workaround for
+Pydantic coercing `int 1` to `float 1.0` in certain union fields:
 ```python
 if isinstance(value, float) and value.is_integer():
     return str(int(value))
 ```
-If the underlying union types in the schema.org models were tightened or
-ordered differently, this normalization could go away. Worth investigating once
-the schema.org generator is touched again.
+The same workaround is now *also* duplicated in
+`src/metadata_converter/uplift/remove.py:_stringify` — so the extraction
+fixed the module coupling but not the duplication; there are two copies of
+this normalization today instead of one. If the underlying union types in the
+schema.org models were tightened or ordered differently, both could go away.
+Worth investigating once the schema.org generator is touched again, along with
+whether `_stringify` and `to_lookup_key` should simply share one function.
 
 ### Inline `parse.py` (24 lines) and `http.py` (9 lines)
 Both modules are too small to justify their own files. `parse.py` is only
@@ -100,9 +96,9 @@ be appropriate.
 
 ### Builder inheritance vs. composition in `biosamples/uplifting.py`
 `BaseBuilder` shares helpers between `ProductBuilder` and `ActionBuilder`, but
-has no abstract `build()` and exercises no polymorphism. `_unwrap_single` is
-`@staticmethod`. `ProductBuilder._build_manufacturer` near-duplicates
-`BaseBuilder._build_research_project`. Question: keep the inheritance and fix
+has no abstract `build()` and exercises no polymorphism. `unwrap_single` is
+`@staticmethod`. `ProductBuilder.build_manufacturer` near-duplicates
+`BaseBuilder.build_research_project`. Question: keep the inheritance and fix
 the DRY violation, or convert the builders to plain functions taking a
 `SampleRecord`? Largely tangled with the "extract project-specific code"
 item — defer until that direction is settled.
@@ -115,9 +111,9 @@ validation has no side effects. If removed: drop the `plugin_dir` /
 `plugin_name` / `plugins` fields, `CleaningPlugin` ABC, and `load_plugins()`.
 
 ### Document the implicit coupling in `extract.py`
-`src/metadata_converter/extract.py:extract_data` uses
-`config.model_dump(exclude={"file_path"})` and passes the result as kwargs to
-`pd.read_excel`. Any field added to `ExcelExtractorConfig` that pandas does
+`src/metadata_converter/flat_data/extract.py:extract_data` uses
+`extractor_cfg.model_dump(exclude={"input"})` and passes the result as kwargs
+to `pd.read_excel`. Any field added to `ExcelExtractorConfig` that pandas does
 not accept will break extraction at runtime. Either document this constraint
 clearly (in the docstring on `ExcelExtractorConfig`) or spell out the
 supported pandas kwargs explicitly.
@@ -137,12 +133,6 @@ re-derives the shape it needs, so validating the raw fused dict would be
 redundant work), or should `load_biosamples` gain fixers/validation
 symmetric with the other two source types? Needs a decision before either
 adding validation there or documenting the asymmetry as permanent.
-
-### Audit `flat_data/transform_helpers.py` for dead code
-`combine_columns` (the helper version, not the `transform.py` one) and
-`create_full_names` appear unused. Confirm via grep + tests, then delete.
-Note: two functions named `combine_columns` exist in the codebase — even if
-both are kept, one should be renamed.
 
 ### Define a clear public API
 `src/metadata_converter/__init__.py` currently exports only `get_schema`.
