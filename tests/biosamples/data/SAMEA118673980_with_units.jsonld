@@ -2,7 +2,6 @@
   "@context": [
     "http://schema.org",
     {
-      "OBI": "http://purl.obolibrary.org/obo/OBI_",
       "biosample": "http://identifiers.org/biosample/"
     }
   ],
@@ -17,7 +16,7 @@
     "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980",
     "@type": [
       "Sample",
-      "OBI:0000747"
+      "https://purl.obolibrary.org/obo/OBI_0000747"
     ],
     "identifier": [
       "biosample:SAMEA118673980"
