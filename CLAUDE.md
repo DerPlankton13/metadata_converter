@@ -180,7 +180,7 @@ There are three source types plus a separate uplift config:
 - **uplift config** — no `source_type`; used with `converter uplift` to post-process already-loaded JSON-LD via
   declarative rules. Operations: **link** (resolve cross-references), **enrich** (wrap a scalar in a custom
   PropertyValue subclass), **remove** (filter scaffolding items out of a list), and **add** (set a fixed value). See
-  the flat-data uplift subsection below.
+  the generic uplift subsection below.
 
 ### Where each transformation belongs
 
@@ -219,7 +219,7 @@ and be removed at uplift — never become first-class stub entities that merely 
   `additionalProperty` (which all our schema objects may carry). It sets `populate_by_name=True`, so models accept
   **either** field names (`cls(id=...)`) **or** aliases (`cls(**{"@id": ...})`) on construction; the `@id`/`@type`
   aliases are what `model_dump(by_alias=True)` emits. Because field names work, building from the `type`/`id` mapping
-  grammar needs no alias remap (see `schema_builder.instantiate` and `flat_data/uplift/add.py`).
+  grammar needs no alias remap (see `schema_builder.instantiate` and `uplift/add.py`).
 - **`custom_models.py`** — project-specific `PropertyValue` subclasses (e.g. `Orcid`, `DOI`, `ISSN`, `ISBN`,
   `UrlIdentifier`) with validation logic. Also exposes `get_schema(type_name)` for dynamic type lookup by string name.
 - **`schemaorg_models.py` (end)** — `make_strict()` creates a strict variant of any model; `rebuild_all_models()` forces
@@ -298,14 +298,13 @@ dict[str, DataFrame]` — they receive the whole dataset (so they can read one s
 the built-in cleaning steps. They are discovered dynamically from a `plugin_dir`. After cleaning, sheets with no
 `mapping` entry are dropped (loaded only as plugin/broadcast sources).
 
-### Flat-data uplift (`src/metadata_converter/flat_data/uplift/`)
+### Generic uplift (`src/metadata_converter/uplift/`)
 
 A **project-agnostic** post-processing stage over already-loaded JSON-LD — it knows nothing about specific @types or
-properties; the rules in `FlatDataUpliftConfig` drive everything. Nothing here is flat-data-specific: only the config
-class name and the package location tie it to `flat_data`, and it is **slated to move to its own top-level package**.
-(The one remaining coupling is `link.py` importing `to_lookup_key` from `flat_data.transform`, to be relocated on
-extraction.) Do not confuse this with biosamples `uplifting.py`, which is project-*specific* data transformation, not
-generic graph post-processing — the shared name is historical.
+properties; the rules in `GenericUpliftConfig` drive everything. Already lives in its own top-level package (moved out
+of `flat_data`); `link.py` now imports `to_lookup_key` from `utils/lookup_key.py`, not `flat_data.transform` — no
+remaining coupling to `flat_data`. Do not confuse this with biosamples `uplifting.py`, which is project-*specific* data
+transformation, not generic graph post-processing — the shared name is historical.
 
 `run_uplift` loads every `*.jsonld` from `input_dir` into an `EntityStore` (indexed by `@type`), applies each operation
 in a fixed order, then writes every entity to `output_dir`:

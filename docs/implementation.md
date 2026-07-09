@@ -21,7 +21,7 @@ accumulated BIOcean5D-specific assumptions. Forking is the recommended path for
 other projects. This section enumerates the coupling.
 
 The `flat_data` and `api` source types, and the generic uplift stage
-(`flat_data/uplift/`), are project-agnostic and may be reused as-is. Everything
+(`uplift/`), are project-agnostic and may be reused as-is. Everything
 below lives in `biosamples/uplifting.py`.
 
 ### Hardcoded identifiers and URIs
