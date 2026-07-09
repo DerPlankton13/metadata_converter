@@ -1,5 +1,6 @@
 import json
 import logging
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
@@ -28,6 +29,7 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 )
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.io import write_json
+from metadata_converter.utils.jsonld import expand_curie
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
@@ -178,6 +180,14 @@ def load_biosamples(config: BiosamplesConfig):
             continue
 
         write_json(sample, config.output_dir / f"{sample_id}.jsonld")
+        if config.provenance_dir is not None:
+            structured_id = expand_curie(structured["@id"], structured["@context"])
+            write_provenance_file(
+                sample["@id"],
+                config.provenance_dir,
+                [structured_id, os.path.relpath(json_path)],
+                "load",
+            )
 
     if failures:
         raise RuntimeError(
