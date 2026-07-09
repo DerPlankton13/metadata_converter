@@ -1,7 +1,6 @@
 import json
 import logging
 import sys
-from typing import Any
 
 from tqdm import tqdm
 
@@ -10,42 +9,12 @@ from metadata_converter.api_fetching.config import ApiFetchingConfig
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.utils.hashing import hashed_id
 from metadata_converter.utils.io import write_json
+from metadata_converter.utils.jsonld import standardise_id
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
 logger = logging.getLogger(__name__)
-
-
-def standardise_id(jsonld: dict) -> dict:
-    """Replace `@id` with a content hash, preserving the original as `identifier`.
-
-    A fetched record's `@id` is always source-native (a DOI, a URL, ...); it can
-    never already be one of our own content hashes, so this always rehashes —
-    there is no "already standardised" case to detect here.
-
-    Mutates and returns `jsonld` in place.
-    """
-    current_id = jsonld.get("@id")
-    jsonld["@id"] = hashed_id({k: v for k, v in jsonld.items() if k != "@id"})
-    if current_id is not None and not (
-        in_property(jsonld.get("identifier"), current_id)
-        or in_property(jsonld.get("url"), current_id)
-    ):
-        jsonld["identifier"] = current_id
-    return jsonld
-
-
-def in_property(prop: Any, value: Any) -> bool:
-    """Check whether `value` equals `prop` or is contained in it when `prop` is a list."""
-    if prop is None:
-        return False
-    if not isinstance(prop, list):
-        prop = [prop]
-    if value in prop:
-        return True
-    return False
 
 
 def fetch_api_data(config: ApiFetchingConfig) -> None:

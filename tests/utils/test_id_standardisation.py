@@ -1,4 +1,4 @@
-from metadata_converter.api_fetching.run import standardise_id
+from metadata_converter.utils.jsonld import standardise_id
 
 
 def test_standardise_id_arbitrary_id_replaced_and_kept_as_identifier():
