@@ -57,7 +57,7 @@ def get_sample_ids(
 def fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) -> bool:
     session = make_session(config.fetcher.user_agent)
     try:
-        get_metadata(sample_id, session, fetched_path)
+        get_metadata(sample_id, session, fetched_path, config.provenance_dir)
         return True
     except Exception as e:
         logger.error("Could not fetch sample '%s': %s", sample_id, e)
@@ -91,12 +91,6 @@ def fetch_biosamples(config: BiosamplesConfig):
 
     fetched_path = config.fetched_dir
     fetched_path.mkdir(parents=True, exist_ok=True)
-
-    if config.provenance_dir is not None:
-        for sid in all_sample_ids:
-            write_provenance_file(
-                f"{sid}.jsonld", config.provenance_dir, sample_source_urls(sid), "load"
-            )
 
     already_fetched = {
         sid
