@@ -146,6 +146,12 @@ def fetch_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples fetch complete. Output: %s", fetched_path)
 
 
+def load_sample(structured: dict, unstructured: dict) -> dict:
+    """Fuse a sample's structured and unstructured metadata and repair known source bugs."""
+    fused = fuse_metadata(structured, unstructured)
+    return fix_obi(fused)
+
+
 def load_biosamples(config: BiosamplesConfig):
     logger.info("Starting biosamples load")
 
@@ -170,15 +176,14 @@ def load_biosamples(config: BiosamplesConfig):
                 structured = json.load(f)
             with json_path.open() as f:
                 unstructured = json.load(f)
-            fused = fuse_metadata(structured, unstructured)
-            fused = fix_obi(fused)
-            fused = standardise_context(fused)
+            sample = load_sample(structured, unstructured)
+            sample = standardise_context(sample)
         except Exception as e:
             logger.error("Failed to load %s: %s", sample_id, e)
             failures += 1
             continue
 
-        write_json(fused, config.output_dir / f"{sample_id}.jsonld")
+        write_json(sample, config.output_dir / f"{sample_id}.jsonld")
 
     if failures:
         raise RuntimeError(
@@ -260,7 +265,7 @@ def fix_obi(fused: dict) -> dict:
     JSON-LD 1.1 only auto-expands a compact IRI like "OBI:0000747" when the
     prefix's mapped IRI ends in a URI gen-delim character (e.g. ":", "/"); OBI's
     mapped IRI ends in "_", so it no longer expands. Rewrite it to the full IRI
-    instead, to make the output JSON-LD version independent. 
+    instead, to make the output JSON-LD version independent.
     """
     try:
         obi_iri = fused["@context"][1].pop("OBI", None)

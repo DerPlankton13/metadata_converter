@@ -12,8 +12,13 @@ from metadata_converter.biosamples.config import (
     BiosamplesExtractorConfig,
     BiosamplesUpliftConfig,
 )
-from metadata_converter.biosamples.fetch import fuse_metadata, sample_source_urls
-from metadata_converter.biosamples.run import fetch_biosamples, fix_obi, uplift_biosamples
+from metadata_converter.biosamples.fetch import sample_source_urls
+from metadata_converter.biosamples.run import (
+    fetch_biosamples,
+    fix_obi,
+    load_sample,
+    uplift_biosamples,
+)
 from metadata_converter.biosamples.uplifting import (
     ActionBuilder,
     SampleRecord,
@@ -83,12 +88,12 @@ def make_coord_property(name: str, value: str, unit: str) -> dict:
 
 
 @pytest.mark.parametrize("sample_id", SAMPLE_IDS)
-def test_fuse_metadata(sample_id):
+def test_load_sample(sample_id):
     expected = load_json(DATA_DIR / f"{sample_id}_with_units.jsonld")
     structured = load_json(DATA_DIR / f"{sample_id}_original.jsonld")
     unstructured = load_json(DATA_DIR / f"{sample_id}_original.json")
 
-    result = fuse_metadata(structured, unstructured)
+    result = load_sample(structured, unstructured)
     # I consider the dicts the be equal, even if they contain additional None entries
     assert_no_diff(strip_none(expected), strip_none(result))
 
