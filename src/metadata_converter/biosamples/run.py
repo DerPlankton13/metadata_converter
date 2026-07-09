@@ -19,7 +19,7 @@ from metadata_converter.biosamples.fetch import (
     sample_source_urls,
 )
 from metadata_converter.biosamples.uplifting import SampleUplifter
-from metadata_converter.load import load_to_jsonld
+from metadata_converter.load import load_to_jsonld, standardise_context
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
     Product,
@@ -51,21 +51,6 @@ def get_sample_ids(
         return None
 
     return set(df[config.sample_id_column].dropna().tolist())
-
-
-def modify_context(metadata: dict, sample_id: str) -> dict:
-    """Puts schema.org into context's @vocab to avoid issues with rdflib."""
-    context = metadata.get("@context")
-    if not context:
-        logger.error("No '@context' found for sample %s", sample_id)
-    else:
-        try:
-            terms = context[1]
-            context = {"@vocab": "https://schema.org/", **terms}
-            metadata["@context"] = context
-        except (IndexError, TypeError):
-            logger.error("Unexpected @context for sample %s: %s", sample_id, context)
-    return metadata
 
 
 def fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) -> bool:
@@ -183,7 +168,7 @@ def load_biosamples(config: BiosamplesConfig):
             with json_path.open() as f:
                 unstructured = json.load(f)
             fused = fuse_metadata(structured, unstructured)
-            fused = modify_context(fused, sample_id)
+            fused = standardise_context(fused)
         except Exception as e:
             logger.error("Failed to load %s: %s", sample_id, e)
             failures += 1
