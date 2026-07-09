@@ -12,10 +12,10 @@ from metadata_converter.biosamples.config import (
     BiosamplesExtractorConfig,
     BiosamplesUpliftConfig,
 )
-from metadata_converter.biosamples.fetch import sample_source_urls
+from metadata_converter.biosamples.fetch import get_metadata, sample_source_urls
 from metadata_converter.biosamples.run import (
-    fetch_biosamples,
     fix_obi,
+    load_biosamples,
     load_sample,
     uplift_biosamples,
 )
@@ -418,64 +418,156 @@ def test_sample_source_urls():
     ]
 
 
-@pytest.fixture
-def offline_biosamples_input(tmp_path, monkeypatch):
-    """An input dir holding an Excel file the glob finds, with sample-id discovery
-    and the per-sample network fetch stubbed so fetch_biosamples runs offline for a
-    single sample SAMEA1."""
-    input_dir = tmp_path / "in"
-    input_dir.mkdir()
-    (input_dir / "samples.xlsx").touch()
-    monkeypatch.setattr(
-        "metadata_converter.biosamples.run.get_sample_ids",
-        lambda excel_file, cfg: {"SAMEA1"},
-    )
-    monkeypatch.setattr(
-        "metadata_converter.biosamples.run.fetch_sample",
-        lambda sid, path, cfg: True,
-    )
-    return input_dir
+def fake_fetch_metadata(url: str, session) -> dict:
+    """Stand-in for fetch.fetch_metadata: returns canned structured/unstructured
+    metadata for sample SAMEA1 without touching the network."""
+    if url.endswith(".ldjson"):
+        return {
+            "@id": "biosample:SAMEA1",
+            "@context": [
+                "http://schema.org",
+                {"biosample": "http://identifiers.org/biosample/"},
+            ],
+        }
+    return {"characteristics": {}}
 
 
-def test_biosamples_fetch_writes_provenance(tmp_path, offline_biosamples_input):
-    config = BiosamplesConfig(
-        extractor=BiosamplesExtractorConfig(input=offline_biosamples_input),
-        fetched_dir=tmp_path / "fetched",
-        output_dir=tmp_path / "loaded_base",
+def test_get_metadata_writes_fetch_provenance(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "metadata_converter.biosamples.fetch.fetch_metadata", fake_fetch_metadata
+    )
+    (tmp_path / "fetched").mkdir()
+
+    get_metadata(
+        "SAMEA1",
+        session=None,
+        fetched_path=tmp_path / "fetched",
         provenance_dir=tmp_path / "provenance",
     )
 
-    fetch_biosamples(config)
-
-    doc = json.loads(
-        (tmp_path / "provenance" / "Provenance_load_SAMEA1.jsonld").read_text()
+    ldjson_provenance = json.loads(
+        (tmp_path / "provenance" / "Provenance_fetch_SAMEA1.jsonld").read_text()
     )
-    assert doc == {
+    assert ldjson_provenance == {
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "DigitalDocument",
-        "@id": "Provenance_load_SAMEA1.jsonld",
-        "about": {"@type": "Thing", "@id": "SAMEA1.jsonld"},
-        "isBasedOn": [
-            {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.ldjson"},
-            {"@type": "CreativeWork", "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.json"},
-        ],
-        "description": "stage: load",
-        "dateCreated": doc["dateCreated"],
+        "@id": "Provenance_fetch_SAMEA1",
+        "about": {"@type": "Thing", "@id": "http://identifiers.org/biosample/SAMEA1"},
+        "isBasedOn": {
+            "@type": "CreativeWork",
+            "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.ldjson",
+        },
+        "description": "stage: fetch",
+        "dateCreated": ldjson_provenance["dateCreated"],
     }
-    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", doc["dateCreated"])
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", ldjson_provenance["dateCreated"]
+    )
+
+    json_provenance = json.loads(
+        (tmp_path / "provenance" / "Provenance_fetch_SAMEA1.json.jsonld").read_text()
+    )
+    assert json_provenance == {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "DigitalDocument",
+        "@id": "Provenance_fetch_SAMEA1.json",
+        "about": {"@type": "Thing", "@id": "fetched/SAMEA1.json"},
+        "isBasedOn": {
+            "@type": "CreativeWork",
+            "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA1.json",
+        },
+        "description": "stage: fetch",
+        "dateCreated": json_provenance["dateCreated"],
+    }
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", json_provenance["dateCreated"]
+    )
 
 
-def test_biosamples_fetch_without_provenance_dir_writes_nothing(
-    tmp_path, offline_biosamples_input
-):
-    config = BiosamplesConfig(
-        extractor=BiosamplesExtractorConfig(input=offline_biosamples_input),
-        fetched_dir=tmp_path / "fetched",
-        output_dir=tmp_path / "loaded_base",
+def test_get_metadata_without_provenance_dir_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setattr(
+        "metadata_converter.biosamples.fetch.fetch_metadata", fake_fetch_metadata
+    )
+    (tmp_path / "fetched").mkdir()
+
+    get_metadata(
+        "SAMEA1",
+        session=None,
+        fetched_path=tmp_path / "fetched",
         provenance_dir=None,
     )
 
-    fetch_biosamples(config)
+    assert not (tmp_path / "provenance").exists()
+
+
+def biosamples_config(fetched_dir, output_dir, provenance_dir):
+    """A minimal BiosamplesConfig for the load step."""
+    return BiosamplesConfig(
+        extractor=BiosamplesExtractorConfig(input=fetched_dir),
+        fetched_dir=fetched_dir,
+        output_dir=output_dir,
+        provenance_dir=provenance_dir,
+    )
+
+
+def write_fetched_sample(fetched_dir, sample_id):
+    """A minimal fetched .ldjson/.json pair for `sample_id`, fusable without error."""
+    structured = {
+        "@id": f"biosample:{sample_id}",
+        "@context": [
+            "http://schema.org",
+            {"biosample": "http://identifiers.org/biosample/"},
+        ],
+        "mainEntity": {"additionalProperty": []},
+    }
+    (fetched_dir / f"{sample_id}.ldjson").write_text(json.dumps(structured))
+    (fetched_dir / f"{sample_id}.json").write_text(json.dumps({"characteristics": {}}))
+
+
+def test_load_biosamples_writes_provenance(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    fetched_dir = tmp_path / "fetched"
+    fetched_dir.mkdir()
+    write_fetched_sample(fetched_dir, "SAMEA1")
+    config = biosamples_config(
+        fetched_dir, tmp_path / "loaded_base", tmp_path / "provenance"
+    )
+
+    load_biosamples(config)
+
+    provenance = json.loads(
+        (tmp_path / "provenance" / "Provenance_load_biosample:SAMEA1.jsonld").read_text()
+    )
+    assert provenance == {
+        "@context": {"@vocab": "https://schema.org/"},
+        "@type": "DigitalDocument",
+        "@id": "Provenance_load_biosample:SAMEA1",
+        "about": {"@type": "Thing", "@id": "biosample:SAMEA1"},
+        "isBasedOn": [
+            {
+                "@type": "CreativeWork",
+                "@id": "http://identifiers.org/biosample/SAMEA1",
+            },
+            {"@type": "CreativeWork", "@id": "fetched/SAMEA1.json"},
+        ],
+        "description": "stage: load",
+        "dateCreated": provenance["dateCreated"],
+    }
+    assert re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", provenance["dateCreated"]
+    )
+
+
+def test_load_biosamples_without_provenance_dir_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    fetched_dir = tmp_path / "fetched"
+    fetched_dir.mkdir()
+    write_fetched_sample(fetched_dir, "SAMEA1")
+    config = biosamples_config(fetched_dir, tmp_path / "loaded_base", None)
+
+    load_biosamples(config)
 
     assert not (tmp_path / "provenance").exists()
 
@@ -502,11 +594,14 @@ def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
     uplift_biosamples(config)
 
     product_doc = json.loads(
-        (tmp_path / "provenance" / f"Provenance_uplift_Product_{sid}.jsonld").read_text()
+        (
+            tmp_path / "provenance" / f"Provenance_uplift_Product_{sid}.jsonld"
+        ).read_text()
     )
     assert product_doc["about"] == {"@type": "Thing", "@id": f"Product_{sid}.jsonld"}
     assert product_doc["isBasedOn"] == {
-        "@type": "CreativeWork", "@id": f"biosample:{sid}"
+        "@type": "CreativeWork",
+        "@id": f"biosample:{sid}",
     }
     assert product_doc["description"] == "stage: uplift"
 
@@ -515,7 +610,8 @@ def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
     )
     assert action_doc["about"] == {"@type": "Thing", "@id": f"Action_{sid}.jsonld"}
     assert action_doc["isBasedOn"] == {
-        "@type": "CreativeWork", "@id": f"biosample:{sid}"
+        "@type": "CreativeWork",
+        "@id": f"biosample:{sid}",
     }
     assert action_doc["description"] == "stage: uplift"
 
