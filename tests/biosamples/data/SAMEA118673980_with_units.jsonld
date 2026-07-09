@@ -16,7 +16,7 @@
     "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980",
     "@type": [
       "Sample",
-      "https://purl.obolibrary.org/obo/OBI_0000747"
+      "http://purl.obolibrary.org/obo/OBI_0000747"
     ],
     "identifier": [
       "biosample:SAMEA118673980"
