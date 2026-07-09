@@ -187,8 +187,23 @@ There are three source types plus a separate uplift config:
 The converter produces JSON-LD *files*; it does not build or query a graph. Decide where a transformation lives by its
 nature:
 
-- **Load (table space)** — shape source data into well-formed entities, including data-structure *repair* via plugins
-  (e.g. materialising a join the source only expressed implicitly across sheets).
+- **Fetch** — retrieve data from its origin and store it exactly as returned: no repair, no validation, no `@id`
+  assignment. It exists so a pipeline run can be reproduced later without depending on the source still being
+  reachable or unchanged online. `flat_data` has no separate fetch phase because its source (an Excel file) is
+  already a static local copy — there is nothing to insulate against going offline.
+- **Load (table space)** — shape source data into well-formed, schema.org-valid entities, including data-structure
+  *repair*: via cleaning plugins for `flat_data` (e.g. materialising a join the source only expressed implicitly
+  across sheets), via "fixers" for `api` (source-specific bug corrections; see `api_fetching/fixers.py`). This is
+  also where each entity's final, canonical `@id` is assigned (a content hash — see `@id` and IRIs below), since
+  hashing requires the entity's content to already be in its repaired, final form. Repair only — no enrichment, no
+  linking; that's uplift's job.
+
+  **Known inconsistency:** `biosamples`'s load stage (`load_biosamples`) does not follow this pattern — it has no
+  fixers and builds no Pydantic model, so the fused JSON-LD is neither repaired nor schema.org-validated before being
+  written to `loaded_base`. `flat_data` and `api` both construct/validate a `SchemaOrgBase` model at load time;
+  biosamples only does so one stage later, at uplift (`Product`/`Action` construction). See
+  [`TODO.md`](TODO.md#load_biosamples-skips-the-repairvalidation-that-load-does-elsewhere) — this needs a decision
+  before being treated as either a bug or a documented permanent asymmetry.
 - **Uplift (entity space)** — declarative post-processing that must be written into the artifact: resolving
   cross-references by naming convention (relative-IRI assignment), enriching scalars, scrubbing scaffolding.
 - **Graph space (downstream `paper` repo, in SPARQL)** — true inferences/derivations (transitive closure, cross-source

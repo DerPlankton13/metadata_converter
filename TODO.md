@@ -54,8 +54,8 @@ workflow" goes away.
 
 ### Extract the failure-counting loop pattern
 Four near-identical loops in `biosamples/run.py:fetch_biosamples`,
-`biosamples/run.py:ingest_biosamples`, `biosamples/run.py:uplift_biosamples`,
-and `api_fetching/run.py:ingest_api_data`. Each does: tqdm-wrap an iterable,
+`biosamples/run.py:load_biosamples`, `biosamples/run.py:uplift_biosamples`,
+and `api_fetching/run.py:load_api_data`. Each does: tqdm-wrap an iterable,
 try/except per item, count failures, raise `RuntimeError` if any failed. A
 shared helper (`process_with_failures(items, fn, *, desc, unit, log_prefix)`)
 would collapse ~80 lines.
@@ -86,9 +86,9 @@ into their respective callers reduces module count without losing clarity.
 
 ### Validate API fetch records as Pydantic models early
 `src/metadata_converter/api_fetching/fetch.py:fetch_jsonld` returns a raw
-`dict`. Validation happens later in `ingest_api_data` via `get_schema(...)(...)`.
+`dict`. Validation happens later in `load_api_data` via `get_schema(...)(...)`.
 Validating earlier — at fetch time — would surface malformed responses
-immediately rather than during the ingest pass. Combines naturally with the
+immediately rather than during the load pass. Combines naturally with the
 "unify schema-building paradigms" item above.
 
 ---
@@ -121,6 +121,22 @@ validation has no side effects. If removed: drop the `plugin_dir` /
 not accept will break extraction at runtime. Either document this constraint
 clearly (in the docstring on `ExcelExtractorConfig`) or spell out the
 supported pandas kwargs explicitly.
+
+### `load_biosamples` skips the repair/validation that `load` does elsewhere
+`load_flat_data` (cleaning plugins) and `load_api_data` (`FIXERS` +
+`get_schema(...)(**jsonld)`) both build and validate a Pydantic
+`SchemaOrgBase` model at load time — malformed or dirty source data is either
+corrected or rejected before it reaches `output_dir`. `load_biosamples`
+(`biosamples/run.py`) does neither: it only fuses the structured/unstructured
+BioSamples JSON and calls `standardise_context`, then writes the raw fused
+`dict` straight to `output_dir` — no schema.org validation, no equivalent of a
+"fixer" for known source-specific bugs. The first real construction of typed
+models (`Product`/`Action`) only happens at uplift, one stage later than every
+other source type. Question: is this gap intentional (uplift already
+re-derives the shape it needs, so validating the raw fused dict would be
+redundant work), or should `load_biosamples` gain fixers/validation
+symmetric with the other two source types? Needs a decision before either
+adding validation there or documenting the asymmetry as permanent.
 
 ### Audit `flat_data/transform_helpers.py` for dead code
 `combine_columns` (the helper version, not the `transform.py` one) and
