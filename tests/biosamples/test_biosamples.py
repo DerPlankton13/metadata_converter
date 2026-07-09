@@ -1,3 +1,4 @@
+import copy
 import json
 import re
 import shutil
@@ -12,7 +13,7 @@ from metadata_converter.biosamples.config import (
     BiosamplesUpliftConfig,
 )
 from metadata_converter.biosamples.fetch import fuse_metadata, sample_source_urls
-from metadata_converter.biosamples.run import fetch_biosamples, uplift_biosamples
+from metadata_converter.biosamples.run import fetch_biosamples, fix_obi, uplift_biosamples
 from metadata_converter.biosamples.uplifting import (
     ActionBuilder,
     SampleRecord,
@@ -528,3 +529,71 @@ def test_biosamples_uplift_without_provenance_dir_writes_nothing(
     uplift_biosamples(config)
 
     assert not (tmp_path / "provenance").exists()
+
+
+def test_fix_obi_expands_prefix_and_drops_context_entry():
+    fused = {
+        "@context": [
+            "http://schema.org",
+            {
+                "OBI": "http://purl.obolibrary.org/obo/OBI_",
+                "biosample": "http://identifiers.org/biosample/",
+            },
+        ],
+        "identifier": "biosample:SAMEA1",
+        "mainEntity": {"@type": ["Sample", "OBI:0000747"]},
+    }
+
+    result = fix_obi(fused)
+
+    assert result == {
+        "@context": [
+            "http://schema.org",
+            {"biosample": "http://identifiers.org/biosample/"},
+        ],
+        "identifier": "biosample:SAMEA1",
+        "mainEntity": {
+            "@type": ["Sample", "http://purl.obolibrary.org/obo/OBI_0000747"]
+        },
+    }
+
+
+def test_fix_obi_leaves_mid_string_occurrence_untouched():
+    fused = {
+        "@context": [
+            "http://schema.org",
+            {"OBI": "http://purl.obolibrary.org/obo/OBI_"},
+        ],
+        "note": "see reference OBI:0000747",
+    }
+
+    result = fix_obi(fused)
+
+    assert result == {
+        "@context": ["http://schema.org", {}],
+        "note": "see reference OBI:0000747",
+    }
+
+
+def test_fix_obi_no_obi_key_returns_unchanged():
+    fused = {
+        "@context": [
+            "http://schema.org",
+            {"biosample": "http://identifiers.org/biosample/"},
+        ],
+        "stray": "OBI:0000747",
+    }
+    original = copy.deepcopy(fused)
+
+    result = fix_obi(fused)
+
+    assert result == original
+
+
+def test_fix_obi_missing_context_returns_unchanged():
+    fused = {"@type": "DataRecord", "identifier": "biosample:SAMEA1"}
+    original = copy.deepcopy(fused)
+
+    result = fix_obi(fused)
+
+    assert result == original

@@ -5,6 +5,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
+from boltons.iterutils import remap
 from pydantic import ValidationError
 from tqdm import tqdm
 
@@ -111,7 +112,9 @@ def fetch_biosamples(config: BiosamplesConfig):
         return
 
     logger.info(
-        "Fetching %d sample(s) with %d worker(s)", len(pending), config.fetcher.max_workers
+        "Fetching %d sample(s) with %d worker(s)",
+        len(pending),
+        config.fetcher.max_workers,
     )
 
     with ThreadPoolExecutor(max_workers=config.fetcher.max_workers) as executor:
@@ -168,6 +171,7 @@ def load_biosamples(config: BiosamplesConfig):
             with json_path.open() as f:
                 unstructured = json.load(f)
             fused = fuse_metadata(structured, unstructured)
+            fused = fix_obi(fused)
             fused = standardise_context(fused)
         except Exception as e:
             logger.error("Failed to load %s: %s", sample_id, e)
@@ -231,7 +235,9 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
             try:
                 validate_strict(action)
             except ValueError as e:
-                logger.warning("Strict validation failed for Action from %s: %s", path.name, e)
+                logger.warning(
+                    "Strict validation failed for Action from %s: %s", path.name, e
+                )
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)
             log_validation_error(e, logger)
@@ -246,3 +252,26 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
         )
     else:
         logger.info("Biosamples uplift complete. Output: %s", config.output_dir)
+
+
+def fix_obi(fused: dict) -> dict:
+    """Expand OBI compact IRIs to full https IRIs and drop the OBI context entry.
+
+    JSON-LD 1.1 only auto-expands a compact IRI like "OBI:0000747" when the
+    prefix's mapped IRI ends in a URI gen-delim character (e.g. ":", "/"); OBI's
+    mapped IRI ends in "_", so it no longer expands. Rewrite it to the full IRI
+    instead, to make the output JSON-LD version independent. 
+    """
+    try:
+        obi_iri = fused["@context"][1].pop("OBI", None)
+    except (KeyError, IndexError, TypeError):
+        obi_iri = None
+    if obi_iri is None:
+        return fused
+
+    def replace_obi(path, key, value):
+        if isinstance(value, str) and value.startswith("OBI:"):
+            return key, obi_iri + value.removeprefix("OBI:")
+        return key, value
+
+    return remap(fused, visit=replace_obi)
