@@ -146,12 +146,6 @@ def fetch_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples fetch complete. Output: %s", fetched_path)
 
 
-def load_sample(structured: dict, unstructured: dict) -> dict:
-    """Fuse a sample's structured and unstructured metadata and repair known source bugs."""
-    fused = fuse_metadata(structured, unstructured)
-    return fix_obi(fused)
-
-
 def load_biosamples(config: BiosamplesConfig):
     logger.info("Starting biosamples load")
 
@@ -177,12 +171,13 @@ def load_biosamples(config: BiosamplesConfig):
             unstructured = json.load(f)
 
         try:
-            sample = load_sample(structured, unstructured)
+            sample = fuse_metadata(structured, unstructured)
         except (KeyError, ValueError) as e:
-            logger.error("Failed to load %s: %s", sample_id, e)
+            logger.error("Failed to fuse %s: %s", sample_id, e)
             failures += 1
             continue
 
+        sample = fix_obi(sample)
         namespace = find_schema_namespace(sample.get("@context"))
         if namespace is not None:
             sample = remove_base_namespace(sample, namespace)
@@ -190,6 +185,7 @@ def load_biosamples(config: BiosamplesConfig):
         sample["@id"] = f"{sample['@type']}_{sample_id}.jsonld"
 
         write_json(sample, config.output_dir / sample["@id"])
+
         if config.provenance_dir is not None:
             # we need to expand the @id as we are not keeping the context in the
             # provenance file and the CURIE becomes unresolvable otherwise
