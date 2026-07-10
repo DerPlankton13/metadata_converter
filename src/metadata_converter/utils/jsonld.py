@@ -1,8 +1,11 @@
+import logging
 from typing import Any
 
 from boltons.iterutils import remap, research
 
 from metadata_converter.utils.hashing import hashed_id
+
+logger = logging.getLogger(__name__)
 
 
 def expand_curie(curie: str, context: list | dict) -> str:
@@ -26,12 +29,10 @@ def compact(jsonld: dict, base_namespace: str) -> dict:
     """Compact every string value against `base_namespace`, JSON-LD `@vocab`-style.
 
     Recursively strips `base_namespace` from the start of any string value in the
-    document (e.g. "@type": "https://schema.org/CreativeWork" -> "CreativeWork"),
-    not just `@type` - a source may emit full IRIs for other properties too.
-    Needed before schema construction, since type discrimination looks up `@type`
-    by bare class name in the schema registry, not by IRI. The `@context` value
-    itself (and anything nested under it) is left untouched, since it legitimately
-    contains `base_namespace` as an IRI, not a value to be compacted.
+    document (e.g. "@type": "https://schema.org/CreativeWork" -> "CreativeWork").
+    The `@context` value itself (and anything nested under it) is left untouched,
+    since it legitimately contains `base_namespace` as an IRI, not a value to be
+    compacted.
     """
 
     def remove_base_namespace(path, key, value):
@@ -90,3 +91,48 @@ def in_property(prop: Any, value: Any) -> bool:
     if value in prop:
         return True
     return False
+
+
+SCHEMA_ORG_DEFAULT_CONTEXT = {"@vocab": "https://schema.org/"}
+
+
+def is_schema_org_root(value: str) -> bool:
+    """Check whether `value` refers to schema.org's root (not a per-term IRI)."""
+    lowered = value.lower()
+    if "schema.org" not in lowered:
+        return False
+    after = lowered.split("schema.org", 1)[1]
+    return after in ("", "/")
+
+
+def standardise_context(jsonld: dict) -> dict:
+    """Normalise `@context` to `{"@vocab": "https://schema.org/", ...}`.
+
+    Accepts a missing context, a bare schema.org string (in any host/scheme/case
+    variant), or a list of a bare schema.org string followed by one or more dicts
+    of extra prefix mappings (the shape BioSamples emits). Any other shape —
+    including a per-term schema.org IRI, an unrelated string, or a dict not
+    already in canonical vocab form — is left untouched and logged as an error,
+    since there is no safe way to infer intent from it.
+    """
+    current_context = jsonld.get("@context")
+    if current_context is None or current_context == SCHEMA_ORG_DEFAULT_CONTEXT:
+        jsonld["@context"] = dict(SCHEMA_ORG_DEFAULT_CONTEXT)
+        return jsonld
+    if isinstance(current_context, str) and is_schema_org_root(current_context):
+        jsonld["@context"] = dict(SCHEMA_ORG_DEFAULT_CONTEXT)
+        return jsonld
+    if (
+        isinstance(current_context, list)
+        and len(current_context) >= 2
+        and isinstance(current_context[0], str)
+        and is_schema_org_root(current_context[0])
+        and all(isinstance(entry, dict) for entry in current_context[1:])
+    ):
+        merged = dict(SCHEMA_ORG_DEFAULT_CONTEXT)
+        for entry in current_context[1:]:
+            merged.update(entry)
+        jsonld["@context"] = merged
+        return jsonld
+    logger.error("Unsupported @context value: %r", current_context)
+    return jsonld
