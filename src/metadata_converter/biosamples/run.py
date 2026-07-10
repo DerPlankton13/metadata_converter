@@ -171,13 +171,14 @@ def load_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
+        with ldjson_path.open() as f:
+            structured = json.load(f)
+        with json_path.open() as f:
+            unstructured = json.load(f)
+
         try:
-            with ldjson_path.open() as f:
-                structured = json.load(f)
-            with json_path.open() as f:
-                unstructured = json.load(f)
             sample = load_sample(structured, unstructured)
-        except Exception as e:
+        except (KeyError, ValueError) as e:
             logger.error("Failed to load %s: %s", sample_id, e)
             failures += 1
             continue
