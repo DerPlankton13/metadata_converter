@@ -2,6 +2,7 @@ import json
 import logging
 import sys
 
+from pydantic import ValidationError
 from tqdm import tqdm
 
 from metadata_converter import get_schema
@@ -67,33 +68,41 @@ def load_api_data(config: ApiFetchingConfig) -> None:
     for fetched_file in tqdm(
         fetched_files, desc="Loading records", unit="rec", file=sys.stdout
     ):
+        with fetched_file.open() as f:
+            jsonld = json.load(f)
+        for fixer_name in config.fixers:
+            jsonld = FIXERS[fixer_name](jsonld)
+
+        # fix schema.id now, so it reflects the real final id for provenance
+        jsonld = standardise_id(jsonld)
+        # compaction removes any schema.org prefixes so pydantic's
+        # type discrimination works
+        namespace = find_schema_namespace(jsonld.get("@context"))
+        if namespace is not None:
+            jsonld = compact(jsonld, namespace)
+        # also standardise the context, so we fulfill the load contract
+        jsonld = standardise_context(jsonld)
+
         try:
-            with fetched_file.open() as f:
-                jsonld = json.load(f)
-            for fixer_name in config.fixers:
-                jsonld = FIXERS[fixer_name](jsonld)
-
-            # fix schema.id now, so it reflects the real final id for provenance
-            jsonld = standardise_id(jsonld)
-            # compaction removes any schema.org prefixes so pydantic's
-            # type discrimination works
-            namespace = find_schema_namespace(jsonld.get("@context"))
-            if namespace is not None:
-                jsonld = compact(jsonld, namespace)
-            # also standardise the context, so we fulfill the load contract
-            jsonld = standardise_context(jsonld)
-
             schema = get_schema(jsonld.get("@type"))(**jsonld)
-            load_to_jsonld(schema, output_dir=config.output_dir)
-
-            if config.provenance_dir is not None:
-                write_provenance_file(
-                    schema.id, config.provenance_dir, fetched_file.name, "load"
-                )
-        except Exception as e:
+        except ValidationError as e:
             logger.error("Failed to load %s", fetched_file.name)
             log_validation_error(e, logger)
             failures += 1
+            continue
+        except KeyError as e:
+            logger.error(
+                "Failed to load %s: unrecognized @type — %s", fetched_file.name, e
+            )
+            failures += 1
+            continue
+
+        load_to_jsonld(schema, output_dir=config.output_dir)
+
+        if config.provenance_dir is not None:
+            write_provenance_file(
+                schema.id, config.provenance_dir, fetched_file.name, "load"
+            )
 
     if failures:
         raise RuntimeError(
