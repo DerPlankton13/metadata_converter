@@ -62,6 +62,7 @@ def get_metadata(
             json_url,
             "fetch",
         )
-        # we need to expand the @id as we are not keeping the context in the provenance file
+        # we need to expand the @id as we are not keeping the context in the
+        # provenance file and the CURIE becomes unresolvable otherwise
         structured_id = expand_curie(structured["@id"], structured["@context"])
         write_provenance_file(structured_id, provenance_dir, ldjson_url, "fetch")
