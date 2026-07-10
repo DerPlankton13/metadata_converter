@@ -30,5 +30,23 @@ def fix_zenodo_funding_url(jsonld: dict) -> dict:
     return jsonld
 
 
+def fix_zenodo_schema_base_inconsistencies(jsonld: dict) -> dict:
+    """Normalise Zenodo's `@context` to match the http/https and trailing slash `@type` uses.
+
+    Zenodo emits `"@context": "http://schema.org"` (http, no trailing slash) alongside
+    `@type` values on `https://schema.org/` (https, trailing slash). Left as-is,
+    `remove_base_namespace` only strips a value that starts with the exact namespace
+    string found in `@context`, so this http/https and slash mismatch leaves `@type`
+    unstripped and breaks Pydantic's type discrimination.
+    """
+    context = jsonld.get("@context")
+    if context == "http://schema.org":
+        jsonld["@context"] = "https://schema.org/"
+    return jsonld
+
+
 FIXER = Callable[[dict], dict]
-FIXERS: dict[str, FIXER] = {"fix_zenodo_funding_url": fix_zenodo_funding_url}
+FIXERS: dict[str, FIXER] = {
+    "fix_zenodo_funding_url": fix_zenodo_funding_url,
+    "fix_zenodo_schema_base_inconsistencies": fix_zenodo_schema_base_inconsistencies,
+}
