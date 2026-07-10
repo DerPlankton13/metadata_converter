@@ -18,10 +18,9 @@ from metadata_converter.biosamples.config import (
 from metadata_converter.biosamples.fetch import (
     fuse_metadata,
     get_metadata,
-    sample_source_urls,
 )
 from metadata_converter.biosamples.uplifting import SampleUplifter
-from metadata_converter.load import load_to_jsonld, standardise_context
+from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
     Product,
@@ -29,7 +28,12 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 )
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.io import write_json
-from metadata_converter.utils.jsonld import expand_curie, standardise_id
+from metadata_converter.utils.jsonld import (
+    compact,
+    expand_curie,
+    find_schema_namespace,
+    standardise_context,
+)
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
@@ -178,11 +182,16 @@ def load_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
+        namespace = find_schema_namespace(sample.get("@context"))
+        if namespace is not None:
+            sample = compact(sample, namespace)
         sample = standardise_context(sample)
         sample["@id"] = f"{sample['@type']}_{sample_id}.jsonld"
 
         write_json(sample, config.output_dir / sample["@id"])
         if config.provenance_dir is not None:
+            # we need to expand the @id as we are not keeping the context in the
+            # provenance file and the CURIE becomes unresolvable otherwise
             structured_id = expand_curie(structured["@id"], structured["@context"])
             write_provenance_file(
                 sample["@id"],
