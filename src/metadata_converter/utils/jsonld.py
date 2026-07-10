@@ -1,6 +1,6 @@
 from typing import Any
 
-from boltons.iterutils import remap
+from boltons.iterutils import remap, research
 
 from metadata_converter.utils.hashing import hashed_id
 
@@ -48,6 +48,23 @@ def compact(jsonld: dict, base_namespace: str) -> dict:
         return key, value
 
     return remap(jsonld, visit=remove_base_namespace)
+
+
+def find_schema_namespace(context: list | dict | str | None) -> str | None:
+    """Find the schema.org root IRI (in any scheme/case variant) inside a JSON-LD @context.
+
+    `context` may be a bare vocab string, a prefix-mapping dict, or the list-of-entries
+    shape JSON-LD allows. Returns `None` if no schema.org root is present.
+    """
+    if context is None:
+        return None
+    if isinstance(context, str):
+        return context if is_schema_org_root(context) else None
+    matches = research(
+        {"@context": context},
+        query=lambda path, key, value: isinstance(value, str) and is_schema_org_root(value),
+    )
+    return matches[0][1] if matches else None
 
 
 def standardise_id(jsonld: dict) -> dict:
