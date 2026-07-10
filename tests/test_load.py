@@ -7,7 +7,11 @@ from metadata_converter.schema_org_models.schemaorg_models import Person
 
 
 def test_load_to_jsonld_writes_file_with_id_verbatim(tmp_path):
-    schema = Person(id="Person_orig-id.jsonld", name="Ada Lovelace")
+    schema = Person(
+        id="Person_orig-id.jsonld",
+        name="Ada Lovelace",
+        context={"@vocab": "https://schema.org/"},
+    )
 
     load_to_jsonld(schema, tmp_path)
 
