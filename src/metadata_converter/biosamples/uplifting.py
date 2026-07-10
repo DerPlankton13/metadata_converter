@@ -159,7 +159,11 @@ class Term:
                 raw_code,
             )
             return None
-        return cls(name=name, identifier=terminology.normalize_term_code(raw_code), terminology=terminology)
+        return cls(
+            name=name,
+            identifier=terminology.normalize_term_code(raw_code),
+            terminology=terminology,
+        )
 
     @classmethod
     def from_obo_url(cls, url: str, name: str) -> "Term | None":
@@ -170,7 +174,11 @@ class Term:
         terminology = Terminology.from_term_code(obo_name)
         if not terminology:
             return None
-        return cls(name=name, identifier=terminology.normalize_term_code(obo_name), terminology=terminology)
+        return cls(
+            name=name,
+            identifier=terminology.normalize_term_code(obo_name),
+            terminology=terminology,
+        )
 
 
 def build_subject_of(term: Term) -> dict:
@@ -276,7 +284,7 @@ class SampleRecord:
     def __init__(self, raw: dict):
         self._raw = raw
         try:
-            self.sample_id = raw["@id"].split(":")[-1]
+            self.sample_id = raw["@id"].removesuffix(".jsonld").split("_")[-1]
         except KeyError:
             raise ValueError("The provided input does not contain an '@id' key.")
         self._used: set[str] = set()
@@ -419,8 +427,7 @@ class ProductBuilder(BaseBuilder):
             "@context": {"@vocab": "https://schema.org/"},
             "@type": "Product",
             "additionalType": [
-                "sample",
-                "https://purl.obolibrary.org/obo/OBI_0000747",
+                convert_to_https(t) for t in self.record.base_value("@type")
             ],
             "@id": f"Product_{self.record.sample_id}.jsonld",
             "identifier": self.build_identifiers(),

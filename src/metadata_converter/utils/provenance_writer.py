@@ -7,6 +7,7 @@ from metadata_converter.schema_org_models.schemaorg_models import (
     DigitalDocument,
     Thing,
 )
+from metadata_converter.utils.jsonld import SCHEMA_ORG_DEFAULT_CONTEXT
 
 
 def write_provenance_file(
@@ -30,6 +31,7 @@ def write_provenance_file(
     sources = [based_on] if isinstance(based_on, str) else based_on
     refs = [CreativeWork(id=source) for source in sources]
     provenance = DigitalDocument(
+        context=SCHEMA_ORG_DEFAULT_CONTEXT,
         id=provenance_id,
         about=Thing(id=about_file_id),
         isBasedOn=refs[0] if len(refs) == 1 else refs,

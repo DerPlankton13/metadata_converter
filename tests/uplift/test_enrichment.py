@@ -6,10 +6,10 @@ metadata fields (url, name, propertyID, etc.).
 """
 
 import pytest
-from metadata_converter.flat_data.uplift.enrichment import EnrichmentApplier
 
-from metadata_converter.config import EnrichmentRule, FlatDataUpliftConfig, LinkRule
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
+from metadata_converter.uplift.config import EnrichmentRule, GenericUpliftConfig, LinkRule
+from metadata_converter.uplift.enrichment import EnrichmentApplier
+from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.custom_models import Orcid
 from metadata_converter.schema_org_models.schemaorg_models import Person
 
@@ -136,7 +136,7 @@ def test_enrichment_with_non_property_value_class_raises():
 
 
 # ---------------------------------------------------------------------------
-# Overlap validator on FlatDataUpliftConfig
+# Overlap validator on GenericUpliftConfig
 # ---------------------------------------------------------------------------
 
 
@@ -144,7 +144,7 @@ def test_two_enrichments_on_same_target_raise_at_config_load(tmp_path):
     with pytest.raises(
         ValueError, match=r"Person\.identifier.*targeted by multiple uplift rules"
     ):
-        FlatDataUpliftConfig(
+        GenericUpliftConfig(
             input_dir=tmp_path / "in",
             output_dir=tmp_path / "out",
             enrichments=[
@@ -162,7 +162,7 @@ def test_link_and_enrichment_on_same_target_raise_at_config_load(tmp_path):
     with pytest.raises(
         ValueError, match=r"Person\.identifier.*'link'.*'enrichment'"
     ):
-        FlatDataUpliftConfig(
+        GenericUpliftConfig(
             input_dir=tmp_path / "in",
             output_dir=tmp_path / "out",
             links=[

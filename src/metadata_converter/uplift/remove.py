@@ -13,9 +13,9 @@ survivors are written back as a list.
 
 import logging
 
-from metadata_converter.config import RemovalRule, RemovalWhere
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
-from metadata_converter.flat_data.uplift.select import select_values
+from metadata_converter.uplift.config import RemovalRule, RemovalWhere
+from metadata_converter.uplift.entity_store import EntityStore
+from metadata_converter.uplift.select import select_values
 
 logger = logging.getLogger(__name__)
 

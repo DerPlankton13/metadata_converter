@@ -179,16 +179,31 @@ There are three source types plus a separate uplift config:
   endpoint or HTML scraping.
 - **uplift config** — no `source_type`; used with `converter uplift` to post-process already-loaded JSON-LD via
   declarative rules. Operations: **link** (resolve cross-references), **enrich** (wrap a scalar in a custom
-  PropertyValue subclass), **remove** (filter scaffolding items out of a list), and **add** (set a fixed value). See
-  the flat-data uplift subsection below.
+  PropertyValue subclass), **add** (set a fixed value), **rename** (move a property's value to a different name), and
+  **remove** (filter scaffolding items out of a list). See the generic uplift subsection below.
 
 ### Where each transformation belongs
 
 The converter produces JSON-LD *files*; it does not build or query a graph. Decide where a transformation lives by its
 nature:
 
-- **Load (table space)** — shape source data into well-formed entities, including data-structure *repair* via plugins
-  (e.g. materialising a join the source only expressed implicitly across sheets).
+- **Fetch** — retrieve data from its origin and store it exactly as returned: no repair, no validation, no `@id`
+  assignment. It exists so a pipeline run can be reproduced later without depending on the source still being
+  reachable or unchanged online. `flat_data` has no separate fetch phase because its source (an Excel file) is
+  already a static local copy — there is nothing to insulate against going offline.
+- **Load (table space)** — shape source data into well-formed, schema.org-valid entities, including data-structure
+  *repair*: via cleaning plugins for `flat_data` (e.g. materialising a join the source only expressed implicitly
+  across sheets), via "fixers" for `api` (source-specific bug corrections; see `api_fetching/fixers.py`). This is
+  also where each entity's final, canonical `@id` is assigned (a content hash — see `@id` and IRIs below), since
+  hashing requires the entity's content to already be in its repaired, final form. Repair only — no enrichment, no
+  linking; that's uplift's job.
+
+  **Known inconsistency:** `biosamples`'s load stage (`load_biosamples`) does not follow this pattern — it has no
+  fixers and builds no Pydantic model, so the fused JSON-LD is neither repaired nor schema.org-validated before being
+  written to `loaded_base`. `flat_data` and `api` both construct/validate a `SchemaOrgBase` model at load time;
+  biosamples only does so one stage later, at uplift (`Product`/`Action` construction). See
+  [`TODO.md`](TODO.md#load_biosamples-skips-the-repairvalidation-that-load-does-elsewhere) — this needs a decision
+  before being treated as either a bug or a documented permanent asymmetry.
 - **Uplift (entity space)** — declarative post-processing that must be written into the artifact: resolving
   cross-references by naming convention (relative-IRI assignment), enriching scalars, scrubbing scaffolding.
 - **Graph space (downstream `paper` repo, in SPARQL)** — true inferences/derivations (transitive closure, cross-source
@@ -204,7 +219,7 @@ and be removed at uplift — never become first-class stub entities that merely 
   `additionalProperty` (which all our schema objects may carry). It sets `populate_by_name=True`, so models accept
   **either** field names (`cls(id=...)`) **or** aliases (`cls(**{"@id": ...})`) on construction; the `@id`/`@type`
   aliases are what `model_dump(by_alias=True)` emits. Because field names work, building from the `type`/`id` mapping
-  grammar needs no alias remap (see `schema_builder.instantiate` and `flat_data/uplift/add.py`).
+  grammar needs no alias remap (see `schema_builder.instantiate` and `uplift/add.py`).
 - **`custom_models.py`** — project-specific `PropertyValue` subclasses (e.g. `Orcid`, `DOI`, `ISSN`, `ISBN`,
   `UrlIdentifier`) with validation logic. Also exposes `get_schema(type_name)` for dynamic type lookup by string name.
 - **`schemaorg_models.py` (end)** — `make_strict()` creates a strict variant of any model; `rebuild_all_models()` forces
@@ -283,14 +298,13 @@ dict[str, DataFrame]` — they receive the whole dataset (so they can read one s
 the built-in cleaning steps. They are discovered dynamically from a `plugin_dir`. After cleaning, sheets with no
 `mapping` entry are dropped (loaded only as plugin/broadcast sources).
 
-### Flat-data uplift (`src/metadata_converter/flat_data/uplift/`)
+### Generic uplift (`src/metadata_converter/uplift/`)
 
 A **project-agnostic** post-processing stage over already-loaded JSON-LD — it knows nothing about specific @types or
-properties; the rules in `FlatDataUpliftConfig` drive everything. Nothing here is flat-data-specific: only the config
-class name and the package location tie it to `flat_data`, and it is **slated to move to its own top-level package**.
-(The one remaining coupling is `link.py` importing `to_lookup_key` from `flat_data.transform`, to be relocated on
-extraction.) Do not confuse this with biosamples `uplifting.py`, which is project-*specific* data transformation, not
-generic graph post-processing — the shared name is historical.
+properties; the rules in `GenericUpliftConfig` drive everything. Already lives in its own top-level package (moved out
+of `flat_data`); `link.py` now imports `to_lookup_key` from `utils/lookup_key.py`, not `flat_data.transform` — no
+remaining coupling to `flat_data`. Do not confuse this with biosamples `uplifting.py`, which is project-*specific* data
+transformation, not generic graph post-processing — the shared name is historical.
 
 `run_uplift` loads every `*.jsonld` from `input_dir` into an `EntityStore` (indexed by `@type`), applies each operation
 in a fixed order, then writes every entity to `output_dir`:
@@ -300,15 +314,20 @@ in a fixed order, then writes every entity to `output_dir`:
 2. **`EnrichmentApplier`** (`enrichment.py`) — `EnrichmentRule`: wrap a scalar in a custom PropertyValue subclass
    (`enrich_as`, e.g. `Orcid`); the class's validators fill the enriched fields. One value per entity (a multi-value
    list raises — an entity carries at most one identifier of a given type).
-3. **`AddApplier`** — `AdditionRule`: set a property to a fixed constant value (planned).
-4. **`RemoveApplier`** (`remove.py`) — `RemovalRule`: filter items out of a list-valued property by a `where` predicate
+3. **`AddApplier`** (`add.py`) — `AdditionRule`: set a property to a fixed constant value (a literal, or a node built
+   recursively from a `type`-tagged mapping) on every entity of a type, overwriting any existing value.
+4. **`RenameApplier`** (`rename.py`) — `RenameRule`: move a property's value from `source_property` to
+   `target_property` on every entity of a type (overwriting any existing value there), clearing `source_property`;
+   entities with no value at `source_property` are left untouched.
+5. **`RemoveApplier`** (`remove.py`) — `RemovalRule`: filter items out of a list-valued property by a `where` predicate
    (`equals`/`contains` on a possibly nested subproperty, string-form, case-sensitive); runs last to scrub linking
    scaffolding.
 
 `select.py` holds the shared `select_values` dot-selector (auto-unwraps PropertyValue `.value`) and `render_ref_id`.
 A config validator rejects two rules across links/enrichments/additions targeting the same `(on_type, target_property)`;
-removals are exempt (they legitimately refine other rules' output). Output convention throughout: collapse to the
-shortest shape — 0 → `None`, 1 → scalar, ≥2 → list.
+renames and removals are exempt (renames move a value elsewhere rather than duplicating a target, and removals
+legitimately refine other rules' output). Output convention throughout: collapse to the shortest shape — 0 → `None`,
+1 → scalar, ≥2 → list.
 
 ### Metadata-collector workflow (`src/metadata_converter/api_fetching/`)
 

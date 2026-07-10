@@ -4,7 +4,7 @@ refines an entity in place, isBasedOn's @id equals about's @id — the stage
 distinguishes them."""
 import json
 
-from metadata_converter.flat_data.uplift import run_uplift
+from metadata_converter.uplift import run_uplift
 
 
 def test_uplift_writes_provenance(config_factory, tmp_path):

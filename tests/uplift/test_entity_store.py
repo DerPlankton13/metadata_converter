@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
+from metadata_converter.uplift.entity_store import EntityStore
 
 
 def write_jsonld(path: Path, type_name: str, entity_id: str) -> None:

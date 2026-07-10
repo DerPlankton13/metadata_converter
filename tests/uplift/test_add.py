@@ -11,13 +11,13 @@ import logging
 
 import pytest
 
-from metadata_converter.config import (
+from metadata_converter.uplift.add import AddApplier
+from metadata_converter.uplift.config import (
     AdditionRule,
-    FlatDataUpliftConfig,
+    GenericUpliftConfig,
     LinkRule,
 )
-from metadata_converter.flat_data.uplift.add import AddApplier
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
+from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.schemaorg_models import Person, Project
 
 # ---------------------------------------------------------------------------
@@ -210,7 +210,7 @@ def test_add_unknown_field_warns(caplog):
 
 def test_link_and_add_on_same_target_raises(tmp_path):
     with pytest.raises(ValueError, match="Person.memberOf is targeted by multiple"):
-        FlatDataUpliftConfig(
+        GenericUpliftConfig(
             input_dir=tmp_path / "in",
             output_dir=tmp_path / "out",
             links=[

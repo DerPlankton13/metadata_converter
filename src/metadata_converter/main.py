@@ -8,15 +8,14 @@ from metadata_converter.biosamples.run import (
 )
 from metadata_converter.config import (
     ApiFetchingConfig,
-    ApiFetchingUpliftConfig,
     BiosamplesConfig,
     BiosamplesUpliftConfig,
     FlatDataConfig,
-    FlatDataUpliftConfig,
+    GenericUpliftConfig,
 )
 from metadata_converter.flat_data.run import load_flat_data
-from metadata_converter.flat_data.uplift import run_uplift
 from metadata_converter.parse import parse_cli
+from metadata_converter.uplift import run_uplift
 from metadata_converter.utils.log_setup import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -39,11 +38,8 @@ def main():
             load_api_data(config)
         case ("uplift", BiosamplesUpliftConfig()):
             uplift_biosamples(config)
-        case ("uplift", FlatDataUpliftConfig()):
+        case ("uplift", GenericUpliftConfig()):
             run_uplift(config)
-        case ("uplift", ApiFetchingUpliftConfig()):
-            logger.error("Phase 'uplift' is not implemented yet for source_type 'api_fetching'")
-            raise SystemExit(1)
         case _:
             source = getattr(config, "source_type", "uplift")
             logger.error(

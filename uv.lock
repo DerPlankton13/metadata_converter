@@ -51,6 +51,15 @@ wheels = [
 ]
 
 [[package]]
+name = "boltons"
+version = "26.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/7a/1f/60df922ae497d838c58b48caa518251e2c8e228d7fe93792fee69a3858d6/boltons-26.0.0.tar.gz", hash = "sha256:5566d6cfd5a1e873d8e8476496287a9f92979964611ad9a9cecb6b0ef29b1edd", size = 225129, upload-time = "2026-06-19T06:10:41.226Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/00/01/4001033457f25ecdc2b1ffd513ca0b76200b9ea009dd64f6c1aad2dde133/boltons-26.0.0-py3-none-any.whl", hash = "sha256:ba077cac51b27532299634f87f5589b4080fa94a011b4d43a9247f775e9215c7", size = 195559, upload-time = "2026-06-19T06:10:39.865Z" },
+]
+
+[[package]]
 name = "certifi"
 version = "2026.2.25"
 source = { registry = "https://pypi.org/simple" }
@@ -470,6 +479,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "beautifulsoup4" },
+    { name = "boltons" },
     { name = "ipython" },
     { name = "openpyxl" },
     { name = "pandas" },
@@ -492,6 +502,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "beautifulsoup4", specifier = ">=4.14.3" },
+    { name = "boltons", specifier = ">=26.0.0" },
     { name = "ipython", specifier = ">=9.11.0" },
     { name = "openpyxl", specifier = ">=3.1.5" },
     { name = "pandas", specifier = ">=3.0.1" },

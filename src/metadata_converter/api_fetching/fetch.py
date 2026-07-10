@@ -10,7 +10,7 @@ Supported repositories (built-in query handlers):
 - Zenodo       (``zenodo.org/api``)
 - DataCite     (``api.datacite.org``)
 - SEANOE       (``seanoe.org/api``)
-- Figshare and Figshare-based repositories such as DTU Data (``api.figshare.com``)
+- Figshare and Figshare-based repositories (``api.figshare.com``)
 
 Supported fetch strategies:
 
@@ -80,8 +80,8 @@ import requests
 from bs4 import BeautifulSoup
 from pydantic import BaseModel
 
+from metadata_converter.api_fetching.config import ApiFetcherConfig
 from metadata_converter.api_fetching.query_models import Query, QueryGroup, QueryTerm
-from metadata_converter.config import ApiFetcherConfig
 from metadata_converter.utils.http import make_session
 
 logger = logging.getLogger(__name__)
@@ -357,15 +357,23 @@ def query_seanoe(
     records: list[Record] = []
     logger.info("SEANOE: %d record(s) found", total)
 
+    def localized(value) -> str:
+        """SEANOE returns some text fields as {lang_code: text} dicts (keyed by
+        the requested "languageEnum") rather than plain strings."""
+        if isinstance(value, dict):
+            return value.get("en") or next(iter(value.values()), "")
+        return value
+
     def parse(entries: list[dict]) -> None:
         for entry in entries:
             doc_id = str(entry.get("docId", ""))
+            title = localized(entry.get("title", entry.get("name", "(no title)")))
             records.append(
                 Record(
                     doi=f"10.17882/{doc_id}" if doc_id else None,
-                    title=entry.get("title", entry.get("name", "(no title)")),
+                    title=title,
                     publisher="SEANOE",
-                    url=entry.get("url", ""),
+                    url=entry.get("url") or entry.get("absoluteUrlLandingPage", ""),
                     source_id=doc_id,
                 )
             )
@@ -388,8 +396,11 @@ def query_figshare(
     config: ApiFetcherConfig, session: requests.Session
 ) -> list[Record]:
     """
-    Query handler for Figshare and Figshare-based repositories
-    (e.g. DTU Data at ``data.dtu.dk``).
+    Query handler for Figshare and Figshare-based repositories.
+
+    Note: BIOcean5D's DTU-affiliated records are hosted on Figshare (DTU Data
+    is a Figshare instance), so they are found through this handler rather
+    than a DTU-specific one.
 
     Only `QueryTerm` is supported. Use ``field="search_for"`` for fulltext
     search across all metadata fields.

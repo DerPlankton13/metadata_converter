@@ -41,9 +41,10 @@ from typing import Any
 import pandas as pd
 from pydantic import ValidationError
 
-from metadata_converter.config import FlatDataConfig
+from metadata_converter.flat_data.config import FlatDataConfig
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
+from metadata_converter.utils.jsonld import SCHEMA_ORG_DEFAULT_CONTEXT
 
 logger = logging.getLogger(__name__)
 
@@ -147,11 +148,18 @@ def pivot_row(group: pd.DataFrame) -> dict[str, list[Any]]:
 
 
 def build_root(mapping: Nested, row: dict[str, list[Any]]) -> list[SchemaOrgBase]:
-    """Evaluate a top-level mapping: single instance, no fan-out, literals-only OK."""
+    """Evaluate a top-level mapping: single instance, no fan-out, literals-only OK.
+
+    Defaults `context` to schema.org's vocab since this is usually not set. Only
+    top-level entities get one here - `build_nested` embeds sub-objects without
+    their own `@context`.
+    """
     column, nested, literal = resolve_fields(mapping, row)
     cls = get_schema(mapping.type)
     column = {k: unwrap_single(v) for k, v in column.items()}
-    return instantiate(cls, kwargs={**literal, **nested, **column})
+    kwargs = {**literal, **nested, **column}
+    kwargs.setdefault("context", dict(SCHEMA_ORG_DEFAULT_CONTEXT))
+    return instantiate(cls, kwargs=kwargs)
 
 
 def resolve_fields(

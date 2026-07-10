@@ -4,7 +4,7 @@
   },
   "@type": "Product",
   "additionalType": [
-    "sample",
+    "Sample",
     "https://purl.obolibrary.org/obo/OBI_0000747"
   ],
   "@id": "Product_SAMEA111477556.jsonld",

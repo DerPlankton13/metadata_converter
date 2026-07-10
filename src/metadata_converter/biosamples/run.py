@@ -1,24 +1,25 @@
 import json
 import logging
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
+from boltons.iterutils import remap
 from pydantic import ValidationError
 from tqdm import tqdm
 
+from metadata_converter.biosamples.config import (
+    BiosamplesConfig,
+    BiosamplesExtractorConfig,
+    BiosamplesUpliftConfig,
+)
 from metadata_converter.biosamples.fetch import (
     fuse_metadata,
     get_metadata,
-    sample_source_urls,
 )
 from metadata_converter.biosamples.uplifting import SampleUplifter
-from metadata_converter.config import (
-    BiosamplesConfig,
-    BiosamplesExtractorConfig,
-    SourcePaths,
-)
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
@@ -27,6 +28,12 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 )
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.io import write_json
+from metadata_converter.utils.jsonld import (
+    expand_curie,
+    find_schema_namespace,
+    remove_base_namespace,
+    standardise_context,
+)
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
@@ -53,25 +60,10 @@ def get_sample_ids(
     return set(df[config.sample_id_column].dropna().tolist())
 
 
-def modify_context(metadata: dict, sample_id: str) -> dict:
-    """Puts schema.org into context's @vocab to avoid issues with rdflib."""
-    context = metadata.get("@context")
-    if not context:
-        logger.error("No '@context' found for sample %s", sample_id)
-    else:
-        try:
-            terms = context[1]
-            context = {"@vocab": "https://schema.org/", **terms}
-            metadata["@context"] = context
-        except (IndexError, TypeError):
-            logger.error("Unexpected @context for sample %s: %s", sample_id, context)
-    return metadata
-
-
 def fetch_sample(sample_id: str, fetched_path: Path, config: BiosamplesConfig) -> bool:
     session = make_session(config.fetcher.user_agent)
     try:
-        get_metadata(sample_id, session, fetched_path)
+        get_metadata(sample_id, session, fetched_path, config.provenance_dir)
         return True
     except Exception as e:
         logger.error("Could not fetch sample '%s': %s", sample_id, e)
@@ -106,12 +98,6 @@ def fetch_biosamples(config: BiosamplesConfig):
     fetched_path = config.fetched_dir
     fetched_path.mkdir(parents=True, exist_ok=True)
 
-    if config.provenance_dir is not None:
-        for sid in all_sample_ids:
-            write_provenance_file(
-                f"{sid}.jsonld", config.provenance_dir, sample_source_urls(sid), "load"
-            )
-
     already_fetched = {
         sid
         for sid in all_sample_ids
@@ -126,7 +112,9 @@ def fetch_biosamples(config: BiosamplesConfig):
         return
 
     logger.info(
-        "Fetching %d sample(s) with %d worker(s)", len(pending), config.fetcher.max_workers
+        "Fetching %d sample(s) with %d worker(s)",
+        len(pending),
+        config.fetcher.max_workers,
     )
 
     with ThreadPoolExecutor(max_workers=config.fetcher.max_workers) as executor:
@@ -177,19 +165,37 @@ def load_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
+        with ldjson_path.open() as f:
+            structured = json.load(f)
+        with json_path.open() as f:
+            unstructured = json.load(f)
+
         try:
-            with ldjson_path.open() as f:
-                structured = json.load(f)
-            with json_path.open() as f:
-                unstructured = json.load(f)
-            fused = fuse_metadata(structured, unstructured)
-            fused = modify_context(fused, sample_id)
-        except Exception as e:
-            logger.error("Failed to load %s: %s", sample_id, e)
+            sample = fuse_metadata(structured, unstructured)
+        except (KeyError, ValueError) as e:
+            logger.error("Failed to fuse %s: %s", sample_id, e)
             failures += 1
             continue
 
-        write_json(fused, config.output_dir / f"{sample_id}.jsonld")
+        sample = fix_obi(sample)
+        namespace = find_schema_namespace(sample.get("@context"))
+        if namespace is not None:
+            sample = remove_base_namespace(sample, namespace)
+        sample = standardise_context(sample)
+        sample["@id"] = f"{sample['@type']}_{sample_id}.jsonld"
+
+        write_json(sample, config.output_dir / sample["@id"])
+
+        if config.provenance_dir is not None:
+            # we need to expand the @id as we are not keeping the context in the
+            # provenance file and the CURIE becomes unresolvable otherwise
+            structured_id = expand_curie(structured["@id"], structured["@context"])
+            write_provenance_file(
+                sample["@id"],
+                config.provenance_dir,
+                [structured_id, os.path.relpath(json_path)],
+                "load",
+            )
 
     if failures:
         raise RuntimeError(
@@ -199,7 +205,7 @@ def load_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples load complete. Output: %s", config.output_dir)
 
 
-def uplift_biosamples(config: SourcePaths):
+def uplift_biosamples(config: BiosamplesUpliftConfig):
     logger.info("Starting biosamples uplift")
 
     files = list(config.input_dir.glob("**/*.jsonld"))
@@ -246,7 +252,9 @@ def uplift_biosamples(config: SourcePaths):
             try:
                 validate_strict(action)
             except ValueError as e:
-                logger.warning("Strict validation failed for Action from %s: %s", path.name, e)
+                logger.warning(
+                    "Strict validation failed for Action from %s: %s", path.name, e
+                )
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)
             log_validation_error(e, logger)
@@ -261,3 +269,26 @@ def uplift_biosamples(config: SourcePaths):
         )
     else:
         logger.info("Biosamples uplift complete. Output: %s", config.output_dir)
+
+
+def fix_obi(fused: dict) -> dict:
+    """Expand OBI compact IRIs to full https IRIs and drop the OBI context entry.
+
+    JSON-LD 1.1 only auto-expands a compact IRI like "OBI:0000747" when the
+    prefix's mapped IRI ends in a URI gen-delim character (e.g. ":", "/"); OBI's
+    mapped IRI ends in "_", so it no longer expands. Rewrite it to the full IRI
+    instead, to make the output JSON-LD version independent.
+    """
+    try:
+        obi_iri = fused["@context"][1].pop("OBI", None)
+    except (KeyError, IndexError, TypeError):
+        obi_iri = None
+    if obi_iri is None:
+        return fused
+
+    def replace_obi(path, key, value):
+        if isinstance(value, str) and value.startswith("OBI:"):
+            return key, obi_iri + value.removeprefix("OBI:")
+        return key, value
+
+    return remap(fused, visit=replace_obi)

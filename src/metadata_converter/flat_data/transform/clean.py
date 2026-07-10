@@ -5,7 +5,7 @@ import re
 
 import pandas as pd
 
-from metadata_converter.config import CleaningConfig, FlatDataConfig
+from metadata_converter.flat_data.config import CleaningConfig, FlatDataConfig
 
 logger = logging.getLogger(__name__)
 

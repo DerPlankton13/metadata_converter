@@ -3,12 +3,12 @@ import logging
 
 import pytest
 
-from metadata_converter.config import LinkRule
-from metadata_converter.flat_data.uplift import run_uplift
-from metadata_converter.flat_data.uplift.entity_store import EntityStore
-from metadata_converter.flat_data.uplift.link import LinkApplier
+from metadata_converter.uplift import run_uplift
+from metadata_converter.uplift.config import LinkRule
+from metadata_converter.uplift.entity_store import EntityStore
+from metadata_converter.uplift.link import LinkApplier
 from metadata_converter.schema_org_models.schemaorg_models import Action, Person, Product
-from tests.flat_data.uplift.conftest import load_jsonld, write_jsonld
+from tests.uplift.conftest import load_jsonld, write_jsonld
 
 
 # ---------------------------------------------------------------------------

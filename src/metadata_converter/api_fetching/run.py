@@ -2,13 +2,21 @@ import json
 import logging
 import sys
 
+from pydantic import ValidationError
 from tqdm import tqdm
 
 from metadata_converter import get_schema
+from metadata_converter.api_fetching.config import ApiFetchingConfig
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
-from metadata_converter.config import ApiFetchingConfig
+from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.io import write_json
+from metadata_converter.utils.jsonld import (
+    find_schema_namespace,
+    remove_base_namespace,
+    standardise_context,
+    standardise_id,
+)
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
@@ -41,7 +49,7 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
             else:
                 source_url = record.url
             write_provenance_file(
-                jsonld["@id"], config.provenance_dir, source_url, "load"
+                fetched_file.name, config.provenance_dir, source_url, "fetch"
             )
 
     logger.info("API fetch complete. Output: %s", fetched_path)
@@ -60,16 +68,41 @@ def load_api_data(config: ApiFetchingConfig) -> None:
     for fetched_file in tqdm(
         fetched_files, desc="Loading records", unit="rec", file=sys.stdout
     ):
+        with fetched_file.open() as f:
+            jsonld = json.load(f)
+        for fixer_name in config.fixers:
+            jsonld = FIXERS[fixer_name](jsonld)
+
+        # fix schema.id now, so it reflects the real final id for provenance
+        jsonld = standardise_id(jsonld)
+        # removing the base namespace strips any schema.org prefixes
+        # so pydantic's type discrimination works
+        namespace = find_schema_namespace(jsonld.get("@context"))
+        if namespace is not None:
+            jsonld = remove_base_namespace(jsonld, namespace)
+        # also standardise the context, so we fulfill the load contract
+        jsonld = standardise_context(jsonld)
+
         try:
-            with fetched_file.open() as f:
-                jsonld = json.load(f)
-            schema_type = jsonld["@type"].split("/")[-1]
-            schema = get_schema(schema_type)(**jsonld)
-            load_to_jsonld(schema, output_dir=config.output_dir)
-        except Exception as e:
+            schema = get_schema(jsonld.get("@type"))(**jsonld)
+        except ValidationError as e:
             logger.error("Failed to load %s", fetched_file.name)
             log_validation_error(e, logger)
             failures += 1
+            continue
+        except KeyError as e:
+            logger.error(
+                "Failed to load %s: unrecognized @type — %s", fetched_file.name, e
+            )
+            failures += 1
+            continue
+
+        load_to_jsonld(schema, output_dir=config.output_dir)
+
+        if config.provenance_dir is not None:
+            write_provenance_file(
+                schema.id, config.provenance_dir, fetched_file.name, "load"
+            )
 
     if failures:
         raise RuntimeError(

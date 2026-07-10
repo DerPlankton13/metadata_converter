@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class QueryTerm(BaseModel):
@@ -14,6 +14,8 @@ class QueryTerm(BaseModel):
     value :
         The value to match (e.g. ``"horizoneurope_biocean5d"``).
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     field: str
     value: str
@@ -35,6 +37,8 @@ class QueryGroup(BaseModel):
     terms :
         One or more `QueryTerm` or nested `QueryGroup` instances.
     """
+
+    model_config = ConfigDict(extra="forbid")
 
     operator: Literal["AND", "OR"]
     terms: list["QueryTerm | QueryGroup"]

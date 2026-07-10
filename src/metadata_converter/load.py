@@ -5,14 +5,18 @@ from metadata_converter.utils.io import write_json
 
 
 def load_to_jsonld(schema: SchemaOrgBase, output_dir: Path) -> None:
+    """Serialise a schema.org model to standardised JSON-LD and write it to `output_dir`."""
     if isinstance(output_dir, str):
         output_dir = Path(output_dir)
+
     output_dir.mkdir(parents=True, exist_ok=True)
+    jsonld = schema.model_dump(by_alias=True, exclude_none=True)
+    write_json(jsonld, output_dir / generate_filename(jsonld))
 
-    jsonld_dict = schema.model_dump(by_alias=True, exclude_none=True)
-    jsonld_dict = {"@context": {"@vocab": "https://schema.org/"}, **jsonld_dict}
 
-    file_name = jsonld_dict["@id"].split("/")[-1]
+def generate_filename(jsonld: dict) -> str:
+    """Derive a `.jsonld` filename from the last path component of `@id`."""
+    file_name = jsonld["@id"].split("/")[-1]
     if not file_name.endswith(".jsonld"):
         file_name += ".jsonld"
-    write_json(jsonld_dict, output_dir / file_name)
+    return file_name
