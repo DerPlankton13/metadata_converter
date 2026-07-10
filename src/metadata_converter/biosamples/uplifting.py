@@ -284,7 +284,7 @@ class SampleRecord:
     def __init__(self, raw: dict):
         self._raw = raw
         try:
-            self.sample_id = raw["@id"].split(":")[-1]
+            self.sample_id = raw["@id"].removesuffix(".jsonld").split("_")[-1]
         except KeyError:
             raise ValueError("The provided input does not contain an '@id' key.")
         self._used: set[str] = set()
