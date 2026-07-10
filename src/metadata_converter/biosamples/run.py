@@ -179,7 +179,7 @@ def load_biosamples(config: BiosamplesConfig):
             continue
 
         sample = standardise_context(sample)
-        sample = standardise_id(sample)
+        sample["@id"] = f"{sample['@type']}_{sample_id}.jsonld"
 
         write_json(sample, config.output_dir / sample["@id"])
         if config.provenance_dir is not None:
