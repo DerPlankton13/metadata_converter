@@ -8,11 +8,9 @@ def load_to_jsonld(schema: SchemaOrgBase, output_dir: Path) -> None:
     """Serialise a schema.org model to standardised JSON-LD and write it to `output_dir`."""
     if isinstance(output_dir, str):
         output_dir = Path(output_dir)
+
     output_dir.mkdir(parents=True, exist_ok=True)
-
     jsonld = schema.model_dump(by_alias=True, exclude_none=True)
-    jsonld = standardise_context(jsonld)
-
     write_json(jsonld, output_dir / generate_filename(jsonld))
 
 
