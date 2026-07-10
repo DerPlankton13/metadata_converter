@@ -30,8 +30,8 @@ def fuse_metadata(structured_metadata: dict, unstructured_metadata: dict) -> dic
         name = prop["name"]
         if name in characteristics and "unit" in characteristics[name][0]:
             if len(characteristics[name]) > 1:
-                raise RuntimeError(
-                    "Could not fuse the data, several entries were found for {name} in the unstructured metadata."
+                raise ValueError(
+                    f"Could not fuse the data, several entries were found for {name} in the unstructured metadata."
                 )
             prop["unitText"] = characteristics[name][0]["unit"]
 
