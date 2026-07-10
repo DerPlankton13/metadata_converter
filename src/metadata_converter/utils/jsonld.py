@@ -1,5 +1,7 @@
 from typing import Any
 
+from boltons.iterutils import remap
+
 from metadata_converter.utils.hashing import hashed_id
 
 
@@ -23,6 +25,29 @@ def expand_curie(curie: str, context: list | dict) -> str:
     raise ValueError(
         f"Unknown prefix '{prefix}' in CURIE '{curie}': not found in @context"
     )
+
+
+def compact(jsonld: dict, base_namespace: str) -> dict:
+    """Compact every string value against `base_namespace`, JSON-LD `@vocab`-style.
+
+    Recursively strips `base_namespace` from the start of any string value in the
+    document (e.g. "@type": "https://schema.org/CreativeWork" -> "CreativeWork"),
+    not just `@type` - a source may emit full IRIs for other properties too.
+    Needed before schema construction, since type discrimination looks up `@type`
+    by bare class name in the schema registry, not by IRI. The `@context` value
+    itself (and anything nested under it) is left untouched, since it legitimately
+    contains `base_namespace` as an IRI, not a value to be compacted.
+    """
+
+    def remove_base_namespace(path, key, value):
+        # ignore the context
+        if key == "@context" or "@context" in path:
+            return key, value
+        if isinstance(value, str) and value.startswith(base_namespace):
+            return key, value.removeprefix(base_namespace)
+        return key, value
+
+    return remap(jsonld, visit=remove_base_namespace)
 
 
 def standardise_id(jsonld: dict) -> dict:
