@@ -25,17 +25,16 @@ def expand_curie(curie: str, context: list | dict) -> str:
     return matches[0][1] + local
 
 
-def compact(jsonld: dict, base_namespace: str) -> dict:
-    """Compact every string value against `base_namespace`, JSON-LD `@vocab`-style.
+def remove_base_namespace(jsonld: dict, base_namespace: str) -> dict:
+    """Removes `base_namespace` from any string value.
 
     Recursively strips `base_namespace` from the start of any string value in the
     document (e.g. "@type": "https://schema.org/CreativeWork" -> "CreativeWork").
     The `@context` value itself (and anything nested under it) is left untouched,
-    since it legitimately contains `base_namespace` as an IRI, not a value to be
-    compacted.
+    since it legitimately contains `base_namespace` as an IRI.
     """
 
-    def remove_base_namespace(path, key, value):
+    def remove(path, key, value):
         # ignore the context
         if key == "@context" or "@context" in path:
             return key, value
@@ -43,7 +42,7 @@ def compact(jsonld: dict, base_namespace: str) -> dict:
             return key, value.removeprefix(base_namespace)
         return key, value
 
-    return remap(jsonld, visit=remove_base_namespace)
+    return remap(jsonld, visit=remove)
 
 
 def find_schema_namespace(context: list | dict | str | None) -> str | None:
@@ -58,7 +57,9 @@ def find_schema_namespace(context: list | dict | str | None) -> str | None:
         return context if is_schema_org_root(context) else None
     matches = research(
         {"@context": context},
-        query=lambda path, key, value: isinstance(value, str) and is_schema_org_root(value),
+        query=lambda path, key, value: (
+            isinstance(value, str) and is_schema_org_root(value)
+        ),
     )
     return matches[0][1] if matches else None
 

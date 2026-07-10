@@ -12,8 +12,8 @@ from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.jsonld import (
-    compact,
     find_schema_namespace,
+    remove_base_namespace,
     standardise_context,
     standardise_id,
 )
@@ -75,11 +75,11 @@ def load_api_data(config: ApiFetchingConfig) -> None:
 
         # fix schema.id now, so it reflects the real final id for provenance
         jsonld = standardise_id(jsonld)
-        # compaction removes any schema.org prefixes so pydantic's
-        # type discrimination works
+        # removing the base namespace strips any schema.org prefixes
+        # so pydantic's type discrimination works
         namespace = find_schema_namespace(jsonld.get("@context"))
         if namespace is not None:
-            jsonld = compact(jsonld, namespace)
+            jsonld = remove_base_namespace(jsonld, namespace)
         # also standardise the context, so we fulfill the load contract
         jsonld = standardise_context(jsonld)
 

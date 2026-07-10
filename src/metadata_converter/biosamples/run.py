@@ -29,9 +29,9 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.jsonld import (
-    compact,
     expand_curie,
     find_schema_namespace,
+    remove_base_namespace,
     standardise_context,
 )
 from metadata_converter.utils.log_setup import log_validation_error
@@ -184,7 +184,7 @@ def load_biosamples(config: BiosamplesConfig):
 
         namespace = find_schema_namespace(sample.get("@context"))
         if namespace is not None:
-            sample = compact(sample, namespace)
+            sample = remove_base_namespace(sample, namespace)
         sample = standardise_context(sample)
         sample["@id"] = f"{sample['@type']}_{sample_id}.jsonld"
 
