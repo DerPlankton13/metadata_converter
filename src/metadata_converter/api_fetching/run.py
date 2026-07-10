@@ -10,7 +10,12 @@ from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.io import write_json
-from metadata_converter.utils.jsonld import standardise_id
+from metadata_converter.utils.jsonld import (
+    compact,
+    find_schema_namespace,
+    standardise_context,
+    standardise_id,
+)
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
@@ -67,11 +72,20 @@ def load_api_data(config: ApiFetchingConfig) -> None:
                 jsonld = json.load(f)
             for fixer_name in config.fixers:
                 jsonld = FIXERS[fixer_name](jsonld)
-            schema_type = jsonld["@type"].split("/")[-1]
-            # Standardise now so schema.id below reflects the real final id for provenance.
+
+            # fix schema.id now, so it reflects the real final id for provenance
             jsonld = standardise_id(jsonld)
-            schema = get_schema(schema_type)(**jsonld)
+            # compaction removes any schema.org prefixes so pydantic's
+            # type discrimination works
+            namespace = find_schema_namespace(jsonld.get("@context"))
+            if namespace is not None:
+                jsonld = compact(jsonld, namespace)
+            # also standardise the context, so we fulfill the load contract
+            jsonld = standardise_context(jsonld)
+
+            schema = get_schema(jsonld.get("@type"))(**jsonld)
             load_to_jsonld(schema, output_dir=config.output_dir)
+
             if config.provenance_dir is not None:
                 write_provenance_file(
                     schema.id, config.provenance_dir, fetched_file.name, "load"
