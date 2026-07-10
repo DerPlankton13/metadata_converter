@@ -44,6 +44,7 @@ from pydantic import ValidationError
 from metadata_converter.flat_data.config import FlatDataConfig
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
+from metadata_converter.utils.jsonld import SCHEMA_ORG_DEFAULT_CONTEXT
 
 logger = logging.getLogger(__name__)
 
@@ -293,7 +294,12 @@ def unwrap_single(items: list) -> Any:
 
 
 def instantiate(cls: type[SchemaOrgBase], kwargs: dict) -> list[SchemaOrgBase]:
-    """Instantiate ``cls`` with ``kwargs``; on validation error log per-error and skip."""
+    """Instantiate ``cls`` with ``kwargs``, defaulting `context` to schema.org's vocab; on validation error log per-error and skip.
+
+    Unlike api/biosamples, flat_data builds entities from tabular data with no source
+    `@context` to normalise, so the default is supplied here rather than elsewhere.
+    """
+    kwargs.setdefault("context", dict(SCHEMA_ORG_DEFAULT_CONTEXT))
     try:
         return [cls(**kwargs)]
     except ValidationError as e:
