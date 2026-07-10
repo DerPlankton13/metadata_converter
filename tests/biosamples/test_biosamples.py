@@ -540,18 +540,16 @@ def test_load_biosamples_writes_provenance(tmp_path, monkeypatch):
 
     provenance = json.loads(
         (
-            tmp_path
-            / "provenance"
-            / "Provenance_load_DataRecord_y7Tjtka_D6dY1o-1Xmlvul.jsonld"
+            tmp_path / "provenance" / "Provenance_load_DataRecord_SAMEA1.jsonld"
         ).read_text()
     )
     assert provenance == {
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "DigitalDocument",
-        "@id": "Provenance_load_DataRecord_y7Tjtka_D6dY1o-1Xmlvul.jsonld",
+        "@id": "Provenance_load_DataRecord_SAMEA1.jsonld",
         "about": {
             "@type": "Thing",
-            "@id": "DataRecord_y7Tjtka_D6dY1o-1Xmlvul.jsonld",
+            "@id": "DataRecord_SAMEA1.jsonld",
         },
         "isBasedOn": [
             {
