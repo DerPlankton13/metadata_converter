@@ -427,7 +427,7 @@ class ProductBuilder(BaseBuilder):
             "@context": {"@vocab": "https://schema.org/"},
             "@type": "Product",
             "additionalType": [
-                convert_to_https(t) for t in self.record.base_value("@type")
+                convert_to_https(t) for t in self.record.base_value("additionalType")
             ],
             "@id": f"Product_{self.record.sample_id}.jsonld",
             "identifier": self.build_identifiers(),
