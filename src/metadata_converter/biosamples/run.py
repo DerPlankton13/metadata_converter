@@ -10,6 +10,7 @@ from boltons.iterutils import remap
 from pydantic import ValidationError
 from tqdm import tqdm
 
+from metadata_converter import get_schema
 from metadata_converter.biosamples.config import (
     BiosamplesConfig,
     BiosamplesExtractorConfig,
@@ -27,7 +28,6 @@ from metadata_converter.schema_org_models.schemaorg_models import (
     validate_strict,
 )
 from metadata_converter.utils.http import make_session
-from metadata_converter.utils.io import write_json
 from metadata_converter.utils.jsonld import (
     expand_curie,
     find_schema_namespace,
@@ -155,19 +155,19 @@ def load_biosamples(config: BiosamplesConfig):
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
     failures = 0
-    for ldjson_path in tqdm(
+    for ldjson_file in tqdm(
         ldjson_files, desc="Loading biosamples", unit="sample", file=sys.stdout
     ):
-        sample_id = ldjson_path.stem
-        json_path = fetched_path / f"{sample_id}.json"
-        if not json_path.exists():
+        sample_id = ldjson_file.stem
+        json_file = fetched_path / f"{sample_id}.json"
+        if not json_file.exists():
             logger.error("Missing unstructured metadata for %s, skipping", sample_id)
             failures += 1
             continue
 
-        with ldjson_path.open() as f:
+        with ldjson_file.open() as f:
             structured = json.load(f)
-        with json_path.open() as f:
+        with json_file.open() as f:
             unstructured = json.load(f)
 
         try:
@@ -177,14 +177,40 @@ def load_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
+        # expand obi terms to avoid complications between different jsonld versions
         sample = fix_obi(sample)
+        # fix the types to have validating schema.org compliant models
+        sample["@type"] = "CreativeWork"
+        sample["mainEntity"]["additionalType"] = sample["mainEntity"]["@type"]
+        sample["mainEntity"]["@type"] = "Product"
+
+        # fix schema.id now, so it reflects the real final id for provenance
+        # for biosamples we keep the original accession number
+        sample["@id"] = f"{sample['@type']}_{sample_id}.jsonld"
+
+        # removing the base namespace strips any schema.org prefixes
+        # so pydantic's type discrimination works
         namespace = find_schema_namespace(sample.get("@context"))
         if namespace is not None:
             sample = remove_base_namespace(sample, namespace)
+        # also standardise the context, so we fulfill the load contract
         sample = standardise_context(sample)
-        sample["@id"] = f"{sample['@type']}_{sample_id}.jsonld"
 
-        write_json(sample, config.output_dir / sample["@id"])
+        try:
+            schema = get_schema(sample.get("@type"))(**sample)
+        except ValidationError as e:
+            logger.error("Failed to load %s", ldjson_file.name)
+            log_validation_error(e, logger)
+            failures += 1
+            continue
+        except KeyError as e:
+            logger.error(
+                "Failed to load %s: unrecognized @type — %s", ldjson_file.name, e
+            )
+            failures += 1
+            continue
+
+        load_to_jsonld(schema, output_dir=config.output_dir)
 
         if config.provenance_dir is not None:
             # we need to expand the @id as we are not keeping the context in the
@@ -193,7 +219,7 @@ def load_biosamples(config: BiosamplesConfig):
             write_provenance_file(
                 sample["@id"],
                 config.provenance_dir,
-                [structured_id, os.path.relpath(json_path)],
+                [structured_id, os.path.relpath(json_file)],
                 "load",
             )
 
