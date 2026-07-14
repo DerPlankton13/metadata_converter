@@ -524,7 +524,7 @@ def write_fetched_sample(fetched_dir, sample_id):
             "http://schema.org",
             {"biosample": "http://identifiers.org/biosample/"},
         ],
-        "mainEntity": {"additionalProperty": []},
+        "mainEntity": {"@type": ["Sample", "OBI:0000747"], "additionalProperty": []},
     }
     (fetched_dir / f"{sample_id}.ldjson").write_text(json.dumps(structured))
     (fetched_dir / f"{sample_id}.json").write_text(json.dumps({"characteristics": {}}))
@@ -543,16 +543,16 @@ def test_load_biosamples_writes_provenance(tmp_path, monkeypatch):
 
     provenance = json.loads(
         (
-            tmp_path / "provenance" / "Provenance_load_DataRecord_SAMEA1.jsonld"
+            tmp_path / "provenance" / "Provenance_load_CreativeWork_SAMEA1.jsonld"
         ).read_text()
     )
     assert provenance == {
         "@context": {"@vocab": "https://schema.org/"},
         "@type": "DigitalDocument",
-        "@id": "Provenance_load_DataRecord_SAMEA1.jsonld",
+        "@id": "Provenance_load_CreativeWork_SAMEA1.jsonld",
         "about": {
             "@type": "Thing",
-            "@id": "DataRecord_SAMEA1.jsonld",
+            "@id": "CreativeWork_SAMEA1.jsonld",
         },
         "isBasedOn": [
             {
