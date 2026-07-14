@@ -1,4 +1,5 @@
 import json
+import shutil
 
 import pytest
 
@@ -28,6 +29,29 @@ def test_extract_action(sample_id):
     _, action = SampleUplifter(data).build_dicts()
     # I consider the dicts the be equal, even if they contain additional None entries
     assert_no_diff(strip_none(expected), strip_none(action))
+
+
+@pytest.mark.parametrize("sample_id", SAMPLE_IDS)
+def test_uplift_biosamples_writes_expected_product_and_action(tmp_path, sample_id):
+    expected_product = load_json(DATA_DIR / f"Product_{sample_id}.jsonld")
+    expected_action = load_json(DATA_DIR / f"Action_{sample_id}.jsonld")
+    input_dir = tmp_path / "loaded"
+    input_dir.mkdir()
+    shutil.copy(DATA_DIR / f"CreativeWork_{sample_id}.jsonld", input_dir)
+    config = BiosamplesUpliftConfig(
+        source_type="biosamples",
+        input_dir=input_dir,
+        output_dir=tmp_path / "uplifted",
+        provenance_dir=None,
+    )
+
+    uplift_biosamples(config)
+
+    result_product = load_json(tmp_path / "uplifted" / f"Product_{sample_id}.jsonld")
+    result_action = load_json(tmp_path / "uplifted" / f"Action_{sample_id}.jsonld")
+    # I consider the dicts the be equal, even if they contain additional None entries
+    assert_no_diff(strip_none(expected_product), strip_none(result_product))
+    assert_no_diff(strip_none(expected_action), strip_none(result_action))
 
 
 def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
