@@ -28,6 +28,11 @@ class SchemaOrgBase(BaseModel):
     Defers build until first model validation to massively reduce run
     time as most models are not used and ensures that each new
     assignment is also validated.
+    ``polymorphic_serialization`` is required because a field typed as a bare
+    schema.org class (e.g. ``Thing``) holding a subtype instance (e.g. ``Product``,
+    resolved by ``discriminate_typed_fields``) would otherwise serialize using the
+    declared class's fields only, silently dropping subtype-only fields like
+    ``category`` — see ``tests/schema/test_polymorphic_serialization.py``.
     """
 
     model_config = ConfigDict(
@@ -35,6 +40,7 @@ class SchemaOrgBase(BaseModel):
         populate_by_name=True,
         defer_build=True,
         validate_assignment=True,
+        polymorphic_serialization=True,
     )
 
     # these are all not schema.org properties, but they are needed for jsonld
