@@ -70,7 +70,7 @@
       "subjectOf": {
         "@type": "CreativeWork",
         "url": "https://purl.obolibrary.org/obo/ENVO_00002019",
-        "partOf": "https://purl.obolibrary.org/obo/envo.owl",
+        "isPartOf": "https://purl.obolibrary.org/obo/envo.owl",
         "identifier": "ENVO:00002019",
         "name": "brackish water"
       }

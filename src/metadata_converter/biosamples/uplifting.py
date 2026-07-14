@@ -190,7 +190,7 @@ def build_subject_of(term: Term) -> dict:
         "name": term.name,
     }
     if term.defined_termset:
-        subject_of["partOf"] = term.defined_termset
+        subject_of["isPartOf"] = term.defined_termset
     return subject_of
 
 

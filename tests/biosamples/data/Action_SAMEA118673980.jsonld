@@ -70,7 +70,7 @@
       "subjectOf": {
         "@type": "CreativeWork",
         "url": "https://purl.obolibrary.org/obo/ENVO_00002179",
-        "partOf": "https://purl.obolibrary.org/obo/envo.owl",
+        "isPartOf": "https://purl.obolibrary.org/obo/envo.owl",
         "identifier": "ENVO:00002179",
         "name": "intertidal sediment"
       }
@@ -81,7 +81,7 @@
       "subjectOf": {
         "@type": "CreativeWork",
         "url": "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=749907",
-        "partOf": "https://www.ncbi.nlm.nih.gov/Taxonomy",
+        "isPartOf": "https://www.ncbi.nlm.nih.gov/Taxonomy",
         "identifier": "749907",
         "name": "sediment metagenome"
       }

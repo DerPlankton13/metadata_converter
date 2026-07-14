@@ -102,7 +102,7 @@
       "subjectOf": {
         "@type": "CreativeWork",
         "url": "https://purl.obolibrary.org/obo/ENVO_01001964",
-        "partOf": "https://purl.obolibrary.org/obo/envo.owl",
+        "isPartOf": "https://purl.obolibrary.org/obo/envo.owl",
         "identifier": "ENVO:01001964",
         "name": "seawater"
       }
@@ -113,7 +113,7 @@
       "subjectOf": {
         "@type": "CreativeWork",
         "url": "https://www.ncbi.nlm.nih.gov/Taxonomy/Browser/wwwtax.cgi?id=408172",
-        "partOf": "https://www.ncbi.nlm.nih.gov/Taxonomy",
+        "isPartOf": "https://www.ncbi.nlm.nih.gov/Taxonomy",
         "identifier": "408172",
         "name": "marine metagenome"
       }
