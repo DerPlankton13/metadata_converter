@@ -3,8 +3,8 @@
     "@vocab": "https://schema.org/",
     "biosample": "http://identifiers.org/biosample/"
   },
-  "@type": "DataRecord",
-  "@id": "DataRecord_SAMEA111477556.jsonld",
+  "@type": "CreativeWork",
+  "@id": "CreativeWork_SAMEA111477556.jsonld",
   "identifier": "biosample:SAMEA111477556",
   "dateCreated": "2022-10-17T08:02:21.438Z",
   "dateModified": "2024-02-21T05:33:47.984Z",
@@ -12,7 +12,8 @@
   "dateSubmitted": "2022-10-17T09:02:21Z",
   "mainEntity": {
     "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA111477556",
-    "@type": [
+    "@type": "Product",
+    "additionalType": [
       "Sample",
       "http://purl.obolibrary.org/obo/OBI_0000747"
     ],

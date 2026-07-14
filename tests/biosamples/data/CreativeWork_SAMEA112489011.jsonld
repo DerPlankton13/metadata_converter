@@ -1,13 +1,10 @@
 {
-  "@context": [
-    "http://schema.org",
-    {
-      "OBI": "http://purl.obolibrary.org/obo/OBI_",
-      "biosample": "http://identifiers.org/biosample/"
-    }
-  ],
-  "@type": "DataRecord",
-  "@id": "biosample:SAMEA112489011",
+  "@context": {
+    "@vocab": "https://schema.org/",
+    "biosample": "http://identifiers.org/biosample/"
+  },
+  "@type": "CreativeWork",
+  "@id": "CreativeWork_SAMEA112489011.jsonld",
   "identifier": "biosample:SAMEA112489011",
   "dateCreated": "2023-02-08T14:32:35.199Z",
   "dateModified": "2025-08-14T17:15:59.916Z",
@@ -15,9 +12,10 @@
   "dateSubmitted": "2024-09-13T07:11:32.525Z",
   "mainEntity": {
     "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA112489011",
-    "@type": [
+    "@type": "Product",
+    "additionalType": [
       "Sample",
-      "OBI:0000747"
+      "http://purl.obolibrary.org/obo/OBI_0000747"
     ],
     "identifier": [
       "biosample:SAMEA112489011"
@@ -59,22 +57,26 @@
       {
         "@type": "PropertyValue",
         "name": "depth",
-        "value": "0-3"
+        "value": "0-3",
+        "unitText": "m"
       },
       {
         "@type": "PropertyValue",
         "name": "depth-max",
-        "value": "3"
+        "value": "3",
+        "unitText": "m"
       },
       {
         "@type": "PropertyValue",
         "name": "depth-min",
-        "value": "0"
+        "value": "0",
+        "unitText": "m"
       },
       {
         "@type": "PropertyValue",
         "name": "elevation",
-        "value": "0.0"
+        "value": "0.0",
+        "unitText": "m"
       },
       {
         "@type": "PropertyValue",
@@ -90,12 +92,14 @@
       {
         "@type": "PropertyValue",
         "name": "filtration time",
-        "value": "15.0"
+        "value": "15.0",
+        "unitText": "min"
       },
       {
         "@type": "PropertyValue",
         "name": "filtration volume",
-        "value": "2.5"
+        "value": "2.5",
+        "unitText": "L"
       },
       {
         "@type": "PropertyValue",
@@ -105,12 +109,14 @@
       {
         "@type": "PropertyValue",
         "name": "geographic location (latitude)",
-        "value": "49.3267"
+        "value": "49.3267",
+        "unitText": "DD"
       },
       {
         "@type": "PropertyValue",
         "name": "geographic location (longitude)",
-        "value": "-1.11253"
+        "value": "-1.11253",
+        "unitText": "DD"
       },
       {
         "@type": "PropertyValue",
@@ -172,12 +178,14 @@
       {
         "@type": "PropertyValue",
         "name": "size-fraction lower threshold",
-        "value": "3"
+        "value": "3",
+        "unitText": "µm"
       },
       {
         "@type": "PropertyValue",
         "name": "size-fraction upper threshold",
-        "value": "20"
+        "value": "20",
+        "unitText": "µm"
       },
       {
         "@type": "PropertyValue",
