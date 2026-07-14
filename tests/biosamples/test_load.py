@@ -1,6 +1,7 @@
 import copy
 import json
 import re
+import shutil
 
 import pytest
 
@@ -25,6 +26,22 @@ def test_load_sample(sample_id):
     unstructured = load_json(DATA_DIR / f"{sample_id}.json")
 
     result = fuse_metadata(structured, unstructured)
+    # I consider the dicts the be equal, even if they contain additional None entries
+    assert_no_diff(strip_none(expected), strip_none(result))
+
+
+@pytest.mark.parametrize("sample_id", SAMPLE_IDS)
+def test_load_biosamples_writes_expected_creativework(tmp_path, sample_id):
+    expected = load_json(DATA_DIR / f"CreativeWork_{sample_id}.jsonld")
+    fetched_dir = tmp_path / "fetched"
+    fetched_dir.mkdir()
+    shutil.copy(DATA_DIR / f"{sample_id}.ldjson", fetched_dir)
+    shutil.copy(DATA_DIR / f"{sample_id}.json", fetched_dir)
+    config = biosamples_config(fetched_dir, tmp_path / "loaded", None)
+
+    load_biosamples(config)
+
+    result = load_json(tmp_path / "loaded" / f"CreativeWork_{sample_id}.jsonld")
     # I consider the dicts the be equal, even if they contain additional None entries
     assert_no_diff(strip_none(expected), strip_none(result))
 
