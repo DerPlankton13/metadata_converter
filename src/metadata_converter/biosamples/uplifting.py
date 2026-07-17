@@ -422,13 +422,21 @@ class ProductBuilder(BaseBuilder):
                     keywords.append(prop)
         return keywords if len(keywords) > 0 else None
 
+    def build_additional_type(self):
+        additional_type = [
+            convert_to_https(t) for t in self.record.base_value("additionalType")
+        ]
+        if "Sample" in additional_type:
+            additional_type[additional_type.index("Sample")] = (
+                "https://bioschemas.org/Sample"
+            )
+        return additional_type if len(additional_type) > 1 else additional_type[0]
+
     def build(self) -> dict:
         return {
             "@context": {"@vocab": "https://schema.org/"},
             "@type": "Product",
-            "additionalType": [
-                convert_to_https(t) for t in self.record.base_value("additionalType")
-            ],
+            "additionalType": self.build_additional_type(),
             "@id": f"Product_{self.record.sample_id}.jsonld",
             "identifier": self.build_identifiers(),
             "name": self.record.base_value("name"),
