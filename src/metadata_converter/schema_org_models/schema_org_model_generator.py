@@ -1,25 +1,25 @@
 """
 Generate Pydantic v2 models from schema.org JSON-LD.
 
-Run once to produce a static `schemaorg_models.py` file with no runtime cost.
+Run once to produce a static ``schemaorg_models.py`` file with no runtime cost.
 
 Usage
 -----
 Generate all schema.org types::
 
-    python schemaorg_codegen.py
+    python -m metadata_converter.schema_org_models.schema_org_model_generator
 
 Enforce exact field types (no str fallback for typed fields)::
 
-    python schemaorg_codegen.py --strict
+    python -m metadata_converter.schema_org_models.schema_org_model_generator --strict
 
 Write to a custom path::
 
-    python schemaorg_codegen.py --out my_models.py
+    python -m metadata_converter.schema_org_models.schema_org_model_generator --out my_models.py
 
 Then in your application::
 
-    from schemaorg_models import Person
+    from metadata_converter.schema_org_models.schemaorg_models import Person
 
     person = Person(name="Ada Lovelace", email="ada@example.com")
 """
