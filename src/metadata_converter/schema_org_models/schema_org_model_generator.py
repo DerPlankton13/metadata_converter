@@ -106,7 +106,7 @@ class SchemaOrgBase(BaseModel):
 
     Provides the fields common to all JSON-LD nodes (``@context``, ``@type``,
     ``@id``, ``additionalProperty``) and registers every subclass in
-    ``_SCHEMA_TYPE_REGISTRY`` as it is defined (see ``__init_subclass__``). That
+    ``_SCHEMA_TYPE_REGISTRY`` as it is built (see ``__init_subclass__``). That
     registration also covers project-specific ``PropertyValue`` subtypes such as
     ``Orcid`` and ``DOI`` in ``custom_models.py``.
 
@@ -144,7 +144,7 @@ class SchemaOrgBase(BaseModel):
     type: str = Field(alias="@type")
     id: str | None = Field(default=None, alias="@id")
 
-    # this is our modification of schema.org, saying, that we always allow additionalProperty
+    # this is our modification of schema.org: always allowing additionalProperty
     additionalProperty: PropertyValue | str | list[str | PropertyValue] | None = Field(
         default=None
     )
@@ -159,48 +159,60 @@ class SchemaOrgBase(BaseModel):
         defined. In this manner, the subclasses defined outside of this module (e.g.
         ``custom_models.py``'s ``Orcid``/``DOI``) are registered as well after importing
         these modules.
-        This hook is also used by Pydantic, so we do the ``super()`` call to not
-        interfere with pydantic.
         """
+        # Always call super() in __init_subclass__, so any other hook further along
+        # the MRO still runs.
         super().__init_subclass__(**kwargs)
         _SCHEMA_TYPE_REGISTRY[cls.__name__] = cls
 
     @model_validator(mode="before")
     @classmethod
     def discriminate_typed_fields(cls, data: Any) -> Any:
-        """Discriminate pydantic model fields by the @type/type values from input data.
+        """Discriminate Pydantic model fields by the @type/type values from input data.
 
-        This method looks into pydantic input data (e.g. a dictionary containing
+        This method looks into Pydantic input data (e.g. a dictionary containing
         key-value pairs that map to the properties and values of a schema.org object)
         and attempts to discover if any keys in that dictionary map to values that are,
         themselves, dictionaries that contain a type (@type/type) key. Both spellings
         are supported. When found, this nested dictionary is converted into an instance
-        of a pydantic class corresponding to the name of the type (e.g. Product). Thus,
-        the key in the top level dictionary (e.g. instrument) no longer maps to a nested
-        dictionary as a value, but to an instance of a pydantic class. Since pydantic
-        does not re-validate already built models, this replaces pydantic's default type
-        discrimination.
-        This is necessary since pydantic fails to correctly discriminate child types
-        for complex type annotations containing unions, as it is the case with the
-        schema.org models. In this manner we can ensure that e.g. in the "Action" model
-        the instrument property (which is annotated as "Thing") is built correctly as
-        "Product" (which is a subclass of "Thing") if so declared in the input.
-        Otherwise, the instrument would be built as an instance of "Thing" with
-        additional properties and a value of "Product" for type.
+        of a Pydantic class corresponding to the name of the type (e.g. ``Product``).
+        Thus, the key in the top level dictionary (e.g. instrument) no longer maps to a
+        nested dictionary as a value, but to an instance of a Pydantic class. Since
+        Pydantic does not re-validate already built models, this substitutes for
+        Pydantic's discriminated-union support, which schema.org's hierarchy cannot use
+        directly (its ``type`` field is a plain ``str``, not a ``Literal``-tagged
+        discriminator). This is necessary since Pydantic fails to correctly discriminate
+        child types for complex type annotations containing unions, as it is the case
+        with the schema.org models. In this manner we can ensure that e.g. in the
+        ``Action`` model the instrument property (which is annotated as ``Thing``) is
+        built correctly as ``Product`` (which is a subclass of ``Thing``) if so declared
+        in the input. Otherwise, the instrument would be built as an instance of
+        ``Thing`` with additional properties and a value of ``Product`` for type.
 
         Parameters
         ----------
-        cls :
-
+        cls : type[SchemaOrgBase]
+            The model subclass being validated (e.g. ``Action``); provides
+            ``model_fields`` used to look up each field's annotation.
         data : Any
             Raw input which is often a dict[str, Any] but could also be an instance of
-            the model itself or anything else since you can pass arbitrary objects into model_validate
+            the model itself or anything else since you can pass arbitrary objects into
+            model_validate.
 
         Returns
         -------
         data : Any
-            The possibly modified input from which the pydantic model will be built.
+            The possibly modified input from which the Pydantic model will be built.
 
+        Raises
+        ------
+        pydantic.ValidationError
+            Raised when a nested value's ``@type``/``type`` names a class absent
+            from ``_SCHEMA_TYPE_REGISTRY``, or a registered class that is not a
+            subtype of the field's own annotation. ``_discriminate_value`` raises
+            a plain ``ValueError`` in both cases; Pydantic catches it inside this
+            ``model_validator(mode="before")`` and re-raises it as
+            ``pydantic.ValidationError``.
         """
         if not isinstance(data, dict):
             return data
@@ -218,15 +230,17 @@ class SchemaOrgBase(BaseModel):
 
 def _discriminate_value(raw_input: Any, annotation: Any) -> Any:
     """
-    Resolve the field type using ``@type/type`` value from the input if available.
+    Resolve ``raw_input``'s concrete type from its ``@type``/``type`` key, if present.
 
     If the input specifies its own model type via its ``@type/type`` key, it is checked
     that this specified model is a) a registered schema model (i.e. a member of
-    _SCHEMA_TYPE_REGISTRY) and b) a child class of one of the model types specified in
-    the corresponding field annotation (``annotation``). If this is the case, it builds
-    a validated model of the specified type and returns it. In this manner, pydantic
-    will skip validation for this property of the owning model.
-    Nested "typed" dicts and lists as input are resolved recursively.
+    ``_SCHEMA_TYPE_REGISTRY``) and b) a child class of one of the model types specified
+    in the corresponding field annotation (``annotation``). If this is the case, it
+    builds a validated model of the specified type and returns it. In this manner,
+    Pydantic will skip validation for this property of the owning model.
+    Resolution reaches arbitrarily nested structures, not just the top level: list
+    items are resolved directly by this function, and a resolved dict's own nested
+    fields are resolved in turn as its subtype is validated.
 
     Parameters
     ----------
@@ -240,9 +254,10 @@ def _discriminate_value(raw_input: Any, annotation: Any) -> Any:
     Returns
     -------
     Any
-        ``raw_input`` with any resolvable dict(s) replaced by parsed subtype
-        instances. Non-dict input, and dicts with no ``@type``/``type`` key, pass
-        through unchanged.
+        A dict with a resolvable ``@type``/``type`` is replaced by a parsed subtype
+        instance. A list is replaced by a new list with each item resolved the same
+        way. Any other input, and dicts with no ``@type``/``type`` key, pass through
+        unchanged.
 
     Raises
     ------
@@ -252,7 +267,7 @@ def _discriminate_value(raw_input: Any, annotation: Any) -> Any:
         ``annotation``.
     """
     # this inline call makes this function call part of the recursion, but since this
-    # function is cashed, this should be cheap
+    # function is cached, this should be cheap
     annotated_schema_types = _collect_annotated_schema_types(annotation)
     if isinstance(raw_input, list):
         return [_discriminate_value(item, annotation) for item in raw_input]
@@ -284,15 +299,15 @@ def _collect_annotated_schema_types(type_annotation: Any) -> set[type]:
     subclassing from SchemaOrgBase is accepted, independent of the fact, whether it is
     an actual representation of a schema.org type or a custom addition.
 
-    This function is cashed (memoized) because it is called many times with exactly the
-    same input and thus cashing saves a lot of redundant computation. The schema.org
+    This function is cached (memoized) because it is called many times with exactly the
+    same input and thus caching saves a lot of redundant computation. The schema.org
     models share many same type annotations, which would have to be recomputed during
     each instantiation of a model.
 
     Parameters
     ----------
     type_annotation : Any
-        A resolved (non-string) type annotation for a single pydantic model field —
+        A resolved (non-string) type annotation for a single Pydantic model field —
         e.g. a class, a ``list``/``set``/``tuple`` generic alias, or a union.
 
     Returns
@@ -327,7 +342,7 @@ def _is_wrapped(type_annotation: Any) -> bool:
     Parameters
     ----------
     type_annotation : Any
-        A resolved (non-string) type annotation for a single pydantic model field —
+        A resolved (non-string) type annotation for a single Pydantic model field —
         e.g. a class, a ``list``/``set``/``tuple`` generic alias, or a union.
 
     Returns
@@ -355,13 +370,13 @@ def validate_strict(model: object) -> None:
     ----------
     model : object
         The schema.org model to validate. Lists are walked element-wise and properties
-        which are not pydantic models are skipped.
+        which are not Pydantic models are skipped.
 
     Raises
     ------
     ValueError
         If the model or any nested model carries fields outside its schema.org
-        definition as implemented in the pydantic models.
+        definition as implemented in the Pydantic models.
     """
     if isinstance(model, list):
         for item in model:
@@ -702,13 +717,13 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         "",
         inspect.getsource(SchemaOrgBase),
         "",
-        inspect.getsource(validate_strict),
-        "",
-        inspect.getsource(_is_wrapped),
+        inspect.getsource(_discriminate_value),
         "",
         inspect.getsource(_collect_annotated_schema_types),
         "",
-        inspect.getsource(_discriminate_value),
+        inspect.getsource(_is_wrapped),
+        "",
+        inspect.getsource(validate_strict),
         "",
     ]
 
