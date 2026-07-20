@@ -39,6 +39,7 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from keyword import iskeyword
 from pathlib import Path
+from types import UnionType
 from typing import Any, TypedDict, Union, get_args, get_origin
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
@@ -101,19 +102,32 @@ _SCHEMA_TYPE_REGISTRY: dict[str, type] = {}
 
 class SchemaOrgBase(BaseModel):
     """
-    Base class for all schema.org Pydantic models.
+    Base class for all schema.org based Pydantic models.
 
-    Provides the two fields common to all JSON-LD nodes and configures
-    Pydantic to accept both Python attribute names and JSON-LD @-prefixed
-    aliases interchangeably.
-    Defers build until first model validation to massively reduce run
-    time as most models are not used and ensures that each new
-    assignment is also validated.
-    ``polymorphic_serialization`` is required because a field typed as a bare
-    schema.org class (e.g. ``Thing``) holding a subtype instance (e.g. ``Product``,
-    resolved by ``discriminate_typed_fields``) would otherwise serialize using the
-    declared class's fields only, silently dropping subtype-only fields like
-    ``category`` — see ``tests/schema/test_polymorphic_serialization.py``.
+    Provides the fields common to all JSON-LD nodes (``@context``, ``@type``,
+    ``@id``, ``additionalProperty``) and registers every subclass in
+    ``_SCHEMA_TYPE_REGISTRY`` as it is defined (see ``__init_subclass__``). That
+    registration also covers project-specific ``PropertyValue`` subtypes such as
+    ``Orcid`` and ``DOI`` in ``custom_models.py``.
+
+    Notes
+    -----
+    Each ``model_config`` setting serves a distinct purpose:
+
+    - ``extra="allow"`` keeps unknown fields in ``model_extra`` instead of
+      rejecting them, so source properties outside the schema.org definition
+      survive (``validate_strict`` opts back into strict checking).
+    - ``populate_by_name`` accepts both Python attribute names and the JSON-LD
+      ``@``-prefixed aliases interchangeably.
+    - ``defer_build`` postpones schema build until first validation, massively
+      reducing run time since most models are never used.
+    - ``validate_assignment`` re-validates each attribute on assignment.
+    - ``polymorphic_serialization`` is required because a field typed as a bare
+      schema.org class (e.g. ``Thing``) holding a subtype instance (e.g.
+      ``Product``, resolved by ``discriminate_typed_fields``) would otherwise
+      serialize using the declared class's fields only, silently dropping
+      subtype-only fields like ``category`` — see
+      ``tests/schema/test_polymorphic_serialization.py``.
     """
 
     model_config = ConfigDict(
@@ -136,11 +150,17 @@ class SchemaOrgBase(BaseModel):
     )
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Register every subclass in ``_SCHEMA_TYPE_REGISTRY`` as it is defined.
+        """Register every subclass in ``_SCHEMA_TYPE_REGISTRY`` as it is built.
 
-        This is a plain Python hook that is also used by Pydantic, so we do the
-        ``super()`` call to not interfere with pydantic. This covers subclasses
-        defined after this module too (e.g. ``custom_models.py``'s ``Orcid``/``DOI``).
+        This hook is called by Python at class-creation time (i.e. the instantiation of
+        the metaclass for classes).
+        As soon as a SchemaOrgBase subclass is built (e.g. during an import), this hook
+        is called and each subclass is registering itself, independent of where it is
+        defined. In this manner, the subclasses defined outside of this module (e.g.
+        ``custom_models.py``'s ``Orcid``/``DOI``) are registered as well after importing
+        these modules.
+        This hook is also used by Pydantic, so we do the ``super()`` call to not
+        interfere with pydantic.
         """
         super().__init_subclass__(**kwargs)
         _SCHEMA_TYPE_REGISTRY[cls.__name__] = cls
@@ -148,15 +168,39 @@ class SchemaOrgBase(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def discriminate_typed_fields(cls, data: Any) -> Any:
-        """
-        Resolve ``@type``-tagged dict fields to their declared subtype before parsing.
+        """Discriminate pydantic model fields by the @type/type values from input data.
 
-        A field typed as a bare schema.org class (e.g. ``Thing``) otherwise accepts
-        any dict regardless of its ``@type``. For each field whose annotation names a
-        schema.org class, looks the value's ``@type``/``type`` up in
-        ``_SCHEMA_TYPE_REGISTRY`` and parses it as that subtype instead; raises if
-        ``@type`` is unregistered or not actually a subtype of the field's declared
-        class.
+        This method looks into pydantic input data (e.g. a dictionary containing
+        key-value pairs that map to the properties and values of a schema.org object)
+        and attempts to discover if any keys in that dictionary map to values that are,
+        themselves, dictionaries that contain a type (@type/type) key. Both spellings
+        are supported. When found, this nested dictionary is converted into an instance
+        of a pydantic class corresponding to the name of the type (e.g. Product). Thus,
+        the key in the top level dictionary (e.g. instrument) no longer maps to a nested
+        dictionary as a value, but to an instance of a pydantic class. Since pydantic
+        does not re-validate already built models, this replaces pydantic's default type
+        discrimination.
+        This is necessary since pydantic fails to correctly discriminate child types
+        for complex type annotations containing unions, as it is the case with the
+        schema.org models. In this manner we can ensure that e.g. in the "Action" model
+        the instrument property (which is annotated as "Thing") is built correctly as
+        "Product" (which is a subclass of "Thing") if so declared in the input.
+        Otherwise, the instrument would be built as an instance of "Thing" with
+        additional properties and a value of "Product" for type.
+
+        Parameters
+        ----------
+        cls :
+
+        data : Any
+            Raw input which is often a dict[str, Any] but could also be an instance of
+            the model itself or anything else since you can pass arbitrary objects into model_validate
+
+        Returns
+        -------
+        data : Any
+            The possibly modified input from which the pydantic model will be built.
+
         """
         if not isinstance(data, dict):
             return data
@@ -168,99 +212,156 @@ class SchemaOrgBase(BaseModel):
                 key = field_info.alias
             else:
                 continue
-            base_classes = _referenced_subtypes(field_info.annotation)
-            if base_classes:
-                data[key] = _discriminate_value(
-                    data[key], base_classes, _SCHEMA_TYPE_REGISTRY
-                )
+            data[key] = _discriminate_value(data[key], field_info.annotation)
         return data
 
 
-@functools.lru_cache(maxsize=None)
-def _referenced_subtypes(annotation: Any) -> set[type]:
+def _discriminate_value(raw_input: Any, annotation: Any) -> Any:
     """
-    Return the ``SchemaOrgBase`` subclasses referenced in a field annotation.
+    Resolve the field type using ``@type/type`` value from the input if available.
 
-    Recurses through ``Union``/``X | Y`` and ``list``/``set``/``tuple`` wrappers.
-    Memoized: the same annotation object is checked once per validated instance of
-    every class carrying that field.
+    If the input specifies its own model type via its ``@type/type`` key, it is checked
+    that this specified model is a) a registered schema model (i.e. a member of
+    _SCHEMA_TYPE_REGISTRY) and b) a child class of one of the model types specified in
+    the corresponding field annotation (``annotation``). If this is the case, it builds
+    a validated model of the specified type and returns it. In this manner, pydantic
+    will skip validation for this property of the owning model.
+    Nested "typed" dicts and lists as input are resolved recursively.
 
     Parameters
     ----------
+    raw_input : Any
+        The raw, unvalidated data assigned to a field — a dict, a list, or anything
+        else.
     annotation : Any
-        A resolved (non-string) field type annotation.
-
-    Returns
-    -------
-    set[type]
-        The schema.org classes referenced in ``annotation``, possibly empty.
-    """
-    origin = get_origin(annotation)
-    bases: set[type] = set()
-    if _is_union(origin) or origin in (list, set, tuple):
-        for arg in get_args(annotation):
-            bases |= _referenced_subtypes(arg)
-    elif isinstance(annotation, type) and issubclass(annotation, SchemaOrgBase):
-        bases.add(annotation)
-    return bases
-
-
-def _is_union(origin: Any) -> bool:
-    """Return whether a ``get_origin()`` result is a union — either ``Union[X, Y]`` or ``X | Y``.
-
-    The two spellings produce different origins (``typing.Union`` vs. ``types.UnionType``),
-    so both must be checked.
-    """
-    return origin is Union or getattr(origin, "__name__", "") == "UnionType"
-
-
-def _discriminate_value(
-    value: Any, base_classes: set[type], registry: dict[str, type]
-) -> Any:
-    """
-    Resolve a raw field value's ``@type``-tagged dict(s) to a registered subtype.
-
-    Parameters
-    ----------
-    value : Any
-        The raw value assigned to a field — a dict, a list, or anything else.
-    base_classes : set[type]
-        The schema.org classes declared for this field (from ``_referenced_subtypes``).
-    registry : dict[str, type]
-        Maps schema.org type names to their Pydantic model classes.
+        The field's resolved (non-string) type annotation, passed to
+        ``_collect_annotated_schema_types`` to determine the candidate subtypes.
 
     Returns
     -------
     Any
-        ``value`` with any resolvable dict(s) replaced by parsed subtype instances.
-        Non-dict values, and dicts with no ``@type``/``type`` key, pass through
-        unchanged.
+        ``raw_input`` with any resolvable dict(s) replaced by parsed subtype
+        instances. Non-dict input, and dicts with no ``@type``/``type`` key, pass
+        through unchanged.
 
     Raises
     ------
     ValueError
-        If ``@type``/``type`` names something not in ``registry``, or a registered
-        type that is not a subtype of any of ``base_classes``.
+        If ``@type``/``type`` names a type not in ``_SCHEMA_TYPE_REGISTRY``, or a
+        registered type that is not a subtype of any of the types referenced by
+        ``annotation``.
     """
-    if isinstance(value, list):
-        return [_discriminate_value(item, base_classes, registry) for item in value]
-    if isinstance(value, dict) and base_classes:
-        type_name = value.get("@type") or value.get("type")
+    # this inline call makes this function call part of the recursion, but since this
+    # function is cashed, this should be cheap
+    annotated_schema_types = _collect_annotated_schema_types(annotation)
+    if isinstance(raw_input, list):
+        return [_discriminate_value(item, annotation) for item in raw_input]
+    # just return the raw input for non-dict (str, float, class) values and no
+    # annotated model
+    if isinstance(raw_input, dict) and annotated_schema_types:
+        type_name = raw_input.get("@type") or raw_input.get("type")
         if type_name is not None:
-            cls = registry.get(type_name)
-            if cls is None or not any(issubclass(cls, base) for base in base_classes):
-                declared = ", ".join(sorted(base.__name__ for base in base_classes))
+            cls = _SCHEMA_TYPE_REGISTRY.get(type_name)
+            if cls is None or not any(
+                issubclass(cls, schema_type) for schema_type in annotated_schema_types
+            ):
+                declared = ", ".join(
+                    sorted(
+                        schema_type.__name__ for schema_type in annotated_schema_types
+                    )
+                )
                 raise ValueError(f"{type_name!r} is not a known subtype of {declared}")
-            return cls.model_validate(value)
-    return value
+            return cls.model_validate(raw_input)
+    return raw_input
 
 
-def validate_strict(model) -> None:
-    """Raise if a parsed model — or any nested model — has fields not in the schema.
+@functools.lru_cache(maxsize=None)
+def _collect_annotated_schema_types(type_annotation: Any) -> set[type]:
+    """Collect all ``SchemaOrgBase`` subclasses contained in the type annotation.
 
-    Models parse with ``extra="allow"``, which keeps unknown fields in ``model_extra``
-    instead of rejecting them. This walks the parsed object and raises on the first
-    offender, at any depth.
+    If the type annotation is a ``Union``/``X | Y`` or ``list``/``set``/``tuple`` it
+    recursively searches for the SchemaOrgBase subclasses. Note that any class
+    subclassing from SchemaOrgBase is accepted, independent of the fact, whether it is
+    an actual representation of a schema.org type or a custom addition.
+
+    This function is cashed (memoized) because it is called many times with exactly the
+    same input and thus cashing saves a lot of redundant computation. The schema.org
+    models share many same type annotations, which would have to be recomputed during
+    each instantiation of a model.
+
+    Parameters
+    ----------
+    type_annotation : Any
+        A resolved (non-string) type annotation for a single pydantic model field —
+        e.g. a class, a ``list``/``set``/``tuple`` generic alias, or a union.
+
+    Returns
+    -------
+    set[type]
+        The SchemaOrgBase child classes referenced in ``type_annotation``,
+        possibly empty.
+
+    Notes
+    -----
+    ``lru_cache`` returns the same ``set`` object on every call and not a copy,
+    so callers must not mutate the returned set.
+    """
+    annotated_schema_types: set[type] = set()
+    if _is_wrapped(type_annotation):
+        for arg in get_args(type_annotation):
+            annotated_schema_types |= _collect_annotated_schema_types(arg)
+    # we need to check that type_annotation is a class to safely call issubclass
+    elif isinstance(type_annotation, type) and issubclass(
+        type_annotation, SchemaOrgBase
+    ):
+        annotated_schema_types.add(type_annotation)
+    return annotated_schema_types
+
+
+def _is_wrapped(type_annotation: Any) -> bool:
+    """Return whether ``type_annotation`` is a union or a ``list``/``set``/``tuple``.
+
+    Both wrap other types in their ``get_args()`` rather than being a class
+    themselves, so the caller must unwrap them first to access the types.
+
+    Parameters
+    ----------
+    type_annotation : Any
+        A resolved (non-string) type annotation for a single pydantic model field —
+        e.g. a class, a ``list``/``set``/``tuple`` generic alias, or a union.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``type_annotation`` is a union or a ``list``/``set``/``tuple``,
+        ``False`` otherwise.
+    """
+    type_origin = get_origin(type_annotation)
+    # Union is looked for twice, since it has two spellings with different origins
+    # (``typing.Union`` and ``types.UnionType``).
+    is_union = type_origin is Union or type_origin is UnionType
+    return is_union or type_origin in (list, set, tuple)
+
+
+def validate_strict(model: object) -> None:
+    """Raise if the schema.org model has additional, unspecified properties.
+
+    Schema.org models are configured with ``extra="allow"``, which keeps unknown fields
+    in ``model_extra`` instead of rejecting them. This function recursively checks that
+    the model and any nested models have no ``model_extra`` field, raising on the first
+    offender at any depth.
+
+    Parameters
+    ----------
+    model : object
+        The schema.org model to validate. Lists are walked element-wise and properties
+        which are not pydantic models are skipped.
+
+    Raises
+    ------
+    ValueError
+        If the model or any nested model carries fields outside its schema.org
+        definition as implemented in the pydantic models.
     """
     if isinstance(model, list):
         for item in model:
@@ -590,6 +691,7 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         "",
         "import functools",
         "from datetime import date, datetime, time, timedelta",
+        "from types import UnionType",
         "from typing import Any, Union, get_args, get_origin",
         "",
         "from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator",
@@ -602,9 +704,9 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         "",
         inspect.getsource(validate_strict),
         "",
-        inspect.getsource(_is_union),
+        inspect.getsource(_is_wrapped),
         "",
-        inspect.getsource(_referenced_subtypes),
+        inspect.getsource(_collect_annotated_schema_types),
         "",
         inspect.getsource(_discriminate_value),
         "",
