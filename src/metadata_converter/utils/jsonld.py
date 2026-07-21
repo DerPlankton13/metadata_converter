@@ -164,23 +164,40 @@ def is_schema_org_root(value: Any) -> bool:
     return after in ("", "/")
 
 
-def standardise_context(jsonld: dict) -> dict:
-    """Normalise `@context` to `{"@vocab": "https://schema.org/", ...}`.
+def inline_context_prefixes(jsonld: dict) -> dict:
+    """Normalise `@context` to `{"@vocab": "https://schema.org/"}`.
 
-    Accepts a missing context, a bare schema.org string (in any host/scheme/case
-    variant), or a list of a bare schema.org string followed by one or more dicts
-    of extra prefix mappings (the shape BioSamples emits). Any other shape —
-    including a per-term schema.org IRI, an unrelated string, or a dict not
-    already in canonical vocab form — is left untouched and logged as an error,
-    since there is no safe way to infer intent from it.
+    This function resolves any non-schema.org prefixes to prevent, that any meaning is
+    lost by compacting the context to only schema.org. As e.g. the biosamples input
+    assumes that the context expands the values as well (which is not what JSON-LD does,
+    except the values are marked specifically as an @id), this function remedies this
+    by expanding any CURIE found to its full IRI (via `expand_curies_in_keys_and_values`).
+
+    This function accepts 3 context shapes: a missing context, a bare schema.org string
+    (in any host/scheme/case variant), or a list of a bare schema.org string followed
+    by one or more dicts of additional prefix mappings (the shape BioSamples emits).
+    Any other shape — including a per-term schema.org IRI, an unrelated string, or a
+    dict not already in canonical vocab form — is left untouched and logged as an
+    error. This is a deliberate cut, as no other context shapes are expected for our
+    purposes, and we do not dare to handle other cases generically.
+
+    Parameters
+    ----------
+    jsonld : dict
+        The document whose `@context` should be normalised.
+
+    Returns
+    -------
+    dict
+        A new document with `@context` normalised, or — for an unsupported shape —
+        `jsonld` itself, left untouched and logged.
     """
     current_context = jsonld.get("@context")
     if current_context is None or current_context == SCHEMA_ORG_DEFAULT_CONTEXT:
-        jsonld["@context"] = dict(SCHEMA_ORG_DEFAULT_CONTEXT)
-        return jsonld
-    if isinstance(current_context, str) and is_schema_org_root(current_context):
-        jsonld["@context"] = dict(SCHEMA_ORG_DEFAULT_CONTEXT)
-        return jsonld
+        return {**jsonld, "@context": dict(SCHEMA_ORG_DEFAULT_CONTEXT)}
+    if is_schema_org_root(current_context):
+        return {**jsonld, "@context": dict(SCHEMA_ORG_DEFAULT_CONTEXT)}
+    # the biosamples shape: ["http://schema.org", {"OBI": ..., "biosample": ...}]
     if (
         isinstance(current_context, list)
         and len(current_context) > 1
