@@ -97,9 +97,7 @@ def find_schema_namespace(context: list | dict | str | None) -> str | None:
         return context if is_schema_org_root(context) else None
     matches = research(
         {"@context": context},
-        query=lambda path, key, value: (
-            isinstance(value, str) and is_schema_org_root(value)
-        ),
+        query=lambda path, key, value: is_schema_org_root(value),
     )
     return matches[0][1] if matches else None
 
@@ -137,8 +135,28 @@ def in_property(prop: Any, value: Any) -> bool:
 SCHEMA_ORG_DEFAULT_CONTEXT = {"@vocab": "https://schema.org/"}
 
 
-def is_schema_org_root(value: str) -> bool:
-    """Check whether `value` refers to schema.org's root (not a per-term IRI)."""
+def is_schema_org_root(value: Any) -> bool:
+    """Check whether `value` refers to schema.org's root but not to a property.
+
+    "http://schema.org" would return true, but "https://schema.org/Person" would return
+    False.
+    In general non-string values always return False, so callers do not need an
+    `isinstance` guard before calling this function.
+
+    Parameters
+    ----------
+    value : Any
+        The candidate to check.
+
+    Returns
+    -------
+    bool
+        True if `value` is a string naming schema.org's bare root IRI (in any
+        host/scheme/case variant, e.g. "schema.org", "http://schema.org", or
+        "HTTPS://SCHEMA.ORG/"), False otherwise.
+    """
+    if not isinstance(value, str):
+        return False
     lowered = value.lower()
     if "schema.org" not in lowered:
         return False
@@ -165,8 +183,7 @@ def standardise_context(jsonld: dict) -> dict:
         return jsonld
     if (
         isinstance(current_context, list)
-        and len(current_context) >= 2
-        and isinstance(current_context[0], str)
+        and len(current_context) > 1
         and is_schema_org_root(current_context[0])
         and all(isinstance(entry, dict) for entry in current_context[1:])
     ):
