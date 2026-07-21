@@ -12,10 +12,9 @@ from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.jsonld import (
-    find_schema_namespace,
     inline_context_prefixes,
-    remove_base_namespace,
     standardise_id,
+    strip_schema_org_namespace,
 )
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
@@ -75,13 +74,12 @@ def load_api_data(config: ApiFetchingConfig) -> None:
 
         # fix schema.id now, so it reflects the real final id for provenance
         jsonld = standardise_id(jsonld)
-        # removing the base namespace strips any schema.org prefixes
-        # so pydantic's type discrimination works
-        namespace = find_schema_namespace(jsonld.get("@context"))
-        if namespace is not None:
-            jsonld = remove_base_namespace(jsonld, namespace)
+
         # resolve any CURIE's and use the standard context, to fulfill the load contract
         jsonld = inline_context_prefixes(jsonld)
+        # remove the schema.org prefix from any value to ensure that the type entries
+        # are clean so the type discrimination works
+        jsonld = strip_schema_org_namespace(jsonld)
 
         try:
             schema = get_schema(jsonld.get("@type"))(**jsonld)
