@@ -13,8 +13,8 @@ from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.jsonld import (
     find_schema_namespace,
+    inline_context_prefixes,
     remove_base_namespace,
-    standardise_context,
     standardise_id,
 )
 from metadata_converter.utils.log_setup import log_validation_error
@@ -80,8 +80,8 @@ def load_api_data(config: ApiFetchingConfig) -> None:
         namespace = find_schema_namespace(jsonld.get("@context"))
         if namespace is not None:
             jsonld = remove_base_namespace(jsonld, namespace)
-        # also standardise the context, so we fulfill the load contract
-        jsonld = standardise_context(jsonld)
+        # resolve any CURIE's and use the standard context, to fulfill the load contract
+        jsonld = inline_context_prefixes(jsonld)
 
         try:
             schema = get_schema(jsonld.get("@type"))(**jsonld)

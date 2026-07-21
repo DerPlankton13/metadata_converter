@@ -30,8 +30,8 @@ from metadata_converter.utils.http import make_session
 from metadata_converter.utils.jsonld import (
     expand_curie,
     find_schema_namespace,
+    inline_context_prefixes,
     remove_base_namespace,
-    standardise_context,
 )
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
@@ -190,8 +190,8 @@ def load_biosamples(config: BiosamplesConfig):
         namespace = find_schema_namespace(sample.get("@context"))
         if namespace is not None:
             sample = remove_base_namespace(sample, namespace)
-        # also standardise the context, so we fulfill the load contract
-        sample = standardise_context(sample)
+        # resolve any CURIE's and use the standard context, to fulfill the load contract
+        sample = inline_context_prefixes(sample)
 
         try:
             schema = get_schema(sample.get("@type"))(**sample)
