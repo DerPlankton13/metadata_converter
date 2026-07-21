@@ -79,8 +79,11 @@ Do not jump straight to implementation on a multi-part task.
 Docstrings use NumPy style. Simple functions get a single-line docstring; only use the full NumPy sections (Parameters,
 Returns, etc.) when the function is non-trivial.
 
-For Pydantic models, document fields with `Field(description=...)` instead of a class-level NumPy Parameters section —
-the fields already express type and default declaratively, so a class docstring should be at most one line.
+For Pydantic models, document individual fields with `Field(description=...)` instead of a class-level NumPy Parameters
+section — the fields already express type and default declaratively, so per-field documentation belongs on the field,
+not in the class docstring. This does not cap the class docstring at one line: legitimate class-level rationale (design
+decisions, why a `model_config` setting is set the way it is, cross-references to related code or tests) still belongs
+in the class docstring and may use the full NumPy sections.
 
 A leading underscore on a function, method, or variable name is a strong cultural signal in Python: "do not import or
 reference this from outside the module/class." Plain names are the default — even for module-internal helpers. Reserve
