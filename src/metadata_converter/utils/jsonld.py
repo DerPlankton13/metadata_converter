@@ -25,6 +25,46 @@ def expand_curie(curie: str, context: list | dict) -> str:
     return matches[0][1] + local
 
 
+def expand_curies_in_keys_and_values(jsonld: dict, prefixes: dict[str, str]) -> dict:
+    """Replace every 'prefix:local' pattern in all keys and values with the full IRI.
+
+    Only prefixes present in `prefixes` are ever touched — no attempt is made to detect
+    a CURIE by shape alone. This means an unrelated colon-containing string is left
+    untouched unless its text before the first colon happens to be a registered prefix.
+    This function resolves both dict keys and arbitrary string values, wherever they
+    occur in the document, as opposed to JSON-LD expansion, which would only expand keys
+    and specially tagged values.
+
+    Parameters
+    ----------
+    jsonld : dict
+        The document to sweep.
+    prefixes : dict[str, str]
+        Maps a CURIE prefix to its absolute IRI, e.g.
+        ``{"biosample": "http://identifiers.org/biosample/"}``.
+
+    Returns
+    -------
+    dict
+        A new document (the input `jsonld` is not mutated) with every key and value
+        that originally contained a 'prefix:local' pattern having been replaced by the
+        concatenated full IRI for all prefix specified in `prefixes`.
+    """
+
+    def expand(value):
+        if not isinstance(value, str):
+            return value
+        prefix, sep, local = value.partition(":")
+        if not sep or prefix not in prefixes:
+            return value
+        return prefixes[prefix] + local
+
+    def visit(path, key, value):
+        return expand(key), expand(value)
+
+    return remap(jsonld, visit=visit)
+
+
 def remove_base_namespace(jsonld: dict, base_namespace: str) -> dict:
     """Removes `base_namespace` from any string value.
 
