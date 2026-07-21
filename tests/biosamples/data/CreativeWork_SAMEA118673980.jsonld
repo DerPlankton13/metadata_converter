@@ -1,11 +1,10 @@
 {
   "@context": {
-    "@vocab": "https://schema.org/",
-    "biosample": "http://identifiers.org/biosample/"
+    "@vocab": "https://schema.org/"
   },
   "@type": "CreativeWork",
   "@id": "CreativeWork_SAMEA118673980.jsonld",
-  "identifier": "biosample:SAMEA118673980",
+  "identifier": "http://identifiers.org/biosample/SAMEA118673980",
   "dateCreated": "2025-07-07T07:36:54.655Z",
   "dateModified": "2025-07-07T07:36:54.658Z",
   "dateReleased": "2025-07-07T00:00:00Z",
@@ -18,7 +17,7 @@
       "http://purl.obolibrary.org/obo/OBI_0000747"
     ],
     "identifier": [
-      "biosample:SAMEA118673980"
+      "http://identifiers.org/biosample/SAMEA118673980"
     ],
     "name": "SBR_B5D_471",
     "url": "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980",

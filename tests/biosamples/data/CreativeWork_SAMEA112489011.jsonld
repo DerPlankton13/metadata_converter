@@ -1,11 +1,10 @@
 {
   "@context": {
-    "@vocab": "https://schema.org/",
-    "biosample": "http://identifiers.org/biosample/"
+    "@vocab": "https://schema.org/"
   },
   "@type": "CreativeWork",
   "@id": "CreativeWork_SAMEA112489011.jsonld",
-  "identifier": "biosample:SAMEA112489011",
+  "identifier": "http://identifiers.org/biosample/SAMEA112489011",
   "dateCreated": "2023-02-08T14:32:35.199Z",
   "dateModified": "2025-08-14T17:15:59.916Z",
   "dateReleased": "2024-09-13T08:00:00Z",
@@ -18,7 +17,7 @@
       "http://purl.obolibrary.org/obo/OBI_0000747"
     ],
     "identifier": [
-      "biosample:SAMEA112489011"
+      "http://identifiers.org/biosample/SAMEA112489011"
     ],
     "name": "sample_2023-04-13T17:21:00Z_TREC_002-01-10-00_shallow-water_S320-S_R01_SAMEA112489011",
     "url": "https://www.ebi.ac.uk/biosamples/samples/SAMEA112489011",
