@@ -6,7 +6,6 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
-from boltons.iterutils import remap
 from pydantic import ValidationError
 from tqdm import tqdm
 
@@ -177,8 +176,6 @@ def load_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
-        # expand obi terms to avoid complications between different jsonld versions
-        sample = fix_obi(sample)
         # fix the types to have validating schema.org compliant models
         sample["@type"] = "CreativeWork"
         sample["mainEntity"]["additionalType"] = sample["mainEntity"]["@type"]
@@ -295,26 +292,3 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
         )
     else:
         logger.info("Biosamples uplift complete. Output: %s", config.output_dir)
-
-
-def fix_obi(fused: dict) -> dict:
-    """Expand OBI compact IRIs to full https IRIs and drop the OBI context entry.
-
-    JSON-LD 1.1 only auto-expands a compact IRI like "OBI:0000747" when the
-    prefix's mapped IRI ends in a URI gen-delim character (e.g. ":", "/"); OBI's
-    mapped IRI ends in "_", so it no longer expands. Rewrite it to the full IRI
-    instead, to make the output JSON-LD version independent.
-    """
-    try:
-        obi_iri = fused["@context"][1].pop("OBI", None)
-    except (KeyError, IndexError, TypeError):
-        obi_iri = None
-    if obi_iri is None:
-        return fused
-
-    def replace_obi(path, key, value):
-        if isinstance(value, str) and value.startswith("OBI:"):
-            return key, obi_iri + value.removeprefix("OBI:")
-        return key, value
-
-    return remap(fused, visit=replace_obi)

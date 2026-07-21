@@ -187,10 +187,11 @@ def standardise_context(jsonld: dict) -> dict:
         and is_schema_org_root(current_context[0])
         and all(isinstance(entry, dict) for entry in current_context[1:])
     ):
-        merged = dict(SCHEMA_ORG_DEFAULT_CONTEXT)
+        prefixes: dict[str, str] = {}
         for entry in current_context[1:]:
-            merged.update(entry)
-        jsonld["@context"] = merged
-        return jsonld
+            prefixes.update(entry)
+        expanded = expand_curies_in_keys_and_values(jsonld, prefixes)
+        expanded["@context"] = dict(SCHEMA_ORG_DEFAULT_CONTEXT)
+        return expanded
     logger.error("Unsupported @context value: %r", current_context)
     return jsonld
