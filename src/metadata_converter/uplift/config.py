@@ -151,6 +151,12 @@ class GenericUpliftConfig(BaseModel):
         "directories is an error."
     )
     output_dir: Path
+    reference_dirs: Path | list[Path] | None = Field(
+        default=None,
+        description="Directories read only for link-candidate lookup (e.g. an "
+        "already-uplifted sibling source). Entities found here are available to "
+        "LinkApplier but are never written to output_dir or provenance_dir.",
+    )
     provenance_dir: Path | None = None
     links: list[LinkRule] = Field(default_factory=list)
     enrichments: list[EnrichmentRule] = Field(default_factory=list)

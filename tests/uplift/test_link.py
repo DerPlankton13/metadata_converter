@@ -217,6 +217,22 @@ def test_link_invalid_assignment_skips_entity(caplog):
     assert "assignment failed" in caplog.text
 
 
+def test_link_reference_store_provides_candidates_without_mutating_store():
+    store = EntityStore()
+    store.by_type["Action"] = [Action(id="Action_1.jsonld", identifier="p1")]
+    reference_store = EntityStore()
+    reference_store.by_type["Product"] = [Product(id="Product_1.jsonld", identifier="p1")]
+
+    LinkApplier(store, reference_store).apply(LinkRule(
+        on_type="Action", target_property="object",
+        match_value="identifier", in_type="Product", in_property="identifier",
+    ))
+
+    [action] = store.of_type("Action")
+    assert action.object == Product(id="Product_1.jsonld")
+    assert store.of_type("Product") == []
+
+
 @pytest.mark.parametrize("flag_value", [0, False])
 def test_falsy_flag_values_leave_creator_unset(loaded_base, config_factory, flag_value):
     alice = load_jsonld(loaded_base / "Person_alice.jsonld")

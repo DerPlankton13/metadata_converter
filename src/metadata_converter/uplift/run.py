@@ -24,7 +24,9 @@ def run_uplift(config: GenericUpliftConfig) -> None:
     Phases, in order:
 
     1. **Load** — read every ``*.jsonld`` file from ``config.input_dir`` and
-       group entities by ``@type`` into an ``EntityStore``.
+       group entities by ``@type`` into an ``EntityStore``. If ``config.reference_dirs``
+       is set, also load it into a separate, read-only ``EntityStore`` that supplies
+       extra link candidates but is never written or included in provenance.
     2. **Link** — apply every ``LinkRule`` in ``config.links``.
     3. **Enrich** — apply every ``EnrichmentRule`` in ``config.enrichments``.
     4. **Add** — apply every ``AdditionRule`` in ``config.additions``.
@@ -35,7 +37,12 @@ def run_uplift(config: GenericUpliftConfig) -> None:
     """
     logger.info("Starting uplift from %s", config.input_dir)
     store = EntityStore.load(config.input_dir)
-    LinkApplier(store).apply_all(config.links)
+    reference_store = (
+        EntityStore.load(config.reference_dirs)
+        if config.reference_dirs is not None
+        else None
+    )
+    LinkApplier(store, reference_store).apply_all(config.links)
     EnrichmentApplier(store).apply_all(config.enrichments)
     AddApplier(store).apply_all(config.additions)
     RenameApplier(store).apply_all(config.renames)

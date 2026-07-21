@@ -42,8 +42,11 @@ class LinkApplier:
     than crashing the run.
     """
 
-    def __init__(self, store: EntityStore) -> None:
+    def __init__(
+        self, store: EntityStore, reference_store: EntityStore | None = None
+    ) -> None:
         self.store = store
+        self.reference_store = reference_store
 
     def apply_all(self, rules: list[LinkRule]) -> None:
         for rule in rules:
@@ -121,9 +124,16 @@ class LinkApplier:
     def _build_candidates_by_value(
         self, rule: LinkRule
     ) -> dict[str, list[SchemaOrgBase]]:
-        """Index candidates of ``rule.in_type`` by their normalized lookup value."""
+        """Index candidates of ``rule.in_type`` by their normalized lookup value.
+
+        Candidates come from both ``self.store`` and ``self.reference_store`` (if
+        set) — the reference store is read for lookups only and never mutated.
+        """
         candidates_by_value: dict[str, list[SchemaOrgBase]] = {}
-        for candidate in self.store.of_type(rule.in_type):
+        candidates = list(self.store.of_type(rule.in_type))
+        if self.reference_store is not None:
+            candidates += self.reference_store.of_type(rule.in_type)
+        for candidate in candidates:
             if rule.in_additional_property:
                 values = find_additional_property(
                     candidate, rule.in_additional_property
