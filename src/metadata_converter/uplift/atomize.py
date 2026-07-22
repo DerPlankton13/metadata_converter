@@ -4,8 +4,8 @@ A "blank node" in JSON-LD is a typed property which does not have its own @id. I
  pydantic models this corresponds to a nested ``SchemaOrgBase`` instance with no
 ``@id`` of its own. Atomizing replaces the nested model with a bare reference
 (mirroring the ref shape ``LinkApplier`` produces via ``target_cls(id=...)``) and
-returns it as a separate entity an ``@id`` built from its content hash. This hash is
-identical for identical content, independent of which models contain the nested model.
+returns it as a separate entity with an ``@id`` built from its content hash. This hash
+is identical for identical content, independent of which models contain the nested model.
 That determinism is what turns a mechanical "pull it out" into atomizing:
 content-identical blank nodes collapse onto one shared entity for all models in the
 graph gaining deduplication and cross-linking in the graph which was not present before
@@ -19,26 +19,19 @@ from metadata_converter.utils.hashing import hashed_id
 def atomize_blank_nodes(
     entity: SchemaOrgBase,
 ) -> tuple[SchemaOrgBase, list[SchemaOrgBase]]:
-    """Atomize every nested blank node reachable from `entity` into standalone entities.
+    """Atomize every blank node reachable from `entity` into standalone entities.
 
     Recurses bottom-up: a blank node's own nested blank children are atomized first, so
-    its content hash — and therefore its `@id` — is computed from its fully-resolved
+    its content hash — and therefore its `@id` — is computed from its fully-atomized
     form, the same shape it will eventually be serialised as. A nested node that already
     carries an `@id` is left untouched, together with its own nested content: it is
     already a standalone identity, not something to atomize further.
 
-    Newly atomized entities are collected into one dict, local to this call, shared by
-    every recursive step (`_rebuild_entity_with_references` / `_atomize_nodes_in_value` /
-    `_atomize_node`) and keyed by `@id`. Passing it down and mutating it in place —
-    rather than returning a list from every call and merging those lists back together
-    at each level — is what keeps the recursive helpers simple: they only ever need to
-    return the value they resolved, never a `(value, found_so_far)` pair.
-
     Parameters
     ----------
     entity : SchemaOrgBase
-        The entity to atomize. Never mutated; a new instance is returned whenever any
-        field changes.
+        The entity to atomize. Never mutated: the original `entity`, and everything
+        nested inside it, is left untouched.
 
     Returns
     -------
@@ -49,6 +42,7 @@ def atomize_blank_nodes(
         since the hash — and therefore the `@id` — is the same regardless of where they
         were nested.
     """
+    # collector for all atomized models, indexing via @id does the deduplication
     atomized: dict[str, SchemaOrgBase] = {}
     result = _rebuild_entity_with_references(entity, atomized)
     return result, list(atomized.values())
@@ -57,16 +51,15 @@ def atomize_blank_nodes(
 def _rebuild_entity_with_references(
     entity: SchemaOrgBase, atomized: dict[str, SchemaOrgBase]
 ) -> SchemaOrgBase:
-    """Rebuild `entity`, replacing each blank nested node with a reference where applicable.
+    """Rebuild `entity`, replacing each blank node with a reference where applicable.
 
     "Resolved" means: unchanged for a scalar, walked element-by-element for a list, and
     for a nested node either left as-is (already has an `@id`) or replaced by a bare
     reference to a newly atomized entity — see `_atomize_nodes_in_value` and
     `_atomize_node`. Not every field ends up as a reference: only the ones that held a
-    blank node do.
-    Iterating `entity` directly (rather than `type(entity).model_fields`) walks both
-    declared fields and any `extra="allow"` properties outside the modelled schema.org
-    vocabulary, so a blank node nested under either is atomized the same way.
+    blank node do. This covers any `extra="allow"` properties outside the modelled
+    schema.org vocabulary too, so a blank node nested under one of those is atomized the
+    same way as a declared field.
 
     Parameters
     ----------
@@ -116,6 +109,7 @@ def _atomize_nodes_in_value(
         return _atomize_node(value, atomized)
     if isinstance(value, list):
         return [_atomize_nodes_in_value(item, atomized) for item in value]
+    # this is the case where the recursion stops
     return value
 
 
@@ -148,8 +142,12 @@ def _atomize_node(
     if node.id is not None:
         return node
 
+    # if node contains no nested blank node, this just returns node
+    # otherwise this returns the node containing only references
     resolved = _rebuild_entity_with_references(node, atomized)
-    node_id = hashed_id(resolved.model_dump(by_alias=True, exclude_none=True))
+    node_id = hashed_id(
+        resolved.model_dump(by_alias=True, exclude_none=True, exclude={"context"})
+    )
     resolved = resolved.model_copy(update={"id": node_id})
     atomized.setdefault(node_id, resolved)
     return type(resolved)(id=node_id)
