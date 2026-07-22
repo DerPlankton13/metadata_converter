@@ -1,11 +1,14 @@
 """Tests for the pure ``atomize_blank_nodes`` transform in ``uplift/atomize.py``."""
 
+import pytest
+
 from metadata_converter.schema_org_models.schemaorg_models import (
     CreativeWork,
     Organization,
     Person,
 )
-from metadata_converter.uplift.atomize import atomize_blank_nodes
+from metadata_converter.uplift.atomize import AtomizeApplier, atomize_blank_nodes
+from metadata_converter.uplift.entity_store import EntityStore
 
 
 def test_atomize_blank_nodes_no_nested_schema_objects_returns_unchanged_and_empty_list():
@@ -148,3 +151,76 @@ def test_atomize_blank_nodes_does_not_mutate_input_entity():
 
     assert entity.author.id is None
     assert entity.author.name == "Jane Doe"
+
+
+# ---------------------------------------------------------------------------
+# AtomizeApplier.apply — wiring atomize_blank_nodes into the EntityStore
+# ---------------------------------------------------------------------------
+
+
+def test_atomize_applier_no_blank_nodes_leaves_store_unchanged():
+    store = EntityStore()
+    store.by_type["CreativeWork"] = [
+        CreativeWork(id="CreativeWork_1.jsonld", name="Sample dataset")
+    ]
+    store.by_type["Person"] = [Person(id="Person_existing.jsonld", name="Jane Doe")]
+
+    AtomizeApplier(store).apply()
+
+    assert store.of_type("CreativeWork") == [
+        CreativeWork(id="CreativeWork_1.jsonld", name="Sample dataset")
+    ]
+    assert store.of_type("Person") == [
+        Person(id="Person_existing.jsonld", name="Jane Doe")
+    ]
+    assert store.by_type.keys() == {"CreativeWork", "Person"}
+
+
+def test_atomize_applier_blank_node_extracted_into_new_type_bucket():
+    store = EntityStore()
+    store.by_type["CreativeWork"] = [
+        CreativeWork(id="CreativeWork_1.jsonld", author=Person(name="Jane Doe"))
+    ]
+
+    AtomizeApplier(store).apply()
+
+    [dataset] = store.of_type("CreativeWork")
+    assert dataset.id == "CreativeWork_1.jsonld"
+    assert dataset.author == Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld")
+    assert store.of_type("Person") == [
+        Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld", name="Jane Doe")
+    ]
+
+
+def test_atomize_applier_dedupes_identical_blank_content_across_entities():
+    store = EntityStore()
+    store.by_type["CreativeWork"] = [
+        CreativeWork(id="CreativeWork_1.jsonld", author=Person(name="Jane Doe")),
+        CreativeWork(id="CreativeWork_2.jsonld", author=Person(name="Jane Doe")),
+    ]
+
+    AtomizeApplier(store).apply()
+
+    [first, second] = store.of_type("CreativeWork")
+    assert first.id == "CreativeWork_1.jsonld"
+    assert second.id == "CreativeWork_2.jsonld"
+    assert first.author.id == "Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld"
+    assert second.author.id == "Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld"
+    assert store.of_type("Person") == [
+        Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld", name="Jane Doe")
+    ]
+
+
+def test_atomize_applier_id_collision_with_different_content_raises():
+    store = EntityStore()
+    store.by_type["Person"] = [
+        Person(
+            id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld", name="Already Loaded Version"
+        )
+    ]
+    store.by_type["CreativeWork"] = [
+        CreativeWork(id="CreativeWork_1.jsonld", author=Person(name="Jane Doe"))
+    ]
+
+    with pytest.raises(ValueError, match="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld"):
+        AtomizeApplier(store).apply()
