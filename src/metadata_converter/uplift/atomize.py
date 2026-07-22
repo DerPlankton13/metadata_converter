@@ -60,7 +60,9 @@ def _rebuild_entity_with_references(
     `_atomize_node`. Not every field ends up as a reference: only the ones that held a
     blank node do. This covers any `extra="allow"` properties outside the modelled
     schema.org vocabulary too, so a blank node nested under one of those is atomized the
-    same way as a declared field.
+    same way as a declared field. Note that if the extra property contains invalid types
+    (i.e. not a SchemaOrgBase subclass) it will stay a dict during Pydantics validation
+    and will thus not be atomized, but be kept as the typed dict it is. 
 
     Parameters
     ----------
