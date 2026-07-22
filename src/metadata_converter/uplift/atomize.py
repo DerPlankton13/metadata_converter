@@ -13,6 +13,7 @@ when each blank node property was directly embedded.
 """
 
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
+from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.utils.hashing import hashed_id
 
 
@@ -84,11 +85,11 @@ def _atomize_nodes_in_value(
 ) -> object:
     """Atomize any nested node(s) in one field value; pass anything else through unchanged.
 
-    Routes on `value`'s shape only — it makes no atomize-or-leave-alone decision itself,
-    that's `_atomize_node`'s job. A single nested node is handed to `_atomize_node`
-    directly; a list is walked element-by-element so every item gets the same treatment
-    regardless of whether the field is single- or multi-valued; anything else (a plain
-    scalar, the raw `@context` dict) passes through untouched.
+    Dispatches on `value`'s shape only: a single nested node goes to `_atomize_node`
+    directly, and a list is walked element-by-element so every item gets the same
+    treatment regardless of whether the field is single- or multi-valued. Anything
+    else — a plain scalar, the raw `@context` dict — passes through unchanged; that
+    passthrough case doubles as the base case ending the recursion.
 
     Parameters
     ----------
@@ -151,3 +152,65 @@ def _atomize_node(
     resolved = resolved.model_copy(update={"id": node_id})
     atomized.setdefault(node_id, resolved)
     return type(resolved)(id=node_id)
+
+
+class AtomizeApplier:
+    """Atomize every entity in an `EntityStore`, replacing its contents in place."""
+
+    def __init__(self, store: EntityStore) -> None:
+        self.store = store
+
+    def apply(self) -> None:
+        """Atomize every entity in the store and replace `store.by_type` with the result.
+
+        Runs `atomize_blank_nodes` over every entity currently in the store (a snapshot
+        taken up front, so rebuilding entities during the walk never affects what's still
+        to be processed), collecting every rebuilt top-level entity and every newly
+        atomized entity into one `@id`-keyed map, then writes that map back to the store,
+        regrouped by `@type`.
+
+        Raises
+        ------
+        ValueError
+            If two entities being merged into the store — top-level or newly atomized —
+            share an `@id` but have different content. A shared `@id` with matching
+            content is deduplicated silently instead.
+        """
+        final_by_id: dict[str, SchemaOrgBase] = {}
+        for entity in self.store.all_entities():
+            rebuilt, atoms = atomize_blank_nodes(entity)
+            self._register_atoms(final_by_id, [rebuilt, *atoms])
+
+        self.store.set_entities(list(final_by_id.values()))
+
+    @staticmethod
+    def _register_atoms(
+        final_by_id: dict[str, SchemaOrgBase], atoms: list[SchemaOrgBase]
+    ) -> None:
+        """Insert each of `atoms` under its `@id`, or raise on a genuine content mismatch.
+
+        Parameters
+        ----------
+        final_by_id : dict[str, SchemaOrgBase]
+            Accumulator of entities keyed by `@id`, built up across the whole store.
+            Mutated in place: gains an entry for each of `atoms` unless already present
+            with equal content.
+        atoms : list[SchemaOrgBase]
+            The entities to register: a rebuilt top-level entity together with every
+            newly atomized entity discovered in its tree.
+
+        Raises
+        ------
+        ValueError
+            If an `@id` in `atoms` is already present in `final_by_id` under different
+            content.
+        """
+        for atom in atoms:
+            existing = final_by_id.get(atom.id)
+            if existing is None:
+                final_by_id[atom.id] = atom
+            elif existing != atom:
+                raise ValueError(
+                    f"@id {atom.id!r} is claimed by two entities with different "
+                    "content during atomize."
+                )
