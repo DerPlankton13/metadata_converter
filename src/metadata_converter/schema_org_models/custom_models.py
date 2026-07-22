@@ -34,7 +34,7 @@ def search_pattern(value: str, pattern: re.Pattern[str], type: str) -> str:
 class Orcid(PropertyValue):
     name: str = "Open Researcher and Contributor ID"
     alternateName: str = "ORCID"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/orcid"
+    propertyID: AnyUrl = AnyUrl("https://registry.identifiers.org/registry/orcid")
 
     @model_validator(mode="before")
     @classmethod
@@ -57,7 +57,7 @@ class Orcid(PropertyValue):
 class ISSN(PropertyValue):
     name: str = "International Standard Serial Number"
     alternateName: str = "ISSN"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/issn"
+    propertyID: AnyUrl = AnyUrl("https://registry.identifiers.org/registry/issn")
 
     @model_validator(mode="before")
     @classmethod
@@ -71,7 +71,7 @@ class ISSN(PropertyValue):
 class ISBN(PropertyValue):
     name: str = "International Standard Book Number"
     alternateName: str = "ISBN"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/isbn"
+    propertyID: AnyUrl = AnyUrl("https://registry.identifiers.org/registry/isbn")
 
     @model_validator(mode="before")
     @classmethod
@@ -85,7 +85,7 @@ class ISBN(PropertyValue):
 class DOI(PropertyValue):
     name: str = "Digital Object Identifier"
     alternateName: str = "DOI"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/doi"
+    propertyID: AnyUrl = AnyUrl("https://registry.identifiers.org/registry/doi")
 
     @model_validator(mode="before")
     @classmethod
