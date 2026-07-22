@@ -5,6 +5,12 @@ distinguishes them."""
 import json
 
 from metadata_converter.uplift import run_uplift
+from metadata_converter.uplift.config import (
+    GenericUpliftConfig,
+    RemovalRule,
+    RemovalWhere,
+)
+from tests.uplift.conftest import load_jsonld, write_jsonld
 
 
 def test_uplift_writes_provenance(config_factory, tmp_path):
@@ -44,3 +50,81 @@ def test_uplift_without_provenance_dir_writes_nothing(config_factory, tmp_path):
     run_uplift(cfg)
 
     assert not (tmp_path / "provenance").exists()
+
+
+# ---------------------------------------------------------------------------
+# atomize wiring: config flag, ordering relative to write/provenance/removal
+# ---------------------------------------------------------------------------
+
+
+def test_uplift_atomize_default_true_extracts_blank_nodes(loaded_base, tmp_path):
+    cfg = GenericUpliftConfig(
+        input_dir=loaded_base, output_dir=tmp_path / "out", links=[]
+    )
+
+    run_uplift(cfg)
+
+    action = load_jsonld(cfg.output_dir / "Action_analysis1.jsonld")
+    assert action["agent"] == {
+        "@type": "Person", "@id": "Person_Njtdsk7B9jXU3438K9WYXX.jsonld"
+    }
+    atom = load_jsonld(cfg.output_dir / "Person_Njtdsk7B9jXU3438K9WYXX.jsonld")
+    assert atom["identifier"] == "0000-0002-2222-2222"
+
+
+def test_uplift_atomize_false_leaves_blank_nodes_embedded(config_factory, tmp_path):
+    cfg = config_factory(out_name="no_atomize", rules=[], atomize=False)
+
+    run_uplift(cfg)
+
+    action = load_jsonld(cfg.output_dir / "Action_analysis1.jsonld")
+    assert action["agent"] == {"@type": "Person", "identifier": "0000-0002-2222-2222"}
+    assert not (cfg.output_dir / "Person_Njtdsk7B9jXU3438K9WYXX.jsonld").exists()
+
+
+def test_uplift_atomize_extracted_entity_written_but_gets_no_provenance(
+    loaded_base, tmp_path
+):
+    cfg = GenericUpliftConfig(
+        input_dir=loaded_base,
+        output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
+        links=[],
+        atomize=True,
+    )
+
+    run_uplift(cfg)
+
+    atom_id = "Person_Njtdsk7B9jXU3438K9WYXX.jsonld"
+    assert (cfg.output_dir / atom_id).exists()
+    assert not (cfg.provenance_dir / f"Provenance_uplift_{atom_id}").exists()
+    # the original, now-mutated top-level entity still gets its own provenance file
+    assert (cfg.provenance_dir / "Provenance_uplift_Action_analysis1.jsonld").exists()
+
+
+def test_uplift_atomize_runs_after_removal_scrubbed_content_not_atomized(tmp_path):
+    input_dir = tmp_path / "in"
+    write_jsonld(input_dir / "Person_x.jsonld", {
+        "@context": {"@vocab": "https://schema.org"},
+        "@type": "Person", "@id": "Person_x.jsonld",
+        "name": "X",
+        "additionalProperty": [
+            {"@type": "PropertyValue", "name": "scaffold", "value": "1"},
+        ],
+    })
+    cfg = GenericUpliftConfig(
+        input_dir=input_dir,
+        output_dir=tmp_path / "out",
+        removals=[
+            RemovalRule(
+                on_type="Person", target_property="additionalProperty",
+                where=RemovalWhere(property="name", equals="scaffold"),
+            )
+        ],
+        atomize=True,
+    )
+
+    run_uplift(cfg)
+
+    written = {p.name for p in cfg.output_dir.glob("*.jsonld")}
+    assert written == {"Person_x.jsonld"}

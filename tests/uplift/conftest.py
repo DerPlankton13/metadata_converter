@@ -126,6 +126,7 @@ def config_factory(loaded_base, tmp_path):
         out_name: str = "uplifted",
         provenance_dir: Path | None = None,
         reference_dirs: Path | list[Path] | None = None,
+        atomize: bool = False,
     ) -> GenericUpliftConfig:
         return GenericUpliftConfig(
             input_dir=loaded_base,
@@ -133,6 +134,7 @@ def config_factory(loaded_base, tmp_path):
             reference_dirs=reference_dirs,
             links=rules if rules is not None else DATAHUB_RULES,
             provenance_dir=provenance_dir,
+            atomize=atomize,
         )
     return make
 
