@@ -14,6 +14,7 @@ from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.uplift.link import LinkApplier
 from metadata_converter.uplift.remove import RemoveApplier
 from metadata_converter.uplift.rename import RenameApplier
+from metadata_converter.schema_org_models.schemaorg_models import validate_strict
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
 logger = logging.getLogger(__name__)
@@ -38,7 +39,9 @@ def run_uplift(config: GenericUpliftConfig) -> None:
        standalone entity (must run last among the transforms above: it reads each
        entity's full nested content, which earlier stages resolve or remove via
        dot-selectors into that same nested content).
-    8. **Write** — export every entity to ``config.output_dir``.
+    8. **Write** — export every entity to ``config.output_dir``, then log (never raise) a
+       warning for every written entity that still carries content outside the modelled
+       schema.org vocabulary, via ``validate_strict``.
 
     Provenance (if ``config.provenance_dir`` is set) is written only for entities
     present before atomize: an atomized entity has no single loaded entity it is
@@ -60,6 +63,11 @@ def run_uplift(config: GenericUpliftConfig) -> None:
     if config.atomize:
         AtomizeApplier(store).apply()
     store.write(config.output_dir)
+    for entity in store.all_entities():
+        try:
+            validate_strict(entity)
+        except ValueError as e:
+            logger.warning("Strict validation failed for %s: %s", entity.id, e)
     if config.provenance_dir is not None:
         for entity_id in provenance_ids:
             # uplift refines an entity in place, so it is based on the loaded

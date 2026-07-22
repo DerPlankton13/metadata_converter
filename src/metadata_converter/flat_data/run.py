@@ -6,14 +6,17 @@ from metadata_converter.flat_data.extract import extract_data
 from metadata_converter.flat_data.transform.add_columns import add_columns
 from metadata_converter.flat_data.transform.clean import clean
 from metadata_converter.flat_data.transform.id_refs_broadcasting import (
-    prepare_id_ref_broadcast,
-    extract_inline_id_ref_broadcasts,
     broadcast_id_refs,
+    extract_inline_id_ref_broadcasts,
+    prepare_id_ref_broadcast,
 )
 from metadata_converter.flat_data.transform.reshape import reshape
 from metadata_converter.flat_data.transform.schema_builder import build_schemas
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
+from metadata_converter.schema_org_models.schemaorg_models import (
+    SchemaOrgBase,
+    validate_strict,
+)
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
 logger = logging.getLogger(__name__)
@@ -63,3 +66,7 @@ def write_schemas(
     logger.info("Writing %d JSON-LD file(s) to %s", len(schemas), output_dir)
     for schema in schemas:
         load_to_jsonld(schema, output_dir=output_dir)
+        try:
+            validate_strict(schema)
+        except ValueError as e:
+            logger.warning("Strict validation failed for %s: %s", schema.id, e)

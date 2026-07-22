@@ -206,6 +206,11 @@ def load_biosamples(config: BiosamplesConfig):
 
         load_to_jsonld(schema, output_dir=config.output_dir)
 
+        try:
+            validate_strict(schema)
+        except ValueError as e:
+            logger.warning("Strict validation failed for %s: %s", ldjson_file.name, e)
+
         if config.provenance_dir is not None:
             # we need to expand the @id as we are not keeping the context in the
             # provenance file and the CURIE becomes unresolvable otherwise
