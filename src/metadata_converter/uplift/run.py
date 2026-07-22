@@ -49,11 +49,8 @@ def run_uplift(config: GenericUpliftConfig) -> None:
     RemoveApplier(store).apply_all(config.removals)
     store.write(config.output_dir)
     if config.provenance_dir is not None:
-        for models in store.by_type.values():
-            for model in models:
-                # uplift refines an entity in place, so it is based on the loaded
-                # entity of the same @id; the stage in the filename distinguishes them.
-                write_provenance_file(
-                    model.id, config.provenance_dir, model.id, "uplift"
-                )
+        for model in store.all_entities():
+            # uplift refines an entity in place, so it is based on the loaded
+            # entity of the same @id; the stage in the filename distinguishes them.
+            write_provenance_file(model.id, config.provenance_dir, model.id, "uplift")
     logger.info("Uplift complete. Output: %s", config.output_dir)
