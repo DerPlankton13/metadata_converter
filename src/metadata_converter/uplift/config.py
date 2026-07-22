@@ -163,6 +163,12 @@ class GenericUpliftConfig(BaseModel):
     additions: list[AdditionRule] = Field(default_factory=list)
     renames: list[RenameRule] = Field(default_factory=list)
     removals: list[RemovalRule] = Field(default_factory=list)
+    atomize: bool = Field(
+        default=True,
+        description="Extract every blank node reachable from any entity into its own "
+        "standalone, content-hashed entity, replacing it with a reference. Runs last, "
+        "after all rule-driven operations above.",
+    )
 
     @model_validator(mode="after")
     def _no_target_overlap(self) -> GenericUpliftConfig:
