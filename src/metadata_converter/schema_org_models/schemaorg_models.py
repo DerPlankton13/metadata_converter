@@ -10,13 +10,22 @@ strict : False
 from __future__ import annotations
 
 import functools
+import logging
 from datetime import date, datetime, time, timedelta
 from types import UnionType
 from typing import Any, Union, get_args, get_origin
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
 
 _SCHEMA_TYPE_REGISTRY: dict[str, type] = {}
+logger = logging.getLogger(__name__)
 
 
 class SchemaOrgBase(BaseModel):
@@ -146,87 +155,97 @@ class SchemaOrgBase(BaseModel):
             data[key] = _discriminate_value(data[key], field_info.annotation)
         return data
 
-    @model_validator(mode="after")
-    def validate_extra_fields(self) -> SchemaOrgBase:
-        """Validate ``@type``/``type``-tagged values inside extra properties.
+    @model_validator(mode="before")
+    @classmethod
+    def convert_extra_props_to_additional_property(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
 
-        This functions builds and thus validates all typed properties which are not
-        declared by the Pydantic fields. In this manner we allow user's to built models
-        that contain additional properties, but these must be of a valid schema.org
-        type.
-        ``discriminate_typed_fields`` only looks at declared fields, so an extra
-        property (kept in ``model_extra`` due to the ``extra="allow"`` setting)
-        containing a nested ``@type``/``type`` dict would otherwise stay a plain dict
-        instead of being built as a model.
-
-        Notes
-        -----
-        Each value is written back through ``self.model_extra[key] = ...`` rather than
-        ``setattr(self, key, ...)``. With ``validate_assignment=True``, ``setattr`` re-runs
-        every ``mode="after"`` validator on the whole instance — including this one — so it
-        would recurse into itself indefinitely. Writing directly into ``model_extra``
-        (the same dict as ``self.__pydantic_extra__``) updates the value without
-        re-triggering validation already performed by ``_build_model``. Overwriting a
-        value in place while iterating is safe here since no keys are added or removed.
-
-        Returns
-        -------
-        SchemaOrgBase
-            This instance, with each ``model_extra`` value resolved in place.
-
-        Raises
-        ------
-        pydantic.ValidationError
-            Raised when a nested value's ``@type``/``type`` names a class absent from
-            ``_SCHEMA_TYPE_REGISTRY``. ``_build_model`` raises a plain ``ValueError``;
-            Pydantic catches it inside this ``model_validator(mode="after")`` and
-            re-raises it as ``pydantic.ValidationError``.
-        """
-        for key, value in self.model_extra.items():
-            self.model_extra[key] = _build_model(value)
-
-        return self
-
-
-def _build_model(value: Any) -> SchemaOrgBase | list[SchemaOrgBase | Any] | Any:
-    """Recursively resolve ``@type``/``type``-tagged dicts nested in an extra property.
-
-    Unlike ``_discriminate_value``, there is no field annotation to restrict or check
-    candidate types against here — extra properties are not declared on any model — so
-    any dict whose ``@type``/``type`` names a registered class is built as that class,
-    regardless of what it is. Dicts without a resolvable ``@type``/``type`` are walked
-    value-by-value instead, so a typed object nested arbitrarily deep inside an untyped
-    extra property is still discriminated.
-
-    Parameters
-    ----------
-    value : Any
-        The extra property's raw value: a dict, a list, or a scalar.
-
-    Returns
-    -------
-    SchemaOrgBase | list[SchemaOrgBase | Any] | Any
-        A dict with a resolvable ``@type``/``type`` becomes a parsed model instance. A
-        list is returned with each item resolved the same way. A dict without a
-        ``@type``/``type`` is returned with each of its values resolved recursively. Any
-        other value passes through unchanged.
-
-    Raises
-    ------
-    ValueError
-        If a dict names a ``@type``/``type`` that is not in ``_SCHEMA_TYPE_REGISTRY``.
-    """
-    if isinstance(value, list):
-        return [_build_model(item) for item in value]
-    if isinstance(value, dict):
-        if type_name := value.get("@type") or value.get("type"):
-            if type_name not in _SCHEMA_TYPE_REGISTRY:
-                raise ValueError(f"Invalid type for {type_name}")
-            return _SCHEMA_TYPE_REGISTRY.get(type_name)(**value)
+        existing = data.get("additionalProperty")
+        if existing is None:
+            additional_props = []
+        # ensure no harmful unintended inplace modification occurr
+        elif isinstance(existing, list):
+            additional_props = list(existing)
         else:
-            return {key: _build_model(val) for key, val in value.items()}
-    else:
-        return value
+            additional_props = [existing]
+
+        # identify not specified properties
+        field_names = {
+            *cls.model_fields.keys(),
+            *(
+                field_info.alias
+                for field_info in cls.model_fields.values()
+                if field_info.alias
+            ),
+        }
+        extra_props = data.keys() - field_names
+
+        for prop in extra_props:
+            value = data.pop(prop)
+            if not isinstance(value, list):
+                value = [value]
+            for item in value:
+                # except anything that can easily be converted to a string and do not
+                # notify about it
+                if isinstance(item, (date, datetime, time, timedelta, AnyUrl)):
+                    item = str(item)
+                try:
+                    additional_props.append(PropertyValue(name=prop, value=item))
+                    continue
+                except ValidationError:
+                    logger.warning(
+                        "Could not directly build a PropertyValue for %s from %s",
+                        prop,
+                        item,
+                    )
+                if isinstance(item, dict):
+                    type_name = item.get("@type") or item.get("type")
+                    resolved = _SCHEMA_TYPE_REGISTRY.get(type_name)
+                    if resolved is not None and issubclass(
+                        resolved, _additional_property_extra_types()
+                    ):
+                        try:
+                            built = resolved(**item)
+                        except ValidationError:
+                            logger.error(
+                                "Could not build %s for %s from %s",
+                                type_name,
+                                prop,
+                                item,
+                            )
+                            continue
+                        additional_props.append(
+                            PropertyValue.model_construct(name=prop, value=built)
+                        )
+                        logger.info(
+                            "Created a PropertyValue using a value of type %s which "
+                            "is outside of the schema.org definition.",
+                            type_name,
+                        )
+                        continue
+                logger.error(
+                    "Could not add %s to additionalProperty since %s could not be "
+                    "converted to a PropertyValue. Dropping %s from the data now.",
+                    prop,
+                    item,
+                    prop,
+                )
+
+        if additional_props:
+            data["additionalProperty"] = (
+                additional_props if len(additional_props) > 1 else additional_props[0]
+            )
+        return data
+
+
+@functools.cache
+def _additional_property_extra_types() -> tuple[type, ...]:
+    return tuple(
+        _SCHEMA_TYPE_REGISTRY[name]
+        for name in ("DefinedTerm", "PropertyValueSpecification")
+    )
 
 
 def _discriminate_value(raw_input: Any, annotation: Any) -> Any:
