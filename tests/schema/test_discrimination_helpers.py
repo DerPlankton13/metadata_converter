@@ -2,10 +2,11 @@
 
 These test ``_is_wrapped``, ``_collect_annotated_schema_types``, ``_discriminate_value``,
 and the ``__init_subclass__`` registry side effect directly, via small local
-``SchemaOrgBase`` subclasses — they don't need the real generated
-``schemaorg_models.py`` classes, since the helpers are project-agnostic.
-``tests/schema/test_generated_discrimination.py`` covers the same mechanism wired into
-real generated fields.
+``SchemaOrgBase`` subclasses — the helpers are project-agnostic, so the subclasses under
+test don't need to be real schema.org types. They are still built against the real
+generated ``schemaorg_models.py``, not ``schema_org_model_generator``'s copy, so the
+helpers are exercised as actually shipped. ``tests/schema/test_generated_discrimination.py``
+covers the same mechanism wired into real generated fields.
 """
 
 from typing import Union
@@ -13,10 +14,7 @@ from typing import Union
 import pytest
 from pydantic import Field
 
-from metadata_converter.schema_org_models import (
-    schema_org_model_generator as generator_module,
-)
-from metadata_converter.schema_org_models.schema_org_model_generator import (
+from metadata_converter.schema_org_models.schemaorg_models import (
     _SCHEMA_TYPE_REGISTRY,
     SchemaOrgBase,
     _collect_annotated_schema_types,
@@ -24,10 +22,8 @@ from metadata_converter.schema_org_models.schema_org_model_generator import (
     _is_wrapped,
 )
 
-# SchemaOrgBase.additionalProperty forward-references `PropertyValue`, which is only
-# defined in the real generated schemaorg_models.py. Building any subclass defined here
-# instead needs a stand-in resolvable from this module's own globals.
-generator_module.PropertyValue = SchemaOrgBase
+# Forces the deferred `PropertyValue` forward reference to resolve now, against
+# schemaorg_models.py's namespace, before a subclass defined here needs it.
 SchemaOrgBase.model_rebuild(force=True)
 
 
