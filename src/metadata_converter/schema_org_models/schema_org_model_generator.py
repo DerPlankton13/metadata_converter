@@ -227,6 +227,160 @@ class SchemaOrgBase(BaseModel):
             data[key] = _discriminate_value(data[key], field_info.annotation)
         return data
 
+    @model_validator(mode="before")
+    @classmethod
+    def convert_extra_props_to_additional_property(cls, data: Any) -> Any:
+        """Move input keys that aren't declared properties into ``additionalProperty``.
+
+        Because ``model_config`` sets ``extra="allow"``, keys absent from
+        ``cls.model_fields`` (corresponding to the official schema.org definition) would
+        otherwise be kept unvalidated in ``model_extra``. This validator instead pops
+        every such key, converts each of its values to a ``PropertyValue`` via
+        ``_build_extra_property_value`` (dropping values that cannot be represented,
+        with a logged warning/error), and appends the results to any
+        ``additionalProperty`` already present in the input data. The final list is
+        collapsed to a scalar when it holds exactly one item.
+
+        Parameters
+        ----------
+        cls : type[SchemaOrgBase]
+            The model subclass being validated; provides ``model_fields`` used to
+            distinguish declared properties (and their aliases) from extras.
+        data : Any
+            Raw input, typically a ``dict[str, Any]`` but possibly any other object
+            passed to ``model_validate``.
+
+        Returns
+        -------
+        data : Any
+            The input with extra keys removed and folded into
+            ``additionalProperty``. Non-dict input is returned unchanged.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+
+        existing = data.get("additionalProperty")
+        if existing is None:
+            additional_props = []
+        # ensure no harmful unintended inplace modification occurr
+        elif isinstance(existing, list):
+            additional_props = list(existing)
+        else:
+            additional_props = [existing]
+
+        # identify not specified properties
+        field_names = {
+            *cls.model_fields.keys(),
+            *(
+                field_info.alias
+                for field_info in cls.model_fields.values()
+                if field_info.alias
+            ),
+        }
+        extra_props = data.keys() - field_names
+
+        for prop in extra_props:
+            value = data.pop(prop)
+            if not isinstance(value, list):
+                value = [value]
+            for item in value:
+                built = _build_extra_property_value(prop, item)
+                if built is not None:
+                    additional_props.append(built)
+
+        if additional_props:
+            data["additionalProperty"] = (
+                additional_props if len(additional_props) > 1 else additional_props[0]
+            )
+        return data
+
+
+def _build_extra_property_value(prop: str, item: Any) -> PropertyValue | None:
+    """Build a ``PropertyValue`` for one extra-property item, or drop it.
+
+    Date/time/URL values are stringified first, since ``PropertyValue.value`` does not
+    accept those types directly. A plain ``PropertyValue`` is then built directly
+    when possible. If that fails and ``item`` is a dict whose ``@type``/``type``
+    resolves to a class registered in ``_SCHEMA_TYPE_REGISTRY`` and listed in
+    ``_additional_property_extra_types``, that class is used to build a nested value
+    instead. Otherwise, the item is dropped, with a logged error.
+
+    Parameters
+    ----------
+    prop : str
+        The property name ``item`` was found under; carried as ``name`` on the
+        returned ``PropertyValue``.
+    item : Any
+        One value of the extra property; either a plain scalar or a dict describing a
+        nested schema.org object.
+
+    Returns
+    -------
+    PropertyValue or None
+        A ``PropertyValue`` wrapping ``item`` (or an object built from it), or
+        ``None`` if ``item`` could not be converted and was dropped.
+    """
+    # except anything that can easily be converted to a string and do not notify about it
+    if isinstance(item, (date, datetime, time, timedelta, AnyUrl)):
+        item = str(item)
+    try:
+        return PropertyValue(name=prop, value=item)
+    except ValidationError:
+        logger.warning(
+            "Could not directly build a PropertyValue for %s from %s", prop, item
+        )
+
+    if isinstance(item, dict):
+        type_name = item.get("@type") or item.get("type")
+        resolved = _SCHEMA_TYPE_REGISTRY.get(type_name)
+        if resolved is not None and issubclass(
+            resolved, _additional_property_extra_types()
+        ):
+            try:
+                built = resolved(**item)
+            except ValidationError:
+                logger.error("Could not build %s for %s from %s", type_name, prop, item)
+                return None
+            logger.info(
+                "Created a PropertyValue using a value of type %s which "
+                "is outside of the schema.org definition.",
+                type_name,
+            )
+            return PropertyValue.model_construct(name=prop, value=built)
+
+    logger.error(
+        "Could not add %s to additionalProperty since %s could not be "
+        "converted to a PropertyValue. Dropping %s from the data now.",
+        prop,
+        item,
+        prop,
+    )
+    return None
+
+
+@functools.cache
+def _additional_property_extra_types() -> tuple[type, ...]:
+    """Return the schema.org classes allowed as a nested ``PropertyValue.value``.
+
+    This is the extension point for widening what ``_build_extra_property_value``
+    accepts as a nested value inside ``additionalProperty``: add a class name here
+    (resolved via ``_SCHEMA_TYPE_REGISTRY``) to permit instances of it, beyond
+    the primitive value types ``PropertyValue.value`` already accepts. Cached since
+    the registry is stable once all modules have been imported.
+
+    Returns
+    -------
+    tuple[type, ...]
+        The classes (currently ``DefinedTerm`` and ``PropertyValueSpecification``)
+        allowed as a nested ``PropertyValue.value`` inside an ``additionalProperty``
+        entry.
+    """
+    return tuple(
+        _SCHEMA_TYPE_REGISTRY[name]
+        for name in ("DefinedTerm", "PropertyValueSpecification")
+    )
+
 
 def _discriminate_value(raw_input: Any, annotation: Any) -> Any:
     """
@@ -705,17 +859,29 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         "from __future__ import annotations",
         "",
         "import functools",
+        "import logging",
         "from datetime import date, datetime, time, timedelta",
         "from types import UnionType",
         "from typing import Any, Union, get_args, get_origin",
         "",
-        "from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator",
-        "",
+        "from pydantic import (",
+        "    AnyUrl,",
+        "    BaseModel,",
+        "    ConfigDict,",
+        "    Field,",
+        "    ValidationError,",
+        "    model_validator,",
+        ")",
         "",
         "_SCHEMA_TYPE_REGISTRY: dict[str, type] = {}",
+        "logger = logging.getLogger(__name__)",
         "",
         "",
         inspect.getsource(SchemaOrgBase),
+        "",
+        inspect.getsource(_build_extra_property_value),
+        "",
+        inspect.getsource(_additional_property_extra_types),
         "",
         inspect.getsource(_discriminate_value),
         "",
