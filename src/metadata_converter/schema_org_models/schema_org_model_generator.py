@@ -280,12 +280,17 @@ class SchemaOrgBase(BaseModel):
         }
         extra_props = data.keys() - field_names
 
+        # names the entity in log messages about converted or dropped values, so a
+        # user can tell which record a complaint refers to and judge whether it matters
+        entity_id = data.get("@id") or data.get("id")
+        owner = f"{cls.__name__} {entity_id}" if entity_id else cls.__name__
+
         for prop in extra_props:
             value = data.pop(prop)
             if not isinstance(value, list):
                 value = [value]
             for item in value:
-                built = _build_extra_property_value(prop, item)
+                built = _build_extra_property_value(prop, item, owner)
                 if built is not None:
                     additional_props.append(built)
 
@@ -296,7 +301,9 @@ class SchemaOrgBase(BaseModel):
         return data
 
 
-def _build_extra_property_value(prop: str, item: Any) -> PropertyValue | None:
+def _build_extra_property_value(
+    prop: str, item: Any, owner: str
+) -> PropertyValue | None:
     """Build a ``PropertyValue`` for one extra-property item, or drop it.
 
     Date/time/URL values are stringified first, since ``PropertyValue.value`` does not
@@ -314,6 +321,10 @@ def _build_extra_property_value(prop: str, item: Any) -> PropertyValue | None:
     item : Any
         One value of the extra property; either a plain scalar or a dict describing a
         nested schema.org object.
+    owner : str
+        The entity ``item`` was found on — its ``@type``, plus its ``@id`` when it has
+        one. Only used to identify the record in log messages, so that a conversion
+        that deviated from schema.org or dropped data can be traced back to it.
 
     Returns
     -------
@@ -327,8 +338,11 @@ def _build_extra_property_value(prop: str, item: Any) -> PropertyValue | None:
     try:
         return PropertyValue(name=prop, value=item)
     except ValidationError:
-        logger.warning(
-            "Could not directly build a PropertyValue for %s from %s", prop, item
+        logger.debug(
+            "%s: could not directly build a PropertyValue for %s from %s",
+            owner,
+            prop,
+            item,
         )
 
     if isinstance(item, dict):
@@ -350,8 +364,9 @@ def _build_extra_property_value(prop: str, item: Any) -> PropertyValue | None:
             return PropertyValue.model_construct(name=prop, value=built)
 
     logger.error(
-        "Could not add %s to additionalProperty since %s could not be "
+        "%s: could not add %s to additionalProperty since %s could not be "
         "converted to a PropertyValue. Dropping %s from the data now.",
+        owner,
         prop,
         item,
         prop,
