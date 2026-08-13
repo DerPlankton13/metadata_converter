@@ -114,9 +114,9 @@ class SchemaOrgBase(BaseModel):
     -----
     Each ``model_config`` setting serves a distinct purpose:
 
-    - ``extra="allow"`` keeps unknown fields in ``model_extra`` instead of
-      rejecting them, so source properties outside the schema.org definition
-      survive (``validate_strict`` opts back into strict checking).
+    - ``extra="allow"`` lets unknown fields through instead of rejecting them, so
+      source properties outside the schema.org definition survive — they are
+      folded into ``additionalProperty`` rather than left in ``model_extra``.
     - ``populate_by_name`` accepts both Python attribute names and the JSON-LD
       ``@``-prefixed aliases interchangeably.
     - ``defer_build`` postpones schema build until first validation, massively
@@ -660,41 +660,6 @@ def _is_wrapped(type_annotation: Any) -> bool:
     return is_union or type_origin in (list, set, tuple)
 
 
-def validate_strict(model: object) -> None:
-    """Raise if the schema.org model has additional, unspecified properties.
-
-    Schema.org models are configured with ``extra="allow"``, which keeps unknown fields
-    in ``model_extra`` instead of rejecting them. This function recursively checks that
-    the model and any nested models have no ``model_extra`` field, raising on the first
-    offender at any depth.
-
-    Parameters
-    ----------
-    model : object
-        The schema.org model to validate. Lists are walked element-wise and properties
-        which are not Pydantic models are skipped.
-
-    Raises
-    ------
-    ValueError
-        If the model or any nested model carries fields outside its schema.org
-        definition as implemented in the Pydantic models.
-    """
-    if isinstance(model, list):
-        for item in model:
-            validate_strict(item)
-        return
-    if not isinstance(model, BaseModel):
-        return
-    if model.model_extra:
-        raise ValueError(
-            f"{type(model).__name__} has fields outside the schema.org model: "
-            f"{sorted(model.model_extra)}"
-        )
-    for field_name in type(model).model_fields:
-        validate_strict(getattr(model, field_name))
-
-
 def local(iri: str) -> str:
     """Extract local name from a schema.org IRI."""
     return iri.removeprefix(SCHEMA_PREFIX).removeprefix("schema:")
@@ -1038,8 +1003,6 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         inspect.getsource(_collect_annotated_schema_types),
         "",
         inspect.getsource(_is_wrapped),
-        "",
-        inspect.getsource(validate_strict),
         "",
     ]
 
