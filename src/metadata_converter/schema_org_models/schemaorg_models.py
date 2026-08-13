@@ -93,6 +93,75 @@ class SchemaOrgBase(BaseModel):
         super().__init_subclass__(**kwargs)
         _SCHEMA_TYPE_REGISTRY[cls.__name__] = cls
 
+    @classmethod
+    @functools.cache
+    def declared_names(cls) -> frozenset[str]:
+        """Return every name a declared property can be addressed by.
+
+        Both the Python field name and its JSON-LD alias count, since
+        ``populate_by_name`` accepts either spelling (``id`` and ``@id`` name the same
+        property). Cached per class: the fields are fixed once the class is built, and
+        ``__setattr__`` consults this on every single assignment.
+
+        Returns
+        -------
+        frozenset[str]
+            The declared field names together with the aliases of those that have one.
+        """
+        return frozenset(
+            {
+                *cls.model_fields.keys(),
+                *(
+                    field_info.alias
+                    for field_info in cls.model_fields.values()
+                    if field_info.alias
+                ),
+            }
+        )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Route assignment of an undeclared property into ``additionalProperty``.
+
+        Construction and assignment must leave the same model: ``Person(bogus="x")``
+        and ``person.bogus = "x"`` have to agree. Construction is covered by the
+        ``convert_extra_props_to_additional_property`` validator below, but that
+        validator cannot cover assignment: Pydantic picks the destination from ``name``
+        before any validator runs, so an undeclared name lands in ``model_extra``, and
+        no return value can retract it — the same data would sit in two places.
+        Intercepting the name here, before Pydantic sees it, is the only point at which
+        the two can be made to agree.
+
+        Parameters
+        ----------
+        name : str
+            Attribute being assigned. Declared properties (by field name or alias) and
+            private attributes are passed straight through to Pydantic.
+        value : Any
+            The value to assign. For an undeclared property it is converted by
+            ``_build_extra_property_value`` and merged into ``additionalProperty``;
+            a value that cannot be converted is dropped, with a logged error.
+        """
+        # a private attribute is machinery, not data, so it must never be published as
+        # a property — it is excluded here rather than left to fall through as an extra
+        if name in type(self).declared_names() or name.startswith("_"):
+            super().__setattr__(name, value)
+            return
+
+        # an undeclared property has no field to clear, so there is nothing to record
+        if value is None:
+            return
+
+        owner = f"{type(self).__name__} {self.id}" if self.id else type(self).__name__
+        built = _build_extra_property_value(name, value, owner)
+        if built is None:
+            return
+
+        # written through Pydantic, so the merged value is validated like any other
+        super().__setattr__(
+            "additionalProperty",
+            _merge_additional_property(self.additionalProperty, [built]),
+        )
+
     @model_validator(mode="before")
     @classmethod
     def discriminate_typed_fields(cls, data: Any) -> Any:
@@ -167,7 +236,8 @@ class SchemaOrgBase(BaseModel):
         ``_build_extra_property_value`` (dropping values that cannot be represented,
         with a logged warning/error), and appends the results to any
         ``additionalProperty`` already present in the input data. The final list is
-        collapsed to a scalar when it holds exactly one item.
+        collapsed to a scalar when it holds exactly one item. Input carrying no extras
+        is left alone, so an ``additionalProperty`` given explicitly keeps its shape.
 
         Parameters
         ----------
@@ -188,31 +258,15 @@ class SchemaOrgBase(BaseModel):
             return data
         data = dict(data)
 
-        existing = data.get("additionalProperty")
-        if existing is None:
-            additional_props = []
-        # ensure no harmful unintended inplace modification occurr
-        elif isinstance(existing, list):
-            additional_props = list(existing)
-        else:
-            additional_props = [existing]
-
         # identify not specified properties
-        field_names = {
-            *cls.model_fields.keys(),
-            *(
-                field_info.alias
-                for field_info in cls.model_fields.values()
-                if field_info.alias
-            ),
-        }
-        extra_props = data.keys() - field_names
+        extra_props = data.keys() - cls.declared_names()
 
         # names the entity in log messages about converted or dropped values, so a
         # user can tell which record a complaint refers to and judge whether it matters
         entity_id = data.get("@id") or data.get("id")
         owner = f"{cls.__name__} {entity_id}" if entity_id else cls.__name__
 
+        converted = []
         for prop in extra_props:
             value = data.pop(prop)
             if not isinstance(value, list):
@@ -220,13 +274,46 @@ class SchemaOrgBase(BaseModel):
             for item in value:
                 built = _build_extra_property_value(prop, item, owner)
                 if built is not None:
-                    additional_props.append(built)
+                    converted.append(built)
 
-        if additional_props:
-            data["additionalProperty"] = (
-                additional_props if len(additional_props) > 1 else additional_props[0]
+        # avoid accidentally modifying a present additionalProperty if nothing converted
+        if converted:
+            data["additionalProperty"] = _merge_additional_property(
+                data.get("additionalProperty"), converted
             )
         return data
+
+
+def _merge_additional_property(existing: Any, new_props: list[PropertyValue]) -> Any:
+    """Merge freshly built ``PropertyValue``s into an existing ``additionalProperty``.
+
+    The property holds either a single value or a list of them, so the existing value is
+    normalised to a list, extended, and collapsed back to a scalar if only one item
+    remains.
+
+    Parameters
+    ----------
+    existing : Any
+        The current ``additionalProperty``: ``None``, a single item, or a list. Never
+        modified in place, since it may still be referenced by the caller's input.
+    new_props : list[PropertyValue]
+        The values to append. Expected to be non-empty — an empty list would collapse a
+        single existing item out of its list, changing shape for no reason.
+
+    Returns
+    -------
+    Any
+        The merged value: a list, or the item itself when exactly one remains.
+    """
+    if existing is None:
+        merged = []
+    elif isinstance(existing, list):
+        merged = list(existing)
+    else:
+        merged = [existing]
+
+    merged.extend(new_props)
+    return merged if len(merged) > 1 else merged[0]
 
 
 def _build_extra_property_value(
@@ -236,9 +323,9 @@ def _build_extra_property_value(
 
     Date/time/URL values are stringified first, since ``PropertyValue.value`` does not
     accept those types directly. A plain ``PropertyValue`` is then built directly
-    when possible. If that fails and ``item`` is a dict, it is retried as a
-    ``valueReference`` carrying the object's ``name`` as the ``value`` — the
-    schema.org-sanctioned way to point a property value at a controlled-vocabulary
+    when possible. If that fails and ``item`` is a dict or an already-built model, it is
+    retried as a ``valueReference`` carrying the object's ``name`` as the ``value`` —
+    the schema.org-sanctioned way to point a property value at a controlled-vocabulary
     term. Otherwise, the item is dropped, with a logged error.
 
     Parameters
@@ -247,8 +334,8 @@ def _build_extra_property_value(
         The property name ``item`` was found under; carried as ``name`` on the
         returned ``PropertyValue``.
     item : Any
-        One value of the extra property; either a plain scalar or a dict describing a
-        nested schema.org object.
+        One value of the extra property; a plain scalar, or a nested schema.org object
+        given either as a dict or as an already-built model.
     owner : str
         The entity ``item`` was found on — its ``@type``, plus its ``@id`` when it has
         one. Only used to identify the record in log messages, so that a conversion
@@ -280,6 +367,11 @@ def _build_extra_property_value(
             prop,
             item,
         )
+
+    # normalise item to be a dict, so an already-built model takes the same path as a
+    # freshly constructed one
+    if isinstance(item, SchemaOrgBase):
+        item = item.model_dump(by_alias=True, exclude_none=True)
 
     if isinstance(item, dict):
         type_name = item.get("@type") or item.get("type")
