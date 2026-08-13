@@ -239,7 +239,8 @@ class SchemaOrgBase(BaseModel):
         ``_build_extra_property_value`` (dropping values that cannot be represented,
         with a logged warning/error), and appends the results to any
         ``additionalProperty`` already present in the input data. The final list is
-        collapsed to a scalar when it holds exactly one item.
+        collapsed to a scalar when it holds exactly one item. Input carrying no extras
+        is left alone, so an ``additionalProperty`` given explicitly keeps its shape.
 
         Parameters
         ----------
@@ -260,31 +261,15 @@ class SchemaOrgBase(BaseModel):
             return data
         data = dict(data)
 
-        existing = data.get("additionalProperty")
-        if existing is None:
-            additional_props = []
-        # ensure no harmful unintended inplace modification occurr
-        elif isinstance(existing, list):
-            additional_props = list(existing)
-        else:
-            additional_props = [existing]
-
         # identify not specified properties
-        field_names = {
-            *cls.model_fields.keys(),
-            *(
-                field_info.alias
-                for field_info in cls.model_fields.values()
-                if field_info.alias
-            ),
-        }
-        extra_props = data.keys() - field_names
+        extra_props = data.keys() - cls.declared_names()
 
         # names the entity in log messages about converted or dropped values, so a
         # user can tell which record a complaint refers to and judge whether it matters
         entity_id = data.get("@id") or data.get("id")
         owner = f"{cls.__name__} {entity_id}" if entity_id else cls.__name__
 
+        converted = []
         for prop in extra_props:
             value = data.pop(prop)
             if not isinstance(value, list):
@@ -292,13 +277,46 @@ class SchemaOrgBase(BaseModel):
             for item in value:
                 built = _build_extra_property_value(prop, item, owner)
                 if built is not None:
-                    additional_props.append(built)
+                    converted.append(built)
 
-        if additional_props:
-            data["additionalProperty"] = (
-                additional_props if len(additional_props) > 1 else additional_props[0]
+        # avoid accidentally modifying a present additionalProperty if nothing converted
+        if converted:
+            data["additionalProperty"] = _merge_additional_property(
+                data.get("additionalProperty"), converted
             )
         return data
+
+
+def _merge_additional_property(existing: Any, new_props: list[PropertyValue]) -> Any:
+    """Merge freshly built ``PropertyValue``s into an existing ``additionalProperty``.
+
+    The property holds either a single value or a list of them, so the existing value is
+    normalised to a list, extended, and collapsed back to a scalar if only one item
+    remains.
+
+    Parameters
+    ----------
+    existing : Any
+        The current ``additionalProperty``: ``None``, a single item, or a list. Never
+        modified in place, since it may still be referenced by the caller's input.
+    new_props : list[PropertyValue]
+        The values to append. Expected to be non-empty — an empty list would collapse a
+        single existing item out of its list, changing shape for no reason.
+
+    Returns
+    -------
+    Any
+        The merged value: a list, or the item itself when exactly one remains.
+    """
+    if existing is None:
+        merged = []
+    elif isinstance(existing, list):
+        merged = list(existing)
+    else:
+        merged = [existing]
+
+    merged.extend(new_props)
+    return merged if len(merged) > 1 else merged[0]
 
 
 def _build_extra_property_value(
