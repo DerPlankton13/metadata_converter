@@ -308,10 +308,10 @@ def _build_extra_property_value(
 
     Date/time/URL values are stringified first, since ``PropertyValue.value`` does not
     accept those types directly. A plain ``PropertyValue`` is then built directly
-    when possible. If that fails and ``item`` is a dict whose ``@type``/``type``
-    resolves to a class registered in ``_SCHEMA_TYPE_REGISTRY`` and listed in
-    ``_additional_property_extra_types``, that class is used to build a nested value
-    instead. Otherwise, the item is dropped, with a logged error.
+    when possible. If that fails and ``item`` is a dict, it is retried as a
+    ``valueReference`` carrying the object's ``name`` as the ``value`` — the
+    schema.org-sanctioned way to point a property value at a controlled-vocabulary
+    term. Otherwise, the item is dropped, with a logged error.
 
     Parameters
     ----------
@@ -331,6 +331,14 @@ def _build_extra_property_value(
     PropertyValue or None
         A ``PropertyValue`` wrapping ``item`` (or an object built from it), or
         ``None`` if ``item`` could not be converted and was dropped.
+
+    Raises
+    ------
+    NotImplementedError
+        If ``item`` is an instance of a class listed in
+        ``_unsupported_nested_value_types`` — a type that could only be represented
+        by widening ``PropertyValue.value`` past the schema.org definition. How to
+        handle those is undecided, so the case is surfaced rather than guessed at.
     """
     # except anything that can easily be converted to a string and do not notify about it
     if isinstance(item, (date, datetime, time, timedelta, AnyUrl)):
@@ -347,10 +355,36 @@ def _build_extra_property_value(
 
     if isinstance(item, dict):
         type_name = item.get("@type") or item.get("type")
+        # a list-valued or absent name has no single literal to represent the term,
+        # so value stays unset; valueReference still carries the whole object
+        name = item.get("name")
+        try:
+            return PropertyValue(
+                name=prop,
+                value=name if isinstance(name, str) else None,
+                valueReference=item,
+            )
+        except ValidationError:
+            logger.debug(
+                "%s: could not use %s as a valueReference for %s",
+                owner,
+                type_name,
+                prop,
+            )
+
         resolved = _SCHEMA_TYPE_REGISTRY.get(type_name)
         if resolved is not None and issubclass(
             resolved, _additional_property_extra_types()
         ):
+            raise NotImplementedError(
+                f"{owner}: {prop}={item} can only be represented by widening "
+                f"PropertyValue.value beyond the schema.org definition to admit "
+                f"{type_name}. Such a value cannot be read back by normal "
+                f"validation, so it is not written. Decide whether {type_name} "
+                f"should become readable or be dropped, then handle it explicitly."
+            )
+            # unreachable while the decision above is open; kept as the widening
+            # implementation to restore once it is made
             try:
                 built = resolved(**item)
             except ValidationError:
@@ -384,16 +418,23 @@ def _additional_property_extra_types() -> tuple[type, ...]:
     the primitive value types ``PropertyValue.value`` already accepts. Cached since
     the registry is stable once all modules have been imported.
 
+    Widening is currently not implemented: reaching a listed class raises
+    ``NotImplementedError``, because such a value can be written but not read back
+    by normal validation, which makes load and uplift disagree about the same file.
+    ``DefinedTerm`` is deliberately absent — it is expressible as a
+    ``valueReference``, so a ``DefinedTerm`` reaching the fallback is a malformed
+    instance (a data problem) rather than an unrepresentable type (a design
+    decision), and is dropped with a logged error like any other unconvertible item.
+
     Returns
     -------
     tuple[type, ...]
-        The classes (currently ``DefinedTerm`` and ``PropertyValueSpecification``)
-        allowed as a nested ``PropertyValue.value`` inside an ``additionalProperty``
-        entry.
+        The classes (currently only ``PropertyValueSpecification``) that would need
+        a widened ``PropertyValue.value`` to be carried inside an
+        ``additionalProperty`` entry.
     """
     return tuple(
-        _SCHEMA_TYPE_REGISTRY[name]
-        for name in ("DefinedTerm", "PropertyValueSpecification")
+        _SCHEMA_TYPE_REGISTRY[name] for name in ("PropertyValueSpecification",)
     )
 
 
