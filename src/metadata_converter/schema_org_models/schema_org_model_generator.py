@@ -165,6 +165,75 @@ class SchemaOrgBase(BaseModel):
         super().__init_subclass__(**kwargs)
         _SCHEMA_TYPE_REGISTRY[cls.__name__] = cls
 
+    @classmethod
+    @functools.cache
+    def declared_names(cls) -> frozenset[str]:
+        """Return every name a declared property can be addressed by.
+
+        Both the Python field name and its JSON-LD alias count, since
+        ``populate_by_name`` accepts either spelling (``id`` and ``@id`` name the same
+        property). Cached per class: the fields are fixed once the class is built, and
+        ``__setattr__`` consults this on every single assignment.
+
+        Returns
+        -------
+        frozenset[str]
+            The declared field names together with the aliases of those that have one.
+        """
+        return frozenset(
+            {
+                *cls.model_fields.keys(),
+                *(
+                    field_info.alias
+                    for field_info in cls.model_fields.values()
+                    if field_info.alias
+                ),
+            }
+        )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Route assignment of an undeclared property into ``additionalProperty``.
+
+        Construction and assignment must leave the same model: ``Person(bogus="x")``
+        and ``person.bogus = "x"`` have to agree. Construction is covered by the
+        ``convert_extra_props_to_additional_property`` validator below, but that
+        validator cannot cover assignment: Pydantic picks the destination from ``name``
+        before any validator runs, so an undeclared name lands in ``model_extra``, and
+        no return value can retract it — the same data would sit in two places.
+        Intercepting the name here, before Pydantic sees it, is the only point at which
+        the two can be made to agree.
+
+        Parameters
+        ----------
+        name : str
+            Attribute being assigned. Declared properties (by field name or alias) and
+            private attributes are passed straight through to Pydantic.
+        value : Any
+            The value to assign. For an undeclared property it is converted by
+            ``_build_extra_property_value`` and merged into ``additionalProperty``;
+            a value that cannot be converted is dropped, with a logged error.
+        """
+        # a private attribute is machinery, not data, so it must never be published as
+        # a property — it is excluded here rather than left to fall through as an extra
+        if name in type(self).declared_names() or name.startswith("_"):
+            super().__setattr__(name, value)
+            return
+
+        # an undeclared property has no field to clear, so there is nothing to record
+        if value is None:
+            return
+
+        owner = f"{type(self).__name__} {self.id}" if self.id else type(self).__name__
+        built = _build_extra_property_value(name, value, owner)
+        if built is None:
+            return
+
+        # written through Pydantic, so the merged value is validated like any other
+        super().__setattr__(
+            "additionalProperty",
+            _merge_additional_property(self.additionalProperty, [built]),
+        )
+
     @model_validator(mode="before")
     @classmethod
     def discriminate_typed_fields(cls, data: Any) -> Any:
@@ -326,9 +395,9 @@ def _build_extra_property_value(
 
     Date/time/URL values are stringified first, since ``PropertyValue.value`` does not
     accept those types directly. A plain ``PropertyValue`` is then built directly
-    when possible. If that fails and ``item`` is a dict, it is retried as a
-    ``valueReference`` carrying the object's ``name`` as the ``value`` — the
-    schema.org-sanctioned way to point a property value at a controlled-vocabulary
+    when possible. If that fails and ``item`` is a dict or an already-built model, it is
+    retried as a ``valueReference`` carrying the object's ``name`` as the ``value`` —
+    the schema.org-sanctioned way to point a property value at a controlled-vocabulary
     term. Otherwise, the item is dropped, with a logged error.
 
     Parameters
@@ -337,8 +406,8 @@ def _build_extra_property_value(
         The property name ``item`` was found under; carried as ``name`` on the
         returned ``PropertyValue``.
     item : Any
-        One value of the extra property; either a plain scalar or a dict describing a
-        nested schema.org object.
+        One value of the extra property; a plain scalar, or a nested schema.org object
+        given either as a dict or as an already-built model.
     owner : str
         The entity ``item`` was found on — its ``@type``, plus its ``@id`` when it has
         one. Only used to identify the record in log messages, so that a conversion
@@ -370,6 +439,11 @@ def _build_extra_property_value(
             prop,
             item,
         )
+
+    # normalise item to be a dict, so an already-built model takes the same path as a
+    # freshly constructed one
+    if isinstance(item, SchemaOrgBase):
+        item = item.model_dump(by_alias=True, exclude_none=True)
 
     if isinstance(item, dict):
         type_name = item.get("@type") or item.get("type")
@@ -952,6 +1026,8 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         "",
         "",
         inspect.getsource(SchemaOrgBase),
+        "",
+        inspect.getsource(_merge_additional_property),
         "",
         inspect.getsource(_build_extra_property_value),
         "",
