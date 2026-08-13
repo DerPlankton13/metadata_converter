@@ -10,7 +10,6 @@ from metadata_converter.api_fetching.config import ApiFetchingConfig
 from metadata_converter.api_fetching.fetch import fetch_jsonld, query_source
 from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
-from metadata_converter.schema_org_models.schemaorg_models import validate_strict
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.jsonld import (
     inline_context_prefixes,
@@ -97,13 +96,6 @@ def load_api_data(config: ApiFetchingConfig) -> None:
             continue
 
         load_to_jsonld(schema, output_dir=config.output_dir)
-
-        try:
-            validate_strict(schema)
-        except ValueError as e:
-            logger.warning(
-                "Strict validation failed for %s: %s", fetched_file.name, e
-            )
 
         if config.provenance_dir is not None:
             write_provenance_file(

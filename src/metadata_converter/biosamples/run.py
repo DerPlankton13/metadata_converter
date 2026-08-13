@@ -24,7 +24,6 @@ from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
     Product,
-    validate_strict,
 )
 from metadata_converter.utils.http import make_session
 from metadata_converter.utils.jsonld import (
@@ -206,11 +205,6 @@ def load_biosamples(config: BiosamplesConfig):
 
         load_to_jsonld(schema, output_dir=config.output_dir)
 
-        try:
-            validate_strict(schema)
-        except ValueError as e:
-            logger.warning("Strict validation failed for %s: %s", ldjson_file.name, e)
-
         if config.provenance_dir is not None:
             # we need to expand the @id as we are not keeping the context in the
             # provenance file and the CURIE becomes unresolvable otherwise
@@ -257,12 +251,6 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
                 write_provenance_file(
                     product.id, config.provenance_dir, data["@id"], "uplift"
                 )
-            try:
-                validate_strict(product)
-            except ValueError as e:
-                logger.warning(
-                    "Strict validation failed for Product from %s: %s", path.name, e
-                )
         except ValidationError as e:
             logger.error("Failed to build Product for %s.", path.name)
             log_validation_error(e, logger)
@@ -273,12 +261,6 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
             if config.provenance_dir is not None:
                 write_provenance_file(
                     action.id, config.provenance_dir, data["@id"], "uplift"
-                )
-            try:
-                validate_strict(action)
-            except ValueError as e:
-                logger.warning(
-                    "Strict validation failed for Action from %s: %s", path.name, e
                 )
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)
