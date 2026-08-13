@@ -215,6 +215,14 @@ nature:
 Corollary: linking scaffolding (markers needed only to resolve a reference) should ride as `additionalProperty` entries
 and be removed at uplift — never become first-class stub entities that merely duplicate another entity's identity.
 
+**Prefer the adequate tool over the existing code structure.** When a transformation's nature points at a different
+tool than the one currently doing the job — e.g. entity resolution and cross-source matching are what a SPARQL engine
+is *for*, in a way that file-by-file Python transforms in the converter are not — move the logic to that tool rather
+than accreting more matching machinery around a boundary that no longer fits, even if that means a bigger structural
+leap during a rework than the smallest patch would need. This project is still early enough, and both repos are
+controlled by us, that the cost of such a leap is cheap and the cost of staying stuck in the original structure
+compounds. Don't let "we already built X here" be the reason X keeps growing where it is.
+
 ### Schema.org models (`src/metadata_converter/schema_org_models/`)
 
 - **`schemaorg_models.py`** — auto-generated Pydantic models for all schema.org types. Do not edit manually; regenerate
