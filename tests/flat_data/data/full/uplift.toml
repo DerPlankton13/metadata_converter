@@ -56,7 +56,7 @@ value.id = "https://example.com/super-funding-agency.jsonld"
 
 [[additions]]
 on_type = "DataCatalog"
-target_property = "sourceOrganisation"
+target_property = "sourceOrganization"
 value.type = "Project"
 value.id = "https://example.com/super-funded-project.jsonld"
 
@@ -68,7 +68,7 @@ value.id = "https://example.com/super-funding-agency.jsonld"
 
 [[additions]]
 on_type = "Dataset"
-target_property = "sourceOrganisation"
+target_property = "sourceOrganization"
 value.type = "Project"
 value.id = "https://example.com/super-funded-project.jsonld"
 
