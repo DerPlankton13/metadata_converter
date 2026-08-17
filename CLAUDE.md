@@ -363,9 +363,14 @@ so cross-references remain valid when both are resolved against the same base IR
 ### Serialization
 
 `load_to_jsonld` takes any `SchemaOrgBase` instance, serializes it with `model_dump(by_alias=True, exclude_none=True)`,
-prepends `@context` (no `@base` — relative IRI resolution is left to the graph-build step), and writes to
-`<output_path>/<@id>.jsonld`. The output filename is the last path component of `@id`; this keeps filenames stable and
-means the relative `@id` value doubles as the filename.
+and writes to `<output_path>/<@id>.jsonld` (no `@base` — relative IRI resolution is left to the graph-build step). It
+does **not** inject `@context` itself — it just dumps whatever the model's own `context` field already holds, and
+`exclude_none=True` drops the key entirely when that field is `None`. A nested/blank node legitimately has no
+`context` while embedded, but whoever promotes a model to a standalone top-level entity must set
+`context=SCHEMA_ORG_DEFAULT_CONTEXT` explicitly at that point, or the written file silently loses its `@context`.
+Current promotion points that do this: `flat_data`'s `build_root`, `provenance_writer.write_provenance_file`, and
+`atomize.py`'s `_atomize_node` (a blank node gaining its own `@id`). The output filename is the last path component
+of `@id`; this keeps filenames stable and means the relative `@id` value doubles as the filename.
 
 ### BioSamples test data
 
