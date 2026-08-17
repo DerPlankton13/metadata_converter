@@ -9,6 +9,7 @@ from metadata_converter.schema_org_models.schemaorg_models import (
 )
 from metadata_converter.uplift.atomize import AtomizeApplier, atomize_blank_nodes
 from metadata_converter.uplift.entity_store import EntityStore
+from metadata_converter.utils.jsonld import SCHEMA_ORG_DEFAULT_CONTEXT
 
 
 def test_atomize_blank_nodes_no_nested_schema_objects_returns_unchanged_and_empty_list():
@@ -34,7 +35,11 @@ def test_atomize_blank_nodes_scalar_blank_node_extracted_and_replaced_with_ref()
     assert result.name == "Sample dataset"
     assert result.id == "CreativeWork_1.jsonld"
     assert atomized == [
-        Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld", name="Jane Doe")
+        Person(
+            id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld",
+            name="Jane Doe",
+            context=SCHEMA_ORG_DEFAULT_CONTEXT,
+        )
     ]
 
 
@@ -50,11 +55,16 @@ def test_atomize_blank_nodes_nested_blank_node_extracted_bottom_up():
 
     assert result.author == Person(id="Person_ZZiYTZ7DiKcIXTbaEZDzgG.jsonld")
     assert atomized == [
-        Organization(id="Organization_sROsvZTN0HaB6VlkrkDO3l.jsonld", name="Acme Corp"),
+        Organization(
+            id="Organization_sROsvZTN0HaB6VlkrkDO3l.jsonld",
+            name="Acme Corp",
+            context=SCHEMA_ORG_DEFAULT_CONTEXT,
+        ),
         Person(
             id="Person_ZZiYTZ7DiKcIXTbaEZDzgG.jsonld",
             name="Jane Doe",
             worksFor=Organization(id="Organization_sROsvZTN0HaB6VlkrkDO3l.jsonld"),
+            context=SCHEMA_ORG_DEFAULT_CONTEXT,
         ),
     ]
 
@@ -87,7 +97,11 @@ def test_atomize_blank_nodes_list_valued_property_mixed_blank_and_identified_ite
         Organization(id="Organization_existing.jsonld", name="Acme"),
     ]
     assert atomized == [
-        Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld", name="Jane Doe")
+        Person(
+            id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld",
+            name="Jane Doe",
+            context=SCHEMA_ORG_DEFAULT_CONTEXT,
+        )
     ]
 
 
@@ -103,7 +117,11 @@ def test_atomize_blank_nodes_duplicate_blank_content_across_properties_dedupes_t
     assert result.author.id == "Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld"
     assert result.creator.id == "Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld"
     assert atomized == [
-        Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld", name="Jane Doe")
+        Person(
+            id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld",
+            name="Jane Doe",
+            context=SCHEMA_ORG_DEFAULT_CONTEXT,
+        )
     ]
 
 
@@ -145,6 +163,18 @@ def test_atomize_blank_nodes_context_field_does_not_affect_hash():
     result_with_nested_context, _ = atomize_blank_nodes(entity_with_nested_context)
 
     assert result_without_nested_context.author.id == result_with_nested_context.author.id
+
+
+def test_atomize_blank_nodes_promoted_entity_gets_context_but_ref_left_behind_does_not():
+    entity = CreativeWork(
+        id="CreativeWork_1.jsonld",
+        author=Person(name="Jane Doe"),
+    )
+
+    result, atomized = atomize_blank_nodes(entity)
+
+    assert atomized[0].context == SCHEMA_ORG_DEFAULT_CONTEXT
+    assert result.author.context is None
 
 
 def test_atomize_blank_nodes_does_not_mutate_input_entity():
@@ -194,7 +224,11 @@ def test_atomize_applier_blank_node_extracted_into_new_type_bucket():
     assert dataset.id == "CreativeWork_1.jsonld"
     assert dataset.author == Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld")
     assert store.of_type("Person") == [
-        Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld", name="Jane Doe")
+        Person(
+            id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld",
+            name="Jane Doe",
+            context=SCHEMA_ORG_DEFAULT_CONTEXT,
+        )
     ]
 
 
@@ -213,7 +247,11 @@ def test_atomize_applier_dedupes_identical_blank_content_across_entities():
     assert first.author.id == "Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld"
     assert second.author.id == "Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld"
     assert store.of_type("Person") == [
-        Person(id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld", name="Jane Doe")
+        Person(
+            id="Person_9UdOq2MiGRJzHZ3NpYI4a-.jsonld",
+            name="Jane Doe",
+            context=SCHEMA_ORG_DEFAULT_CONTEXT,
+        )
     ]
 
 
