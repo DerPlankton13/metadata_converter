@@ -15,6 +15,7 @@ when each blank node property was directly embedded.
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.utils.hashing import hashed_id
+from metadata_converter.utils.jsonld import SCHEMA_ORG_DEFAULT_CONTEXT
 
 
 def atomize_blank_nodes(
@@ -123,6 +124,8 @@ def _atomize_node(
 
     Atomizing a blank `node` means: resolve its own nested blank children first (so its
     content hash reflects its fully-resolved form), compute its `@id` from that content,
+    set `context` to schema.org's vocab now that the node is being promoted to a
+    standalone top-level entity (nested blank nodes carry none — see `build_root`),
     register it in `atomized` under that `@id` — a repeat `@id` from content-identical
     blank content is dropped, since an equal entity is already registered — and return a
     bare reference to it instead of the node itself.
@@ -151,7 +154,9 @@ def _atomize_node(
     node_id = hashed_id(
         resolved.model_dump(by_alias=True, exclude_none=True, exclude={"context"})
     )
-    resolved = resolved.model_copy(update={"id": node_id})
+    resolved = resolved.model_copy(
+        update={"id": node_id, "context": dict(SCHEMA_ORG_DEFAULT_CONTEXT)}
+    )
     atomized.setdefault(node_id, resolved)
     return type(resolved)(id=node_id)
 
