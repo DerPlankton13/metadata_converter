@@ -6,7 +6,21 @@ from metadata_converter.utils.io import write_json
 
 
 def load_to_jsonld(schema: SchemaOrgBase, output_dir: Path) -> None:
-    """Serialise a schema.org model to standardised JSON-LD and write it to `output_dir`."""
+    """Serialise a schema.org model to standardised JSON-LD and write it to `output_dir`.
+
+    Raises
+    ------
+    ValueError
+        If `schema.context` is not set. A standalone top-level entity must carry
+        `@context` explicitly (nested/blank models legitimately carry none); writing
+        one without it would otherwise silently drop `@context` from the output, since
+        `model_dump(..., exclude_none=True)` omits an unset field rather than erroring.
+    """
+    if schema.context is None:
+        raise ValueError(
+            f"{type(schema).__name__} {schema.id!r} has no @context set. Make sure to "
+            f"set a value for context before writing to jsonld."
+        )
     if isinstance(output_dir, str):
         output_dir = Path(output_dir)
 
