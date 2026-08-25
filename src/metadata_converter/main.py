@@ -36,7 +36,7 @@ def main():
             load_biosamples(config)
         case ("load", ApiFetchingConfig()):
             load_api_data(config)
-        case ("uplift", BiosamplesUpliftConfig()):
+        case ("uplift_record", BiosamplesUpliftConfig()):
             uplift_biosamples(config)
         case ("uplift", GenericUpliftConfig()):
             run_uplift(config)

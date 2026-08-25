@@ -225,7 +225,7 @@ def load_biosamples(config: BiosamplesConfig):
 
 
 def uplift_biosamples(config: BiosamplesUpliftConfig):
-    logger.info("Starting biosamples uplift")
+    logger.info("Starting biosamples record uplift")
 
     files = list(config.input_dir.glob("**/*.jsonld"))
     logger.info("Found %d loaded file(s) in %s", len(files), config.input_dir)
@@ -249,7 +249,7 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
             load_to_jsonld(product, output_dir=config.output_dir)
             if config.provenance_dir is not None:
                 write_provenance_file(
-                    product.id, config.provenance_dir, data["@id"], "uplift"
+                    product.id, config.provenance_dir, data["@id"], "uplift_record"
                 )
         except ValidationError as e:
             logger.error("Failed to build Product for %s.", path.name)
@@ -260,7 +260,7 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
             load_to_jsonld(action, output_dir=config.output_dir)
             if config.provenance_dir is not None:
                 write_provenance_file(
-                    action.id, config.provenance_dir, data["@id"], "uplift"
+                    action.id, config.provenance_dir, data["@id"], "uplift_record"
                 )
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)

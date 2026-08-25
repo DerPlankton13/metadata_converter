@@ -2,7 +2,8 @@
 
 Composes the three source-specific ``config.py`` modules (fetch/load) and the
 uplift package's config into the discriminated unions used by the CLI
-(``parse.py``).
+(``parse.py``). Each phase maps to exactly one config model or union, so the phase
+itself does the discriminating between generic and source-specific uplift.
 """
 from __future__ import annotations
 
@@ -25,14 +26,6 @@ SourceConfig = Annotated[
 ]
 
 source_config_adapter: TypeAdapter[SourceConfig] = TypeAdapter(SourceConfig)
-
-# Union of the two uplift config types — no discriminator field needed:
-# BiosamplesUpliftConfig requires source_type (no default) and GenericUpliftConfig
-# forbids it, so at most one member ever validates a given input. Used by
-# load_uplift_config — exactly one uplift run per config.
-UpliftConfig = Union[BiosamplesUpliftConfig, GenericUpliftConfig]
-
-uplift_config_adapter: TypeAdapter[UpliftConfig] = TypeAdapter(UpliftConfig)
 
 logger = logging.getLogger(__name__)
 
@@ -68,12 +61,28 @@ def load_source_config(
         handle_validation_error(e)
 
 
-def load_uplift_config(
-    path: str,
-) -> BiosamplesUpliftConfig | GenericUpliftConfig:
-    """Load and validate an uplift config (biosamples-specific or generic) from a TOML file."""
+def load_uplift_config(path: str) -> GenericUpliftConfig:
+    """Load and validate a generic uplift config from a TOML file.
+
+    A record-uplift config is rejected here: ``GenericUpliftConfig`` forbids extra keys,
+    so its ``source_type`` fails validation. The phase, not a union, decides which model
+    a config is read as.
+    """
     config = load_toml(path)
     try:
-        return uplift_config_adapter.validate_python(config)
+        return GenericUpliftConfig.model_validate(config)
+    except ValidationError as e:
+        handle_validation_error(e)
+
+
+def load_record_uplift_config(path: str) -> BiosamplesUpliftConfig:
+    """Load and validate a source-specific record-uplift config from a TOML file.
+
+    Biosamples is the only source with a record-uplift phase. If a second one appears,
+    this becomes a discriminated union on ``source_type`` like ``SourceConfig``.
+    """
+    config = load_toml(path)
+    try:
+        return BiosamplesUpliftConfig.model_validate(config)
     except ValidationError as e:
         handle_validation_error(e)
