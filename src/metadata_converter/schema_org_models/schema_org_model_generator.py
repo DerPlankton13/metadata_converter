@@ -330,8 +330,10 @@ class SchemaOrgBase(BaseModel):
             return data
         data = dict(data)
 
-        # identify not specified properties
-        extra_props = data.keys() - cls.declared_names()
+        # identify not specified properties, in the order the document lists them.
+        # in this manner we keep the order deterministic ensuring exact reproducibility
+        # of the results
+        extra_props = [name for name in data if name not in cls.declared_names()]
 
         # names the entity in log messages about converted or dropped values, so a
         # user can tell which record a complaint refers to and judge whether it matters
