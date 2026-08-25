@@ -1,4 +1,6 @@
-input_dir = ["loaded_base", "biosamples_loaded_uplifted"]
+input_dir = "loaded_base"
+# read-only: supplies Product link candidates without writing them to output_dir
+reference_dirs = "biosamples_loaded_uplifted"
 output_dir = "loaded_uplifted"
 provenance_dir = "provenance"
 atomize = false

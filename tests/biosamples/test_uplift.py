@@ -67,7 +67,7 @@ def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
 
     product_doc = json.loads(
         (
-            tmp_path / "provenance" / f"Provenance_uplift_Product_{sid}.jsonld"
+            tmp_path / "provenance" / f"Provenance_uplift_record_Product_{sid}.jsonld"
         ).read_text()
     )
     assert product_doc["about"] == {"@type": "Thing", "@id": f"Product_{sid}.jsonld"}
@@ -75,17 +75,17 @@ def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
         "@type": "CreativeWork",
         "@id": f"CreativeWork_{sid}.jsonld",
     }
-    assert product_doc["description"] == "stage: uplift"
+    assert product_doc["description"] == "stage: uplift_record"
 
     action_doc = json.loads(
-        (tmp_path / "provenance" / f"Provenance_uplift_Action_{sid}.jsonld").read_text()
+        (tmp_path / "provenance" / f"Provenance_uplift_record_Action_{sid}.jsonld").read_text()
     )
     assert action_doc["about"] == {"@type": "Thing", "@id": f"Action_{sid}.jsonld"}
     assert action_doc["isBasedOn"] == {
         "@type": "CreativeWork",
         "@id": f"CreativeWork_{sid}.jsonld",
     }
-    assert action_doc["description"] == "stage: uplift"
+    assert action_doc["description"] == "stage: uplift_record"
 
 
 def test_biosamples_uplift_without_provenance_dir_writes_nothing(
