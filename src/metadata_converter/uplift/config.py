@@ -145,10 +145,12 @@ class GenericUpliftConfig(BaseModel):
     """Source-independent uplift config, driven entirely by declarative rules."""
 
     model_config = ConfigDict(extra="forbid")
-    input_dir: Path | list[Path] = Field(
-        description="One input directory, or several whose JSON-LD is merged into a "
-        "single store (e.g. one per loaded source). A duplicate @id across "
-        "directories is an error."
+    input_dir: Path = Field(
+        description="The single directory of loaded JSON-LD to uplift. Deliberately not "
+        "a list: everything loaded here is written back to output_dir and recorded in "
+        "provenance_dir, so naming a sibling source would copy it into this source's "
+        "output and attribute its entities to themselves. Read another source through "
+        "reference_dirs instead, which is never written."
     )
     output_dir: Path
     reference_dirs: Path | list[Path] | None = Field(
