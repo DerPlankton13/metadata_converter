@@ -162,10 +162,20 @@ def _atomize_node(
 
 
 class AtomizeApplier:
-    """Atomize every entity in an `EntityStore`, replacing its contents in place."""
+    """Atomize every entity in an `EntityStore`, replacing its contents in place.
+
+    Attributes
+    ----------
+    origins : dict[str, list[str]]
+        Populated by `apply`: maps each newly atomized entity's `@id` to the `@id`s of the
+        top-level entities it was extracted from. An atom shared by several entities lists
+        all of them, which is what lets the caller write it a provenance record — see
+        `run_uplift`. Empty until `apply` has run.
+    """
 
     def __init__(self, store: EntityStore) -> None:
         self.store = store
+        self.origins: dict[str, list[str]] = {}
 
     def apply(self) -> None:
         """Atomize every entity in the store and replace `store.by_type` with the result.
@@ -176,6 +186,11 @@ class AtomizeApplier:
         atomized entity into one `@id`-keyed map, then writes that map back to the store,
         regrouped by `@type`.
 
+        Also records, in `self.origins`, which top-level entities each atom came from. The
+        origin is always the top-level entity, never a nesting atom: that is the file the
+        atom was extracted from, and it keeps every recorded origin a thing that has its
+        own provenance record.
+
         Raises
         ------
         ValueError
@@ -184,9 +199,14 @@ class AtomizeApplier:
             content is deduplicated silently instead.
         """
         final_by_id: dict[str, SchemaOrgBase] = {}
+        self.origins = {}
         for entity in self.store.all_entities():
             rebuilt, atoms = atomize_blank_nodes(entity)
             self._register_atoms(final_by_id, [rebuilt, *atoms])
+            for atom in atoms:
+                # safe to append without a membership check: atomize_blank_nodes keys
+                # atoms by content-hash @id, so one entity never yields the same atom twice
+                self.origins.setdefault(atom.id, []).append(entity.id)
 
         self.store.set_entities(list(final_by_id.values()))
 

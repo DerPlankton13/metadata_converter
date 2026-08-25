@@ -40,9 +40,12 @@ def run_uplift(config: GenericUpliftConfig) -> None:
        dot-selectors into that same nested content).
     8. **Write** — export every entity to ``config.output_dir``.
 
-    Provenance (if ``config.provenance_dir`` is set) is written only for entities
-    present before atomize: an atomized entity has no single loaded entity it is
-    "based on", so it gets no provenance file of its own.
+    Provenance (if ``config.provenance_dir`` is set) is written for every entity in the
+    output. An entity present before atomize is based on the loaded entity of the same
+    ``@id``. An atomized entity has no *single* origin, so it records all of them: the
+    top-level entities it was extracted from, as collected in ``AtomizeApplier.origins``.
+    That keeps the chain walkable — an atom points at the entities containing it, each of
+    which points at what it was loaded from.
     """
     logger.info("Starting uplift from %s", config.input_dir)
     store = EntityStore.load(config.input_dir)
@@ -57,12 +60,23 @@ def run_uplift(config: GenericUpliftConfig) -> None:
     RenameApplier(store).apply_all(config.renames)
     RemoveApplier(store).apply_all(config.removals)
     provenance_ids = [entity.id for entity in store.all_entities()]
+    atom_origins: dict[str, list[str]] = {}
     if config.atomize:
-        AtomizeApplier(store).apply()
+        atomizer = AtomizeApplier(store)
+        atomizer.apply()
+        atom_origins = atomizer.origins
     store.write(config.output_dir)
     if config.provenance_dir is not None:
         for entity_id in provenance_ids:
             # uplift refines an entity in place, so it is based on the loaded
             # entity of the same @id; the stage in the filename distinguishes them.
             write_provenance_file(entity_id, config.provenance_dir, entity_id, "uplift")
+        already_recorded = set(provenance_ids)
+        for atom_id, origins in atom_origins.items():
+            # an atom can dedupe onto an entity that was already loaded under that @id;
+            # that entity is already attributed, and overwriting would swap its record's
+            # isBasedOn from the loaded entity to the atom's origins
+            if atom_id in already_recorded:
+                continue
+            write_provenance_file(atom_id, config.provenance_dir, origins, "uplift")
     logger.info("Uplift complete. Output: %s", config.output_dir)
