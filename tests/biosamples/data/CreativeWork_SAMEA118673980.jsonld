@@ -7,8 +7,18 @@
   "identifier": "http://identifiers.org/biosample/SAMEA118673980",
   "dateCreated": "2025-07-07T07:36:54.655Z",
   "dateModified": "2025-07-07T07:36:54.658Z",
-  "dateReleased": "2025-07-07T00:00:00Z",
-  "dateSubmitted": "2025-07-07T07:36:54.655Z",
+  "additionalProperty": [
+    {
+      "@type": "PropertyValue",
+      "name": "dateReleased",
+      "value": "2025-07-07T00:00:00Z"
+    },
+    {
+      "@type": "PropertyValue",
+      "name": "dateSubmitted",
+      "value": "2025-07-07T07:36:54.655Z"
+    }
+  ],
   "mainEntity": {
     "@id": "https://www.ebi.ac.uk/biosamples/samples/SAMEA118673980",
     "@type": "Product",
