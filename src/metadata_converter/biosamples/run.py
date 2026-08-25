@@ -13,7 +13,7 @@ from metadata_converter import get_schema
 from metadata_converter.biosamples.config import (
     BiosamplesConfig,
     BiosamplesExtractorConfig,
-    BiosamplesUpliftConfig,
+    BiosamplesUpliftRecordConfig,
 )
 from metadata_converter.biosamples.fetch import (
     fuse_metadata,
@@ -224,8 +224,8 @@ def load_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples load complete. Output: %s", config.output_dir)
 
 
-def uplift_biosamples(config: BiosamplesUpliftConfig):
-    logger.info("Starting biosamples record uplift")
+def uplift_record_biosamples(config: BiosamplesUpliftRecordConfig):
+    logger.info("Starting biosamples uplift_record phase")
 
     files = list(config.input_dir.glob("**/*.jsonld"))
     logger.info("Found %d loaded file(s) in %s", len(files), config.input_dir)

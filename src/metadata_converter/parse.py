@@ -5,15 +5,15 @@ from pathlib import Path
 from metadata_converter.config import (
     ApiFetchingConfig,
     BiosamplesConfig,
-    BiosamplesUpliftConfig,
+    BiosamplesUpliftRecordConfig,
     FlatDataConfig,
     GenericUpliftConfig,
-    load_record_uplift_config,
     load_source_config,
     load_uplift_config,
+    load_uplift_record_config,
 )
 
-UpliftConfig = BiosamplesUpliftConfig | GenericUpliftConfig
+UpliftConfig = BiosamplesUpliftRecordConfig | GenericUpliftConfig
 
 
 def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingConfig | UpliftConfig, int]:
@@ -36,7 +36,7 @@ def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingCon
     if args.phase == "uplift":
         config = load_uplift_config(args.config)
     elif args.phase == "uplift_record":
-        config = load_record_uplift_config(args.config)
+        config = load_uplift_record_config(args.config)
     else:
         config = load_source_config(args.config)
 

@@ -14,7 +14,10 @@ from typing import Annotated, Union
 from pydantic import Field, TypeAdapter, ValidationError
 
 from metadata_converter.api_fetching.config import ApiFetchingConfig
-from metadata_converter.biosamples.config import BiosamplesConfig, BiosamplesUpliftConfig
+from metadata_converter.biosamples.config import (
+    BiosamplesConfig,
+    BiosamplesUpliftRecordConfig,
+)
 from metadata_converter.flat_data.config import FlatDataConfig
 from metadata_converter.uplift.config import GenericUpliftConfig
 
@@ -64,9 +67,9 @@ def load_source_config(
 def load_uplift_config(path: str) -> GenericUpliftConfig:
     """Load and validate a generic uplift config from a TOML file.
 
-    A record-uplift config is rejected here: ``GenericUpliftConfig`` forbids extra keys,
-    so its ``source_type`` fails validation. The phase, not a union, decides which model
-    a config is read as.
+    An ``uplift_record`` config is rejected here: ``GenericUpliftConfig`` forbids extra
+    keys, so its ``source_type`` fails validation. The phase, not a union, decides which
+    model a config is read as.
     """
     config = load_toml(path)
     try:
@@ -75,14 +78,15 @@ def load_uplift_config(path: str) -> GenericUpliftConfig:
         handle_validation_error(e)
 
 
-def load_record_uplift_config(path: str) -> BiosamplesUpliftConfig:
-    """Load and validate a source-specific record-uplift config from a TOML file.
+def load_uplift_record_config(path: str) -> BiosamplesUpliftRecordConfig:
+    """Load and validate a source-specific ``uplift_record`` config from a TOML file.
 
-    Biosamples is the only source with a record-uplift phase. If a second one appears,
-    this becomes a discriminated union on ``source_type`` like ``SourceConfig``.
+    Biosamples is the only source with an ``uplift_record`` phase. If a second one
+    appears, this becomes a discriminated union on ``source_type``, like
+    ``SourceConfig``.
     """
     config = load_toml(path)
     try:
-        return BiosamplesUpliftConfig.model_validate(config)
+        return BiosamplesUpliftRecordConfig.model_validate(config)
     except ValidationError as e:
         handle_validation_error(e)

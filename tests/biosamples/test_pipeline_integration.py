@@ -4,8 +4,8 @@ import shutil
 
 import pytest
 
-from metadata_converter.biosamples.config import BiosamplesUpliftConfig
-from metadata_converter.biosamples.run import load_biosamples, uplift_biosamples
+from metadata_converter.biosamples.config import BiosamplesUpliftRecordConfig
+from metadata_converter.biosamples.run import load_biosamples, uplift_record_biosamples
 from tests.biosamples.conftest import (
     DATA_DIR,
     assert_no_diff,
@@ -30,8 +30,8 @@ def test_fetch_to_uplift_produces_expected_product_and_action(tmp_path, sample_i
     uplifted_dir = tmp_path / "uplifted"
 
     load_biosamples(biosamples_config(fetched_dir, loaded_dir, None))
-    uplift_biosamples(
-        BiosamplesUpliftConfig(
+    uplift_record_biosamples(
+        BiosamplesUpliftRecordConfig(
             source_type="biosamples",
             input_dir=loaded_dir,
             output_dir=uplifted_dir,

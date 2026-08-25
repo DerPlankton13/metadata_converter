@@ -4,12 +4,12 @@ from metadata_converter.api_fetching.run import fetch_api_data, load_api_data
 from metadata_converter.biosamples.run import (
     fetch_biosamples,
     load_biosamples,
-    uplift_biosamples,
+    uplift_record_biosamples,
 )
 from metadata_converter.config import (
     ApiFetchingConfig,
     BiosamplesConfig,
-    BiosamplesUpliftConfig,
+    BiosamplesUpliftRecordConfig,
     FlatDataConfig,
     GenericUpliftConfig,
 )
@@ -36,8 +36,8 @@ def main():
             load_biosamples(config)
         case ("load", ApiFetchingConfig()):
             load_api_data(config)
-        case ("uplift_record", BiosamplesUpliftConfig()):
-            uplift_biosamples(config)
+        case ("uplift_record", BiosamplesUpliftRecordConfig()):
+            uplift_record_biosamples(config)
         case ("uplift", GenericUpliftConfig()):
             run_uplift(config)
         case _:

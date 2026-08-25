@@ -3,8 +3,8 @@ import shutil
 
 import pytest
 
-from metadata_converter.biosamples.config import BiosamplesUpliftConfig
-from metadata_converter.biosamples.run import uplift_biosamples
+from metadata_converter.biosamples.config import BiosamplesUpliftRecordConfig
+from metadata_converter.biosamples.run import uplift_record_biosamples
 from metadata_converter.biosamples.uplifting import SampleUplifter
 from tests.biosamples.conftest import DATA_DIR, assert_no_diff, load_json, strip_none
 
@@ -32,20 +32,22 @@ def test_extract_action(sample_id):
 
 
 @pytest.mark.parametrize("sample_id", SAMPLE_IDS)
-def test_uplift_biosamples_writes_expected_product_and_action(tmp_path, sample_id):
+def test_uplift_record_biosamples_writes_expected_product_and_action(
+    tmp_path, sample_id
+):
     expected_product = load_json(DATA_DIR / f"Product_{sample_id}.jsonld")
     expected_action = load_json(DATA_DIR / f"Action_{sample_id}.jsonld")
     input_dir = tmp_path / "loaded"
     input_dir.mkdir()
     shutil.copy(DATA_DIR / f"CreativeWork_{sample_id}.jsonld", input_dir)
-    config = BiosamplesUpliftConfig(
+    config = BiosamplesUpliftRecordConfig(
         source_type="biosamples",
         input_dir=input_dir,
         output_dir=tmp_path / "uplifted",
         provenance_dir=None,
     )
 
-    uplift_biosamples(config)
+    uplift_record_biosamples(config)
 
     result_product = load_json(tmp_path / "uplifted" / f"Product_{sample_id}.jsonld")
     result_action = load_json(tmp_path / "uplifted" / f"Action_{sample_id}.jsonld")
@@ -56,14 +58,14 @@ def test_uplift_biosamples_writes_expected_product_and_action(tmp_path, sample_i
 
 def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
     input_dir, sid = loaded_sample
-    config = BiosamplesUpliftConfig(
+    config = BiosamplesUpliftRecordConfig(
         source_type="biosamples",
         input_dir=input_dir,
         output_dir=tmp_path / "uplifted",
         provenance_dir=tmp_path / "provenance",
     )
 
-    uplift_biosamples(config)
+    uplift_record_biosamples(config)
 
     product_doc = json.loads(
         (
@@ -78,7 +80,9 @@ def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
     assert product_doc["description"] == "stage: uplift_record"
 
     action_doc = json.loads(
-        (tmp_path / "provenance" / f"Provenance_uplift_record_Action_{sid}.jsonld").read_text()
+        (
+            tmp_path / "provenance" / f"Provenance_uplift_record_Action_{sid}.jsonld"
+        ).read_text()
     )
     assert action_doc["about"] == {"@type": "Thing", "@id": f"Action_{sid}.jsonld"}
     assert action_doc["isBasedOn"] == {
@@ -92,13 +96,13 @@ def test_biosamples_uplift_without_provenance_dir_writes_nothing(
     tmp_path, loaded_sample
 ):
     input_dir, _ = loaded_sample
-    config = BiosamplesUpliftConfig(
+    config = BiosamplesUpliftRecordConfig(
         source_type="biosamples",
         input_dir=input_dir,
         output_dir=tmp_path / "uplifted",
         provenance_dir=None,
     )
 
-    uplift_biosamples(config)
+    uplift_record_biosamples(config)
 
     assert not (tmp_path / "provenance").exists()

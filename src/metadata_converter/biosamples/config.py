@@ -36,7 +36,7 @@ class BiosamplesConfig(BaseModel):
     provenance_dir: Path | None = None
 
 
-class BiosamplesUpliftConfig(BaseModel):
+class BiosamplesUpliftRecordConfig(BaseModel):
     """Config for the biosamples ``uplift_record`` phase."""
 
     model_config = ConfigDict(extra="forbid")
@@ -47,4 +47,4 @@ class BiosamplesUpliftConfig(BaseModel):
 
 
 BiosamplesConfig.model_rebuild()
-BiosamplesUpliftConfig.model_rebuild()
+BiosamplesUpliftRecordConfig.model_rebuild()
