@@ -82,8 +82,8 @@ def test_uplift_atomize_false_leaves_blank_nodes_embedded(config_factory, tmp_pa
     assert not (cfg.output_dir / "Person_Njtdsk7B9jXU3438K9WYXX.jsonld").exists()
 
 
-def test_uplift_atomize_extracted_entity_written_but_gets_no_provenance(
-    loaded_base, tmp_path
+def test_uplift_atomize_extracted_entity_gets_provenance_naming_its_origin(
+        loaded_base, tmp_path
 ):
     cfg = GenericUpliftConfig(
         input_dir=loaded_base,
@@ -97,9 +97,44 @@ def test_uplift_atomize_extracted_entity_written_but_gets_no_provenance(
 
     atom_id = "Person_Njtdsk7B9jXU3438K9WYXX.jsonld"
     assert (cfg.output_dir / atom_id).exists()
-    assert not (cfg.provenance_dir / f"Provenance_uplift_{atom_id}").exists()
+    # an atom has no single origin, so it records the entity it was extracted from
+    doc = load_jsonld(cfg.provenance_dir / f"Provenance_uplift_{atom_id}")
+    assert doc["about"] == {"@type": "Thing", "@id": atom_id}
+    assert doc["isBasedOn"] == {
+        "@type": "CreativeWork",
+        "@id": "Action_analysis1.jsonld",
+    }
     # the original, now-mutated top-level entity still gets its own provenance file
     assert (cfg.provenance_dir / "Provenance_uplift_Action_analysis1.jsonld").exists()
+
+
+def test_uplift_atomize_shared_atom_records_every_origin(tmp_path):
+    """One atom reached from two entities lists both — this is what makes the
+    provenance of a cross-source deduplicated atom correct once the graph merges it."""
+    input_dir = tmp_path / "in"
+    for id in ("Action_one.jsonld", "Action_two.jsonld"):
+        write_jsonld(input_dir / id, {
+            "@context": {"@vocab": "https://schema.org"},
+            "@type": "Action", "@id": id,
+            # identical blank node in both -> one shared atom
+            "agent": {"@type": "Person", "identifier": "0000-0002-2222-2222"},
+        })
+    cfg = GenericUpliftConfig(
+        input_dir=input_dir,
+        output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
+        atomize=True,
+    )
+
+    run_uplift(cfg)
+
+    atoms = sorted(p.name for p in cfg.output_dir.glob("Person_*.jsonld"))
+    assert len(atoms) == 1, atoms
+    doc = load_jsonld(cfg.provenance_dir / f"Provenance_uplift_{atoms[0]}")
+    assert sorted(ref["@id"] for ref in doc["isBasedOn"]) == [
+        "Action_one.jsonld",
+        "Action_two.jsonld",
+    ]
 
 
 def test_uplift_atomize_runs_after_removal_scrubbed_content_not_atomized(tmp_path):
