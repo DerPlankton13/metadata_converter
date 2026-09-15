@@ -304,6 +304,13 @@ must have a `type` key (schema.org class name) and then property-to-column mappi
 instance per value; a literal-only mapping emits a constant; output lists are collapsed to scalars where possible
 (one value → not a list).
 
+Fan-out applies to any multi-value column in a nested block, so the config author must decide whether a given column
+*identifies* the nested node or merely *describes* it. `agent.identifier` should fan out — two ORCIDs are two people —
+whereas fanning a descriptor like `keywords` over a block identified by `name` produces near-duplicate nodes and
+defeats the content-hash deduplication in `uplift/atomize.py`. Descriptive multi-value columns belong on the parent
+entity; when the parent class does not declare the property, it is folded into `additionalProperty` as one
+`PropertyValue` per value. See "Splitting multi-value cells" in [`docs/usage.md`](docs/usage.md).
+
 Cleaning plugins subclass `Plugin` (`transform/cleaning_plugin.py`) and implement `run(data: dict[str, DataFrame]) ->
 dict[str, DataFrame]` — they receive the whole dataset (so they can read one sheet and write another) and run before
 the built-in cleaning steps. They are discovered dynamically from a `plugin_dir`. After cleaning, sheets with no
