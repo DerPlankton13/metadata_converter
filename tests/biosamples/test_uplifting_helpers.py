@@ -6,7 +6,12 @@ from metadata_converter.biosamples.uplifting import (
     build_defined_term,
     build_property,
 )
-from tests.biosamples.conftest import assert_no_diff, make_coord_property, make_property, make_record
+from tests.biosamples.conftest import (
+    assert_no_diff,
+    make_coord_property,
+    make_property,
+    make_record,
+)
 
 EXPECTED_ENVO = {
     "@type": "DefinedTerm",
@@ -228,9 +233,9 @@ def test_build_location_with_coordinates():
     assert result["name"] is None
     assert result["geo"] == {
         "@type": "GeoCoordinates",
-        "latitude": "43.5 DD",
-        "longitude": "7.8 DD",
-        "elevation": "10 m",
+        "latitude": 43.5,
+        "longitude": 7.8,
+        "elevation": 10,
     }
 
 
