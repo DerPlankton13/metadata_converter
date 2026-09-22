@@ -13,6 +13,30 @@ from metadata_converter.biosamples.schemas import (
 logger = logging.getLogger(__name__)
 
 
+def to_number(value: str) -> int | float | str:
+    """Convert string to int or float if feasible.
+
+    Ensures that ints are not converted to floats
+    and that e.g. identifiers with leading zeros
+    are not modified by ensuring that the string
+    representation of the results corresponds to
+    the input.
+    """
+    try:
+        as_int = int(value)
+        if str(as_int) == value:
+            return as_int
+    except (ValueError, TypeError):
+        pass
+    try:
+        as_float = float(value)
+        if str(as_float) == value:
+            return as_float
+    except (ValueError, TypeError):
+        pass
+    return str(value)
+
+
 def get_property(sample_record: dict, prop_name: str) -> dict | None:
     props = sample_record["mainEntity"]["additionalProperty"]
 
