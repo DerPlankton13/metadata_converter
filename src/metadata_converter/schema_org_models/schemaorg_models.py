@@ -589,6 +589,7 @@ def _is_wrapped(type_annotation: Any) -> bool:
     is_union = type_origin is Union or type_origin is UnionType
     return is_union or type_origin in (list, set, tuple)
 
+
 class Thing(SchemaOrgBase):
     """The most generic type of item."""
 
@@ -722,7 +723,9 @@ class CreativeWork(Thing):
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
     copyrightNotice: str | list[str] | None = Field(default=None)
-    copyrightYear: float | str | list[float | str] | None = Field(default=None)
+    copyrightYear: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     correction: (
         CorrectionComment | str | AnyUrl | list[CorrectionComment | str | AnyUrl] | None
     ) = Field(default=None)
@@ -901,7 +904,7 @@ class CreativeWork(Thing):
     usageInfo: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
-    version: float | str | list[float | str] | None = Field(default=None)
+    version: int | float | str | list[int | float | str] | None = Field(default=None)
     video: Clip | VideoObject | str | list[Clip | VideoObject | str] | None = Field(
         default=None
     )
@@ -1134,11 +1137,11 @@ class Place(Thing):
     keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
         Field(default=None)
     )
-    latitude: float | str | list[float | str] | None = Field(default=None)
+    latitude: int | float | str | list[int | float | str] | None = Field(default=None)
     logo: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
         default=None
     )
-    longitude: float | str | list[float | str] | None = Field(default=None)
+    longitude: int | float | str | list[int | float | str] | None = Field(default=None)
     map: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     maps: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     maximumAttendeeCapacity: int | str | list[int | str] | None = Field(default=None)
@@ -1201,14 +1204,26 @@ class Accommodation(Place):
     ) = Field(default=None)
     numberOfBathroomsTotal: int | str | list[int | str] | None = Field(default=None)
     numberOfBedrooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
-    numberOfFullBathrooms: float | str | list[float | str] | None = Field(default=None)
-    numberOfPartialBathrooms: float | str | list[float | str] | None = Field(
+    numberOfFullBathrooms: int | float | str | list[int | float | str] | None = Field(
         default=None
     )
+    numberOfPartialBathrooms: int | float | str | list[int | float | str] | None = (
+        Field(default=None)
+    )
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -1216,7 +1231,7 @@ class Accommodation(Place):
     permittedUsage: str | list[str] | None = Field(default=None)
     petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
     tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    yearBuilt: float | str | list[float | str] | None = Field(default=None)
+    yearBuilt: int | float | str | list[int | float | str] | None = Field(default=None)
 
 
 class Organization(Thing):
@@ -1711,7 +1726,7 @@ class Offer(Intangible):
     offeredBy: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    price: float | str | list[float | str] | None = Field(default=None)
+    price: int | float | str | list[int | float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     priceSpecification: (
         PriceSpecification | str | list[PriceSpecification | str] | None
@@ -1749,8 +1764,8 @@ class AggregateOffer(Offer):
     http://purl.org/goodrelations/v1#Sell if businessFunction is not explicitly defined."""
 
     type: str = Field(default="AggregateOffer", alias="@type")
-    highPrice: float | str | list[float | str] | None = Field(default=None)
-    lowPrice: float | str | list[float | str] | None = Field(default=None)
+    highPrice: int | float | str | list[int | float | str] | None = Field(default=None)
+    lowPrice: int | float | str | list[int | float | str] | None = Field(default=None)
     offerCount: int | str | list[int | str] | None = Field(default=None)
     offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
         default=None
@@ -1764,13 +1779,17 @@ class Rating(Intangible):
     author: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    bestRating: float | str | list[float | str] | None = Field(default=None)
+    bestRating: int | float | str | list[int | float | str] | None = Field(default=None)
     ratingExplanation: str | list[str] | None = Field(default=None)
-    ratingValue: float | str | list[float | str] | None = Field(default=None)
+    ratingValue: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     reviewAspect: StructuredValue | str | list[StructuredValue | str] | None = Field(
         default=None
     )
-    worstRating: float | str | list[float | str] | None = Field(default=None)
+    worstRating: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class AggregateRating(Rating):
@@ -2064,7 +2083,12 @@ class Apartment(Accommodation):
 
     type: str = Field(default="Apartment", alias="@type")
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -2092,7 +2116,12 @@ class ApartmentComplex(Residence):
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
     numberOfBedrooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
     tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
@@ -2526,13 +2555,23 @@ class FinancialProduct(Service):
 
     type: str = Field(default="FinancialProduct", alias="@type")
     annualPercentageRate: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     feesAndCommissionsSpecification: str | AnyUrl | list[str | AnyUrl] | None = Field(
         default=None
     )
     interestRate: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
 
 
@@ -2619,7 +2658,12 @@ class LodgingBusiness(LocalBusiness):
         default=None
     )
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
     starRating: Rating | str | list[Rating | str] | None = Field(default=None)
@@ -2642,7 +2686,9 @@ class BedDetails(Intangible):
     development)."""
 
     type: str = Field(default="BedDetails", alias="@type")
-    numberOfBeds: float | str | list[float | str] | None = Field(default=None)
+    numberOfBeds: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     typeOfBed: BedType | str | list[BedType | str] | None = Field(default=None)
 
 
@@ -2870,7 +2916,12 @@ class Reservation(Intangible):
     ) = Field(default=None)
     reservedTicket: Ticket | str | list[Ticket | str] | None = Field(default=None)
     totalPrice: (
-        float | PriceSpecification | str | list[float | PriceSpecification | str] | None
+        int
+        | float
+        | PriceSpecification
+        | str
+        | list[int | float | PriceSpecification | str]
+        | None
     ) = Field(default=None)
     underName: (
         Organization | Person | str | list[Organization | Person | str] | None
@@ -3271,7 +3322,12 @@ class BroadcastFrequencySpecification(Intangible):
 
     type: str = Field(default="BroadcastFrequencySpecification", alias="@type")
     broadcastFrequencyValue: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     broadcastSignalModulation: (
         QualitativeValue | str | list[QualitativeValue | str] | None
@@ -3315,9 +3371,14 @@ class InvestmentOrDeposit(FinancialProduct):
     a financial service in return for potential beneficial financial return."""
 
     type: str = Field(default="InvestmentOrDeposit", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
 
 
 class BrokerageAccount(InvestmentOrDeposit):
@@ -3520,7 +3581,9 @@ class Vehicle(Product):
         | list[DriveWheelConfigurationValue | str]
         | None
     ) = Field(default=None)
-    emissionsCO2: float | str | list[float | str] | None = Field(default=None)
+    emissionsCO2: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     fuelCapacity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
@@ -3541,18 +3604,40 @@ class Vehicle(Product):
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
     modelDate: date | str | list[date | str] | None = Field(default=None)
-    numberOfAirbags: float | str | list[float | str] | None = Field(default=None)
+    numberOfAirbags: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     numberOfAxles: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     numberOfDoors: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     numberOfForwardGears: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     numberOfPreviousOwners: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     payload: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -3560,7 +3645,12 @@ class Vehicle(Product):
     productionDate: date | str | list[date | str] | None = Field(default=None)
     purchaseDate: date | str | list[date | str] | None = Field(default=None)
     seatingCapacity: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     speed: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -3583,7 +3673,12 @@ class Vehicle(Product):
     vehicleInteriorType: str | list[str] | None = Field(default=None)
     vehicleModelDate: date | str | list[date | str] | None = Field(default=None)
     vehicleSeatingCapacity: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     vehicleSpecialUsage: CarUsageType | str | list[CarUsageType | str] | None = Field(
         default=None
@@ -3703,7 +3798,7 @@ class TradeAction(Action):
     exchange for a one time or periodic payment."""
 
     type: str = Field(default="TradeAction", alias="@type")
-    price: float | str | list[float | str] | None = Field(default=None)
+    price: int | float | str | list[int | float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     priceSpecification: (
         PriceSpecification | str | list[PriceSpecification | str] | None
@@ -3748,21 +3843,41 @@ class CDCPMDRecord(StructuredValue):
     )
     cvdFacilityCounty: str | list[str] | None = Field(default=None)
     cvdFacilityId: str | list[str] | None = Field(default=None)
-    cvdNumBeds: float | str | list[float | str] | None = Field(default=None)
-    cvdNumBedsOcc: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19Died: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19HOPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19HospPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19MechVentPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19OFMechVentPats: float | str | list[float | str] | None = Field(
+    cvdNumBeds: int | float | str | list[int | float | str] | None = Field(default=None)
+    cvdNumBedsOcc: int | float | str | list[int | float | str] | None = Field(
         default=None
     )
-    cvdNumC19OverflowPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumICUBeds: float | str | list[float | str] | None = Field(default=None)
-    cvdNumICUBedsOcc: float | str | list[float | str] | None = Field(default=None)
-    cvdNumTotBeds: float | str | list[float | str] | None = Field(default=None)
-    cvdNumVent: float | str | list[float | str] | None = Field(default=None)
-    cvdNumVentUse: float | str | list[float | str] | None = Field(default=None)
+    cvdNumC19Died: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19HOPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19HospPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19MechVentPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19OFMechVentPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19OverflowPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumICUBeds: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumICUBedsOcc: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumTotBeds: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumVent: int | float | str | list[int | float | str] | None = Field(default=None)
+    cvdNumVentUse: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     datePosted: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
@@ -4189,7 +4304,12 @@ class Clip(CreativeWork):
     director: Person | str | list[Person | str] | None = Field(default=None)
     directors: Person | str | list[Person | str] | None = Field(default=None)
     endOffset: (
-        HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
+        HyperTocEntry
+        | int
+        | float
+        | str
+        | list[HyperTocEntry | int | float | str]
+        | None
     ) = Field(default=None)
     musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
         default=None
@@ -4202,7 +4322,12 @@ class Clip(CreativeWork):
         Field(default=None)
     )
     startOffset: (
-        HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
+        HyperTocEntry
+        | int
+        | float
+        | str
+        | list[HyperTocEntry | int | float | str]
+        | None
     ) = Field(default=None)
 
 
@@ -4459,12 +4584,17 @@ class PriceSpecification(StructuredValue):
     eligibleTransactionVolume: (
         PriceSpecification | str | list[PriceSpecification | str] | None
     ) = Field(default=None)
-    maxPrice: float | str | list[float | str] | None = Field(default=None)
+    maxPrice: int | float | str | list[int | float | str] | None = Field(default=None)
     membershipPointsEarned: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
-    minPrice: float | str | list[float | str] | None = Field(default=None)
-    price: float | str | list[float | str] | None = Field(default=None)
+    minPrice: int | float | str | list[int | float | str] | None = Field(default=None)
+    price: int | float | str | list[int | float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     validForMemberTier: (
         MemberProgramTier | str | list[MemberProgramTier | str] | None
@@ -4863,9 +4993,14 @@ class LoanOrCredit(FinancialProduct):
     agreed terms and charges."""
 
     type: str = Field(default="LoanOrCredit", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
     currency: str | list[str] | None = Field(default=None)
     gracePeriod: timedelta | str | list[timedelta | str] | None = Field(default=None)
     loanRepaymentForm: (
@@ -4907,13 +5042,20 @@ class PaymentCard(PaymentMethod, FinancialProduct):
     with an account."""
 
     type: str = Field(default="PaymentCard", alias="@type")
-    cashBack: bool | float | str | list[bool | float | str] | None = Field(default=None)
+    cashBack: bool | int | float | str | list[bool | int | float | str] | None = Field(
+        default=None
+    )
     contactlessPayment: bool | str | list[bool | str] | None = Field(default=None)
     floorLimit: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
     monthlyMinimumRepaymentAmount: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
 
 
@@ -5106,9 +5248,14 @@ class DatedMoneySpecification(StructuredValue):
     is recommended."""
 
     type: str = Field(default="DatedMoneySpecification", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
     currency: str | list[str] | None = Field(default=None)
     endDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
@@ -5584,7 +5731,7 @@ class DonateAction(TransferAction):
     philanthropic reasons."""
 
     type: str = Field(default="DonateAction", alias="@type")
-    price: float | str | list[float | str] | None = Field(default=None)
+    price: int | float | str | list[int | float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     priceSpecification: (
         PriceSpecification | str | list[PriceSpecification | str] | None
@@ -5606,7 +5753,12 @@ class DoseSchedule(MedicalIntangible):
     type: str = Field(default="DoseSchedule", alias="@type")
     doseUnit: str | list[str] | None = Field(default=None)
     doseValue: (
-        float | QualitativeValue | str | list[float | QualitativeValue | str] | None
+        int
+        | float
+        | QualitativeValue
+        | str
+        | list[int | float | QualitativeValue | str]
+        | None
     ) = Field(default=None)
     frequency: str | list[str] | None = Field(default=None)
     targetPopulation: str | list[str] | None = Field(default=None)
@@ -5726,7 +5878,12 @@ class DrugCost(MedicalEntity):
     costCurrency: str | list[str] | None = Field(default=None)
     costOrigin: str | list[str] | None = Field(default=None)
     costPerUnit: (
-        float | QualitativeValue | str | list[float | QualitativeValue | str] | None
+        int
+        | float
+        | QualitativeValue
+        | str
+        | list[int | float | QualitativeValue | str]
+        | None
     ) = Field(default=None)
     drugUnit: str | list[str] | None = Field(default=None)
 
@@ -5779,7 +5936,9 @@ class DrugStrength(MedicalIntangible):
         MaximumDoseSchedule | str | list[MaximumDoseSchedule | str] | None
     ) = Field(default=None)
     strengthUnit: str | list[str] | None = Field(default=None)
-    strengthValue: float | str | list[float | str] | None = Field(default=None)
+    strengthValue: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class DryCleaningOrLaundry(LocalBusiness):
@@ -5914,7 +6073,9 @@ class EducationalOccupationalProgram(Intangible):
         default=None
     )
     termDuration: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    termsPerYear: float | str | list[float | str] | None = Field(default=None)
+    termsPerYear: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     timeOfDay: str | list[str] | None = Field(default=None)
     timeToComplete: timedelta | str | list[timedelta | str] | None = Field(default=None)
     trainingSalary: (
@@ -6049,7 +6210,9 @@ class OrganizationRole(Role):
     """A subclass of Role used to describe roles within organizations."""
 
     type: str = Field(default="OrganizationRole", alias="@type")
-    numberedPosition: float | str | list[float | str] | None = Field(default=None)
+    numberedPosition: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class EmployeeRole(OrganizationRole):
@@ -6058,10 +6221,11 @@ class EmployeeRole(OrganizationRole):
     type: str = Field(default="EmployeeRole", alias="@type")
     baseSalary: (
         MonetaryAmount
+        | int
         | float
         | PriceSpecification
         | str
-        | list[MonetaryAmount | float | PriceSpecification | str]
+        | list[MonetaryAmount | int | float | PriceSpecification | str]
         | None
     ) = Field(default=None)
     salaryCurrency: str | list[str] | None = Field(default=None)
@@ -6322,7 +6486,12 @@ class ExchangeRateSpecification(StructuredValue):
         UnitPriceSpecification | str | list[UnitPriceSpecification | str] | None
     ) = Field(default=None)
     exchangeRateSpread: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
 
 
@@ -6419,7 +6588,12 @@ class ExercisePlan(PhysicalActivity, CreativeWork):
         default=None
     )
     repetitions: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     restPeriods: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -6631,14 +6805,26 @@ class FloorPlan(Intangible):
     ) = Field(default=None)
     numberOfBathroomsTotal: int | str | list[int | str] | None = Field(default=None)
     numberOfBedrooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
-    numberOfFullBathrooms: float | str | list[float | str] | None = Field(default=None)
-    numberOfPartialBathrooms: float | str | list[float | str] | None = Field(
+    numberOfFullBathrooms: int | float | str | list[int | float | str] | None = Field(
         default=None
     )
+    numberOfPartialBathrooms: int | float | str | list[int | float | str] | None = (
+        Field(default=None)
+    )
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
 
@@ -6867,7 +7053,7 @@ class GeoShape(StructuredValue):
     addressCountry: Country | str | list[Country | str] | None = Field(default=None)
     box: str | list[str] | None = Field(default=None)
     circle: str | list[str] | None = Field(default=None)
-    elevation: float | str | list[float | str] | None = Field(default=None)
+    elevation: int | float | str | list[int | float | str] | None = Field(default=None)
     line: str | list[str] | None = Field(default=None)
     polygon: str | list[str] | None = Field(default=None)
     postalCode: str | list[str] | None = Field(default=None)
@@ -6886,9 +7072,9 @@ class GeoCircle(GeoShape):
     geoMidpoint: GeoCoordinates | str | list[GeoCoordinates | str] | None = Field(
         default=None
     )
-    geoRadius: Distance | float | str | list[Distance | float | str] | None = Field(
-        default=None
-    )
+    geoRadius: (
+        Distance | int | float | str | list[Distance | int | float | str] | None
+    ) = Field(default=None)
 
 
 class GeoCoordinates(StructuredValue):
@@ -6899,9 +7085,9 @@ class GeoCoordinates(StructuredValue):
         default=None
     )
     addressCountry: Country | str | list[Country | str] | None = Field(default=None)
-    elevation: float | str | list[float | str] | None = Field(default=None)
-    latitude: float | str | list[float | str] | None = Field(default=None)
-    longitude: float | str | list[float | str] | None = Field(default=None)
+    elevation: int | float | str | list[int | float | str] | None = Field(default=None)
+    latitude: int | float | str | list[int | float | str] | None = Field(default=None)
+    longitude: int | float | str | list[int | float | str] | None = Field(default=None)
     postalCode: str | list[str] | None = Field(default=None)
 
 
@@ -7163,8 +7349,8 @@ class HealthPlanCostSharingSpecification(Intangible):
 
     type: str = Field(default="HealthPlanCostSharingSpecification", alias="@type")
     healthPlanCoinsuranceOption: str | list[str] | None = Field(default=None)
-    healthPlanCoinsuranceRate: float | str | list[float | str] | None = Field(
-        default=None
+    healthPlanCoinsuranceRate: int | float | str | list[int | float | str] | None = (
+        Field(default=None)
     )
     healthPlanCopay: (
         PriceSpecification | str | list[PriceSpecification | str] | None
@@ -7331,7 +7517,12 @@ class House(Accommodation):
 
     type: str = Field(default="House", alias="@type")
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
 
 
@@ -7406,7 +7597,12 @@ class HowToItem(ListItem):
 
     type: str = Field(default="HowToItem", alias="@type")
     requiredQuantity: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
 
 
@@ -7869,10 +8065,11 @@ class JobPosting(Intangible):
     )
     baseSalary: (
         MonetaryAmount
+        | int
         | float
         | PriceSpecification
         | str
-        | list[MonetaryAmount | float | PriceSpecification | str]
+        | list[MonetaryAmount | int | float | PriceSpecification | str]
         | None
     ) = Field(default=None)
     benefits: str | list[str] | None = Field(default=None)
@@ -7895,9 +8092,10 @@ class JobPosting(Intangible):
     estimatedSalary: (
         MonetaryAmount
         | MonetaryAmountDistribution
+        | int
         | float
         | str
-        | list[MonetaryAmount | MonetaryAmountDistribution | float | str]
+        | list[MonetaryAmount | MonetaryAmountDistribution | int | float | str]
         | None
     ) = Field(default=None)
     experienceInPlaceOfEducation: bool | str | list[bool | str] | None = Field(
@@ -8192,7 +8390,7 @@ class PropertyValue(StructuredValue):
     """
 
     type: str = Field(default="PropertyValue", alias="@type")
-    maxValue: float | str | list[float | str] | None = Field(default=None)
+    maxValue: int | float | str | list[int | float | str] | None = Field(default=None)
     measurementMethod: (
         DefinedTerm
         | MeasurementMethodEnum
@@ -8209,16 +8407,17 @@ class PropertyValue(StructuredValue):
         | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
+    minValue: int | float | str | list[int | float | str] | None = Field(default=None)
     propertyID: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     unitText: str | list[str] | None = Field(default=None)
     value: (
         bool
+        | int
         | float
         | StructuredValue
         | str
-        | list[bool | float | StructuredValue | str]
+        | list[bool | int | float | StructuredValue | str]
         | None
     ) = Field(default=None)
     valueReference: (
@@ -8456,11 +8655,15 @@ class PeopleAudience(Audience):
     suggestedGender: GenderType | str | list[GenderType | str] | None = Field(
         default=None
     )
-    suggestedMaxAge: float | str | list[float | str] | None = Field(default=None)
+    suggestedMaxAge: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     suggestedMeasurement: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
-    suggestedMinAge: float | str | list[float | str] | None = Field(default=None)
+    suggestedMinAge: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class MedicalAudience(PeopleAudience, Audience):
@@ -8509,7 +8712,9 @@ class MedicalConditionStage(MedicalIntangible):
     """A stage of a medical condition, such as 'Stage IIIa'."""
 
     type: str = Field(default="MedicalConditionStage", alias="@type")
-    stageAsNumber: float | str | list[float | str] | None = Field(default=None)
+    stageAsNumber: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     subStageSuffix: str | list[str] | None = Field(default=None)
 
 
@@ -8893,7 +9098,12 @@ class MemberProgramTier(Intangible):
         default=None
     )
     membershipPointsEarned: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
 
 
@@ -8995,7 +9205,12 @@ class MerchantReturnPolicy(Intangible):
         RefundTypeEnumeration | str | list[RefundTypeEnumeration | str] | None
     ) = Field(default=None)
     restockingFee: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
     returnFees: (
         ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
@@ -9043,7 +9258,12 @@ class MerchantReturnPolicySeasonalOverride(Intangible):
         RefundTypeEnumeration | str | list[RefundTypeEnumeration | str] | None
     ) = Field(default=None)
     restockingFee: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
     returnFees: (
         ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
@@ -9165,8 +9385,8 @@ class MonetaryAmount(StructuredValue):
 
     type: str = Field(default="MonetaryAmount", alias="@type")
     currency: str | list[str] | None = Field(default=None)
-    maxValue: float | str | list[float | str] | None = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
+    maxValue: int | float | str | list[int | float | str] | None = Field(default=None)
+    minValue: int | float | str | list[int | float | str] | None = Field(default=None)
     validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
@@ -9175,10 +9395,11 @@ class MonetaryAmount(StructuredValue):
     )
     value: (
         bool
+        | int
         | float
         | StructuredValue
         | str
-        | list[bool | float | StructuredValue | str]
+        | list[bool | int | float | StructuredValue | str]
         | None
     ) = Field(default=None)
 
@@ -9194,11 +9415,19 @@ class QuantitativeValueDistribution(StructuredValue):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    median: float | str | list[float | str] | None = Field(default=None)
-    percentile10: float | str | list[float | str] | None = Field(default=None)
-    percentile25: float | str | list[float | str] | None = Field(default=None)
-    percentile75: float | str | list[float | str] | None = Field(default=None)
-    percentile90: float | str | list[float | str] | None = Field(default=None)
+    median: int | float | str | list[int | float | str] | None = Field(default=None)
+    percentile10: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    percentile25: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    percentile75: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    percentile90: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class MonetaryAmountDistribution(QuantitativeValueDistribution):
@@ -9212,9 +9441,14 @@ class MonetaryGrant(Grant):
     """A monetary grant."""
 
     type: str = Field(default="MonetaryGrant", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
     funder: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
@@ -9225,9 +9459,14 @@ class MoneyTransfer(TransferAction):
     electronically or physically."""
 
     type: str = Field(default="MoneyTransfer", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
     beneficiaryBank: BankOrCreditUnion | str | list[BankOrCreditUnion | str] | None = (
         Field(default=None)
     )
@@ -9355,7 +9594,9 @@ class MovieTheater(CivicStructure, EntertainmentBusiness):
     """A movie theater."""
 
     type: str = Field(default="MovieTheater", alias="@type")
-    screenCount: float | str | list[float | str] | None = Field(default=None)
+    screenCount: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class MovingCompany(HomeAndConstructionBusiness):
@@ -9684,16 +9925,17 @@ class QuantitativeValue(StructuredValue):
     additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
     )
-    maxValue: float | str | list[float | str] | None = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
+    maxValue: int | float | str | list[int | float | str] | None = Field(default=None)
+    minValue: int | float | str | list[int | float | str] | None = Field(default=None)
     unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     unitText: str | list[str] | None = Field(default=None)
     value: (
         bool
+        | int
         | float
         | StructuredValue
         | str
-        | list[bool | float | StructuredValue | str]
+        | list[bool | int | float | StructuredValue | str]
         | None
     ) = Field(default=None)
     valueReference: (
@@ -9794,9 +10036,10 @@ class Occupation(Intangible):
     estimatedSalary: (
         MonetaryAmount
         | MonetaryAmountDistribution
+        | int
         | float
         | str
-        | list[MonetaryAmount | MonetaryAmountDistribution | float | str]
+        | list[MonetaryAmount | MonetaryAmountDistribution | int | float | str]
         | None
     ) = Field(default=None)
     experienceRequirements: (
@@ -9822,7 +10065,9 @@ class OccupationalExperienceRequirements(Intangible):
     """Indicates employment-related experience requirements, e.g. monthsOfExperience."""
 
     type: str = Field(default="OccupationalExperienceRequirements", alias="@type")
-    monthsOfExperience: float | str | list[float | str] | None = Field(default=None)
+    monthsOfExperience: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class OccupationalTherapy(MedicalTherapy):
@@ -10035,7 +10280,7 @@ class Order(Intangible):
     customer: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    discount: float | str | list[float | str] | None = Field(default=None)
+    discount: int | float | str | list[int | float | str] | None = Field(default=None)
     discountCode: str | list[str] | None = Field(default=None)
     discountCurrency: str | list[str] | None = Field(default=None)
     isGift: bool | str | list[bool | str] | None = Field(default=None)
@@ -10097,7 +10342,12 @@ class OrderItem(StructuredValue):
         default=None
     )
     orderQuantity: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     orderedItem: (
         OrderItem
@@ -10192,8 +10442,12 @@ class ParentAudience(PeopleAudience):
     content."""
 
     type: str = Field(default="ParentAudience", alias="@type")
-    childMaxAge: float | str | list[float | str] | None = Field(default=None)
-    childMinAge: float | str | list[float | str] | None = Field(default=None)
+    childMaxAge: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    childMinAge: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class Park(CivicStructure):
@@ -10749,7 +11003,12 @@ class ProgramMembership(Intangible):
     )
     membershipNumber: str | list[str] | None = Field(default=None)
     membershipPointsEarned: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     program: MemberProgram | str | list[MemberProgram | str] | None = Field(
         default=None
@@ -10790,13 +11049,17 @@ class PropertyValueSpecification(Intangible):
 
     type: str = Field(default="PropertyValueSpecification", alias="@type")
     defaultValue: str | Thing | list[str | Thing] | None = Field(default=None)
-    maxValue: float | str | list[float | str] | None = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
+    maxValue: int | float | str | list[int | float | str] | None = Field(default=None)
+    minValue: int | float | str | list[int | float | str] | None = Field(default=None)
     multipleValues: bool | str | list[bool | str] | None = Field(default=None)
     readonlyValue: bool | str | list[bool | str] | None = Field(default=None)
-    stepValue: float | str | list[float | str] | None = Field(default=None)
-    valueMaxLength: float | str | list[float | str] | None = Field(default=None)
-    valueMinLength: float | str | list[float | str] | None = Field(default=None)
+    stepValue: int | float | str | list[int | float | str] | None = Field(default=None)
+    valueMaxLength: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    valueMinLength: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     valueName: str | list[str] | None = Field(default=None)
     valuePattern: str | list[str] | None = Field(default=None)
     valueRequired: bool | str | list[bool | str] | None = Field(default=None)
@@ -11153,7 +11416,12 @@ class RepaymentSpecification(StructuredValue):
 
     type: str = Field(default="RepaymentSpecification", alias="@type")
     downPayment: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
     earlyPrepaymentPenalty: MonetaryAmount | str | list[MonetaryAmount | str] | None = (
         Field(default=None)
@@ -11161,8 +11429,12 @@ class RepaymentSpecification(StructuredValue):
     loanPaymentAmount: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
-    loanPaymentFrequency: float | str | list[float | str] | None = Field(default=None)
-    numberOfLoanPayments: float | str | list[float | str] | None = Field(default=None)
+    loanPaymentFrequency: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    numberOfLoanPayments: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class ReplaceAction(UpdateAction):
@@ -11373,8 +11645,8 @@ class RsvpAction(InformAction):
     event."""
 
     type: str = Field(default="RsvpAction", alias="@type")
-    additionalNumberOfGuests: float | str | list[float | str] | None = Field(
-        default=None
+    additionalNumberOfGuests: int | float | str | list[int | float | str] | None = (
+        Field(default=None)
     )
     comment: Comment | str | list[Comment | str] | None = Field(default=None)
     rsvpResponse: RsvpResponseType | str | list[RsvpResponseType | str] | None = Field(
@@ -11540,7 +11812,12 @@ class SeekToAction(Action):
 
     type: str = Field(default="SeekToAction", alias="@type")
     startOffset: (
-        HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
+        HyperTocEntry
+        | int
+        | float
+        | str
+        | list[HyperTocEntry | int | float | str]
+        | None
     ) = Field(default=None)
 
 
@@ -11762,7 +12039,9 @@ class ShippingRateSettings(StructuredValue):
         | None
     ) = Field(default=None)
     isUnlabelledFallback: bool | str | list[bool | str] | None = Field(default=None)
-    orderPercentage: float | str | list[float | str] | None = Field(default=None)
+    orderPercentage: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     shippingDestination: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
         default=None
     )
@@ -11773,7 +12052,9 @@ class ShippingRateSettings(StructuredValue):
         | list[MonetaryAmount | ShippingRateSettings | str]
         | None
     ) = Field(default=None)
-    weightPercentage: float | str | list[float | str] | None = Field(default=None)
+    weightPercentage: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class ShippingService(StructuredValue):
@@ -11822,7 +12103,12 @@ class SingleFamilyResidence(House):
 
     type: str = Field(default="SingleFamilyResidence", alias="@type")
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -12259,7 +12545,12 @@ class Suite(Accommodation):
         default=None
     )
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -12530,7 +12821,12 @@ class Ticket(Intangible):
     ticketToken: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     ticketedSeat: Seat | str | list[Seat | str] | None = Field(default=None)
     totalPrice: (
-        float | PriceSpecification | str | list[float | PriceSpecification | str] | None
+        int
+        | float
+        | PriceSpecification
+        | str
+        | list[int | float | PriceSpecification | str]
+        | None
     ) = Field(default=None)
     underName: (
         Organization | Person | str | list[Organization | Person | str] | None
@@ -12700,7 +12996,9 @@ class TypeAndQuantityNode(StructuredValue):
     function of goods included in a bundle offer."""
 
     type: str = Field(default="TypeAndQuantityNode", alias="@type")
-    amountOfThisGood: float | str | list[float | str] | None = Field(default=None)
+    amountOfThisGood: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     businessFunction: BusinessFunction | str | list[BusinessFunction | str] | None = (
         Field(default=None)
     )
@@ -12744,14 +13042,19 @@ class UnitPriceSpecification(PriceSpecification):
     type: str = Field(default="UnitPriceSpecification", alias="@type")
     billingDuration: (
         timedelta
+        | int
         | float
         | QuantitativeValue
         | str
-        | list[timedelta | float | QuantitativeValue | str]
+        | list[timedelta | int | float | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    billingIncrement: float | str | list[float | str] | None = Field(default=None)
-    billingStart: float | str | list[float | str] | None = Field(default=None)
+    billingIncrement: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    billingStart: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     priceComponentType: (
         PriceComponentTypeEnumeration
         | str
