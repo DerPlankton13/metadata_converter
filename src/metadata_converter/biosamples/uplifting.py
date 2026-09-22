@@ -512,14 +512,22 @@ class ActionBuilder(BaseBuilder):
         loc_name = ", ".join(filter(None, [region, country]))
 
         # adds geo Property to location as type GeoCoordinates if values are provided
-        geo_fields = {
-            "latitude": self.record.with_unit("geographic location (latitude)"),
-            "longitude": self.record.with_unit("geographic location (longitude)"),
-            "elevation": self.record.with_unit("elevation"),
-        }
+        elevation, elevation_unit = self.record.with_unit("elevation")
+        if (
+            elevation is not None
+            and elevation_unit is not None
+            and elevation_unit != "m"
+        ):
+            elevation = f"{elevation} {elevation_unit}"
+            logger.warning(
+                f"Elevation contained a unit that does not correspond to 'm': {elevation_unit}"
+            )
         geo = {
-            key: f"{value} {unit}" for key, (value, unit) in geo_fields.items() if value
+            "latitude": self.record["geographic location (latitude)"],
+            "longitude": self.record["geographic location (longitude)"],
+            "elevation": elevation,
         }
+        geo = {k: v for k, v in geo.items() if v is not None}
 
         # We can add additionalProperty to location
         additional_property = []
