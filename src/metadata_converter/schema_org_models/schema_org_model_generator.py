@@ -902,6 +902,14 @@ def build_models(
     -------
     dict[str, dict]
         Metadata for each class, keyed by Python-safe name.
+
+    Notes
+    -----
+    Fields are sorted alphabetically by name rather than kept in the order
+    ``class_fields`` lists them. That order otherwise follows wherever a property
+    happens to sit in the source JSON-LD's ``@graph`` list, which schema.org's own
+    site (but not every mirror of a pinned release) happens to pre-sort
+    alphabetically — sorting explicitly here keeps output stable across sources.
     """
     return {
         class_name: {
@@ -918,7 +926,9 @@ def build_models(
                         else None,
                     ),
                 )
-                for field in class_fields.get(class_name, [])
+                for field in sorted(
+                    class_fields.get(class_name, []), key=lambda f: f["name"]
+                )
             },
         }
         for class_name, class_def in classes.items()
