@@ -767,11 +767,12 @@ def schema_ids(node: dict, key: str) -> list[str]:
     val = node.get(key, [])
     if isinstance(val, dict):
         val = [val]
-    return [
+    # Sorted so callers get a deterministic order
+    return sorted(
         safe_name(local(item["@id"]))
         for item in val
         if isinstance(item, dict) and item.get("@id", "").startswith("schema:")
-    ]
+    )
 
 
 def parse_schema(data: dict) -> tuple[dict[str, ClassDef], dict[str, list[FieldDef]]]:
@@ -871,8 +872,9 @@ def resolve_type(allowed_types: list[str], strict: bool) -> str:
         # No rangeIncludes declared in schema.org — type is unknown.
         return "Any | None"
 
+    # sorted so union member order is deterministic
     source_names: list[str] = []
-    for type_name in allowed_types:
+    for type_name in sorted(allowed_types):
         if type_name in PRIMITIVE_TYPE_MAP:
             source_names.append(PRIMITIVE_SOURCE[PRIMITIVE_TYPE_MAP[type_name]])
         else:
