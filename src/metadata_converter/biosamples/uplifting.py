@@ -2,7 +2,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 from metadata_converter.biosamples.schemas import (
     SRA,
@@ -75,7 +75,7 @@ def get_value(sample_record: dict, prop_name: str) -> str | None:
 
 def get_value_with_unit(
     sample_record: dict, prop_name: str
-) -> tuple[str | None, str | Literal["Unit unknown"]]:
+) -> tuple[str | None, str | None]:
     """Safely extract the value and unit of an additionalProperty from sample_record.
 
     Exceptions are logged instead of raised.
@@ -86,7 +86,7 @@ def get_value_with_unit(
     tuple[Any, Any]
         (value, unit) tuple
     """
-    value, unit = None, "Unit unknown"
+    value, unit = None, None
     if prop := get_property(sample_record, prop_name):
         try:
             value = to_number(prop["value"])
