@@ -38,8 +38,8 @@ def to_number(value: str) -> int | float | str:
 
 
 def get_property(sample_record: dict, prop_name: str) -> dict | None:
+    """Fetch one of the additionalProperty entries from the sample record."""
     props = sample_record["mainEntity"]["additionalProperty"]
-
     results = [p for p in props if p.get("name") == prop_name]
 
     if len(results) == 0:
@@ -439,19 +439,6 @@ class ProductBuilder(BaseBuilder):
                 SRA(value=sra_accession).model_dump(by_alias=True, exclude_none=True)
             )
         return self.unwrap_single(identifier_list)
-
-    def build_manufacturer(self) -> list[dict] | dict:
-        manufacturer = [
-            {
-                "@type": "ResearchProject",
-                "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
-            }
-        ]
-        if project_name := self.record["project name"]:
-            # do not add the B5D project a second time
-            if project_name.lower() not in ["BIOcean5D".lower(), "b5d"]:
-                manufacturer.append({"@type": "ResearchProject", "name": project_name})
-        return self.unwrap_single(manufacturer)
 
     def build_keywords(self) -> list[dict] | None:
         keywords = []
