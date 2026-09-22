@@ -61,7 +61,9 @@ PRIMITIVE_TYPE_MAP: dict[str, Any] = {
     "Text": str,
     "URL": AnyUrl,
     "Boolean": bool,
-    "Number": float,
+    # schema.org's "Number" doesn't distinguish whole numbers from decimals —
+    # accept both int and float so whole numbers aren't forced into float
+    "Number": (int, float),
     "Integer": int,
     "Float": float,
     "Date": date,
@@ -79,6 +81,7 @@ PRIMITIVE_SOURCE: dict[Any, str] = {
     bool: "bool",
     float: "float",
     int: "int",
+    (int, float): "int | float",
     date: "date",
     datetime: "datetime",
     time: "time",
@@ -874,6 +877,11 @@ def resolve_type(allowed_types: list[str], strict: bool) -> str:
             source_names.append(PRIMITIVE_SOURCE[PRIMITIVE_TYPE_MAP[type_name]])
         else:
             source_names.append(type_name)
+
+    # composite entries (e.g. "int | float" for "Number") need to be split
+    # before deduping
+    source_names = [t for name in source_names for t in name.split(" | ")]
+    source_names = list(dict.fromkeys(source_names))
 
     if not strict and "str" not in source_names:
         source_names.append("str")
