@@ -19,9 +19,9 @@
     "name": "Baie_de_veys, France",
     "geo": {
       "@type": "GeoCoordinates",
-      "elevation": "0.0 m",
-      "latitude": "49.3267 DD",
-      "longitude": "-1.11253 DD"
+      "elevation": 0.0,
+      "latitude": 49.3267,
+      "longitude": -1.11253
     },
     "additionalProperty": [
       {
@@ -53,13 +53,13 @@
       {
         "@type": "PropertyValue",
         "name": "depth-max",
-        "value": "3",
+        "value": 3,
         "unitText": "m"
       },
       {
         "@type": "PropertyValue",
         "name": "depth-min",
-        "value": "0",
+        "value": 0,
         "unitText": "m"
       },
       {

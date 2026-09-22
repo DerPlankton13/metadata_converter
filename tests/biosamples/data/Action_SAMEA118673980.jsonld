@@ -19,9 +19,9 @@
     "name": "France",
     "geo": {
       "@type": "GeoCoordinates",
-      "latitude": "48.608 DD",
-      "longitude": "-3.94 DD",
-      "elevation": "0 m"
+      "latitude": 48.608,
+      "longitude": -3.94,
+      "elevation": 0
     },
     "additionalProperty": [
       {
@@ -40,7 +40,7 @@
       {
         "@type": "PropertyValue",
         "name": "depth",
-        "value": "0.2",
+        "value": 0.2,
         "unitText": "m",
         "propertyID": "https://w3id.org/mixs/0000018"
       }

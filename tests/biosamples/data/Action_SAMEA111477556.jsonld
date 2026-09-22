@@ -19,8 +19,8 @@
     "name": "Baltic Sea",
     "geo": {
       "@type": "GeoCoordinates",
-      "latitude": "56.9309 DD",
-      "longitude": "17.0607 DD"
+      "latitude": 56.9309,
+      "longitude": 17.0607
     },
     "additionalProperty": [
       {
@@ -52,7 +52,7 @@
       {
         "@type": "PropertyValue",
         "name": "depth",
-        "value": "3",
+        "value": 3,
         "unitText": "m",
         "propertyID": "https://w3id.org/mixs/0000018"
       }
