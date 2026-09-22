@@ -45,7 +45,14 @@ from typing import Any, TypedDict, Union, get_args, get_origin
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 from pydantic.fields import FieldInfo
 
-SCHEMA_URL = "https://schema.org/version/latest/schemaorg-current-https.jsonld"
+# Pinned rather than "latest" so regeneration is reproducible. schema.org's own site
+# only ever serves the current release at /version/<n>/ (older versions 404 there),
+# so pinned releases are fetched from the schemaorg GitHub repo, which archives all of them.
+SCHEMA_VERSION = "30.0"
+SCHEMA_URL = (
+    "https://raw.githubusercontent.com/schemaorg/schemaorg/main/data/releases/"
+    f"{SCHEMA_VERSION}/schemaorg-current-https.jsonld"
+)
 SCHEMA_PREFIX = "https://schema.org/"
 DEFAULT_OUTPUT_PATH = Path(__file__).parent / "schemaorg_models.py"
 
