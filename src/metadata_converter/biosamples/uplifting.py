@@ -58,13 +58,14 @@ def get_property(sample_record: dict, prop_name: str) -> dict | None:
 
 
 def get_value(sample_record: dict, prop_name: str) -> str | None:
-    """
-    Safely extract a property value from the data without raising exceptions.
+    """Safely extract the value of an additionalProperty from sample_record.
+
+    Exceptions are logged instead of raised.
     Returns None if the property is not found.
     """
     if prop := get_property(sample_record, prop_name):
         try:
-            return prop["value"]
+            return to_number(prop["value"])
         except KeyError:
             logger.debug("Property '%s' has no 'value' key: %s", prop_name, prop)
         except Exception as e:
@@ -75,8 +76,9 @@ def get_value(sample_record: dict, prop_name: str) -> str | None:
 def get_value_with_unit(
     sample_record: dict, prop_name: str
 ) -> tuple[str | None, str | Literal["Unit unknown"]]:
-    """
-    Safely extract a property value and its unit from the data without raising exceptions.
+    """Safely extract the value and unit of an additionalProperty from sample_record.
+
+    Exceptions are logged instead of raised.
     Returns the default values if the property is not found.
 
     Returns
@@ -87,7 +89,7 @@ def get_value_with_unit(
     value, unit = None, "Unit unknown"
     if prop := get_property(sample_record, prop_name):
         try:
-            value = prop["value"]
+            value = to_number(prop["value"])
             unit = prop["unitText"]
         except KeyError:
             logger.debug(
