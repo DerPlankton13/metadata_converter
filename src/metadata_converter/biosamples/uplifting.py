@@ -305,7 +305,9 @@ def build_property(
     parts = [p.strip() for p in str(prop.get("value", "")).split("|")]
     multi = len(parts) > 1
     if multi:
-        prop["value"] = parts
+        prop["value"] = [to_number(part) for part in parts]
+    else:
+        prop["value"] = to_number(parts[0])
 
     # try to build value references from the value parts and overwrite any existing ones
     defined_terms = [dt for p in parts if (dt := build_defined_term(p)) is not None]
