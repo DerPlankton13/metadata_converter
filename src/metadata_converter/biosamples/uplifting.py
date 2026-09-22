@@ -261,6 +261,34 @@ def build_defined_term(value: str) -> dict[str, str] | None:
     return defined_term_dict
 
 
+def single_or_list(items: list, multi: bool):
+    """Return items unwrapped to a single element unless the property is multi-valued."""
+    return items if multi else items[0]
+
+
+def convert_to_https(link: str) -> str:
+    return link.replace("http://", "https://")
+
+
+def clean_value_reference(
+    existing: dict | list[dict], multi: bool, prop_name: str
+) -> dict | list[dict] | None:
+    """Normalize an existing valueReference: drop entries with no real info, fix http links.
+
+    Returns None if nothing meaningful remains.
+    """
+    entries = existing if isinstance(existing, list) else [existing]
+    if not multi and len(entries) > 1:
+        raise ValueError(
+            f"Expected valueReference to be a dict or single-element list for a "
+            f"single value, got list of length {len(entries)} ({entries}) for "
+            f"property '{prop_name}'"
+        )
+    entries = [e for e in entries if any(v for k, v in e.items() if k != "@type")]
+    entries = [{k: convert_to_https(v) for k, v in e.items()} for e in entries]
+    return single_or_list(entries, multi) if entries else None
+
+
 def build_property(
     sample_record: dict, prop_name: str, prop_id: str | None = None
 ) -> dict | None:
@@ -271,6 +299,9 @@ def build_property(
     if prop_id:
         prop["propertyID"] = prop_id
 
+    # we can have entries like this
+    # "value": "marine biome (ENVO:00000447)|estuarine biome (ENVO:01000020)"
+    # and then need to split the value into a list and create a list of 2 valueReference
     parts = [p.strip() for p in str(prop.get("value", "")).split("|")]
     multi = len(parts) > 1
     if multi:
@@ -279,29 +310,16 @@ def build_property(
     # try to build value references from the value parts and overwrite any existing ones
     defined_terms = [dt for p in parts if (dt := build_defined_term(p)) is not None]
     if defined_terms:
-        prop["valueReference"] = defined_terms if multi else defined_terms[0]
+        prop["valueReference"] = single_or_list(defined_terms, multi)
     # otherwise check if there is an existing value reference and clean it up if needed
     elif existing := prop.get("valueReference"):
-        entries = existing if isinstance(existing, list) else [existing]
-        if not multi and len(entries) > 1:
-            raise ValueError(
-                f"Expected valueReference to be a dict or single-element list for a single value, "
-                f"got list of length {len(entries)} ({entries}) for property '{prop_name}'"
-            )
-        # remove entries that contain no information beyond @type
-        entries = [e for e in entries if any(v for k, v in e.items() if k != "@type")]
-        # fix http links
-        entries = [{k: convert_to_https(v) for k, v in e.items()} for e in entries]
-        if entries:
-            prop["valueReference"] = entries if multi else entries[0]
-        else:
+        cleaned = clean_value_reference(existing, multi, prop_name)
+        if cleaned is None:
             prop.pop("valueReference")
+        else:
+            prop["valueReference"] = cleaned
 
     return prop
-
-
-def convert_to_https(link: str) -> str:
-    return link.replace("http://", "https://")
 
 
 class SampleRecord:
