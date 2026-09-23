@@ -289,6 +289,33 @@ def clean_value_reference(
     return single_or_list(entries, multi) if entries else None
 
 
+def split_value(prop_name: str, value) -> list[str]:
+    """Split a raw property value into its stripped parts.
+
+    Multiple values are normally joined with "|", e.g.
+    ``"marine biome (ENVO:00000447)|estuarine biome (ENVO:01000020)"``, and
+    the caller then builds one valueReference per part. A few relationship-style
+    properties (currently "is control of") join identifiers with "," instead.
+    Comma is only used for those, because it can also occur inside ordinary
+    free-text values.
+
+    Parameters
+    ----------
+    prop_name : str
+        Name of the property; selects the separator.
+    value
+        Raw value; converted with ``str`` before splitting.
+
+    Returns
+    -------
+    list[str]
+        The stripped parts; a single-element list if there is nothing to split.
+    """
+    whitelist_comma_separated = {"is control of"}
+    separator = "," if prop_name in whitelist_comma_separated else "|"
+    return [p.strip() for p in str(value).split(separator)]
+
+
 def build_property(
     sample_record: dict, prop_name: str, prop_id: str | None = None
 ) -> dict | None:
@@ -299,10 +326,7 @@ def build_property(
     if prop_id:
         prop["propertyID"] = prop_id
 
-    # we can have entries like this
-    # "value": "marine biome (ENVO:00000447)|estuarine biome (ENVO:01000020)"
-    # and then need to split the value into a list and create a list of 2 valueReference
-    parts = [p.strip() for p in str(prop.get("value", "")).split("|")]
+    parts = split_value(prop_name, prop.get("value", ""))
     multi = len(parts) > 1
     if multi:
         prop["value"] = [to_number(part) for part in parts]
