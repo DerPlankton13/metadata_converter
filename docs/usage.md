@@ -175,6 +175,83 @@ separate rows before schema building:
 analysis = ["analysis:author-pid", "analysis:keywords"]
 ```
 
+The delimiter is a comma, semicolon, ampersand, or a whitespace-flanked `and`, so
+`"plankton, eDNA, and V9"` yields three values. The whitespace requirement around
+`and` keeps `"Ireland"` whole, and a punctuation mark absorbs a following `and`
+so `"x, y, and z"` gives three values rather than four. Empty pieces left by a
+leading, trailing or doubled delimiter are dropped, while a genuinely empty cell
+stays missing rather than becoming an empty value.
+
+#### What a split column produces
+
+Splitting only establishes that a column now holds several values. The **shape**
+of the output depends on where the mapping points that column.
+
+**At the top level of a sheet's mapping**, the property becomes list-valued — one
+value collapses to a scalar, several stay a list:
+
+```toml
+[mapping.dataset]
+type = "DataCatalog"
+keywords = "dataset:keywords"
+```
+```json
+{"@type": "DataCatalog", "keywords": ["plankton", "eDNA", "V9"]}
+```
+
+**Inside a nested block**, the block *fans out* into one object per value. Other
+columns in the same block that hold a single value are broadcast to every copy:
+
+```toml
+[mapping.analysis]
+type = "Action"
+agent.type = "Person"
+agent.identifier = "analysis:author-pid"
+```
+```json
+{"@type": "Action", "agent": [
+  {"@type": "Person", "identifier": "0000-0002-1"},
+  {"@type": "Person", "identifier": "0000-0002-2"}]}
+```
+
+When several columns in one block are multi-valued they are zipped by position,
+so they must be the same length (or length 1, which broadcasts). A block whose
+column lengths cannot be aligned logs a warning and is dropped rather than
+guessing an alignment.
+
+#### Choosing between the two
+
+Fan-out is right when the multi-value column **distinguishes one node from
+another**, and wrong when it merely **describes** a node whose identity comes
+from a different column.
+
+Two ORCIDs are two people, so `agent.identifier` must fan out. Collapsing it
+would assert a single person holding both ORCIDs, and the uplift `LinkRule` that
+resolves `identifier` → `@id` would then have no single entity to match.
+
+Two keywords, however, are not two protocols. Putting a descriptive multi-value
+column inside a block identified by another column splits one node into
+near-duplicates differing only in the descriptor:
+
+```toml
+# Wrong: one HowTo per keyword, each claiming to be the same method
+actionProcess.type = "HowTo"
+actionProcess.name = "analysis:method"
+actionProcess.keywords = "analysis:keywords"
+```
+
+This also defeats the deduplication that `atomize` provides: blank nodes are
+given a content-hash `@id`, so identical ones collapse onto a single shared
+entity — but only while their content really is identical. Two analyses using the
+same method share one `HowTo` node until a per-analysis descriptor is added to it.
+
+The builder cannot tell the two cases apart; it fans out on whatever column is
+multi-valued, so this is the config author's call. As a rule, **a descriptive
+multi-value column belongs on the parent entity, not inside a nested block.**
+Where the parent class does not declare that property (e.g. `Action` has no
+`keywords`), it is folded into `additionalProperty` as one `PropertyValue` per
+value — usually the intended granularity anyway.
+
 ### Broadcast `@id` references (load-time)
 
 Inject typed references from one sheet into another when there is no explicit
