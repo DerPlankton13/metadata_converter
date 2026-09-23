@@ -475,7 +475,9 @@ class ProductBuilder(BaseBuilder):
             "name": self.record.base_value("name"),
             "description": self.record["sample description"],
             "url": convert_to_https(self.record.base_value("sameAs")),
-            "productionDate": self.record["collection date"],
+            "productionDate": str(collection_date)
+            if (collection_date := self.record["collection date"])
+            else None,
             "material": self.record["environmental medium"],
             "countryOfOrigin": self.record["geographic location (country and/or sea)"],
             "funding": {
