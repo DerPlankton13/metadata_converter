@@ -207,6 +207,22 @@ class Term:
         )
 
 
+def handle_dates(value: Any) -> str | None:
+    """Ensures dates are handled correctly by converting them to strings
+
+    Since converting all values to numbers, if possible, e.g. entries
+    containing only a year value, will be parsed by Pydantic to date(2018)
+    if the property can have a date type. Then the int 2018 is read
+    as unix epoch timestamp, resulting in invalid data.
+    As a simple fix, the dates and times are converted to strings, if they
+    have a meaningful string representation. Otherwise, they are converted
+    to None, indicating not value.
+    """
+    if not value:
+        return None
+    return str(value)
+
+
 def build_subject_of(term: Term) -> dict:
     """Build a subjectOf CreativeWork dict from a Term."""
     subject_of: dict = {
@@ -499,9 +515,7 @@ class ProductBuilder(BaseBuilder):
             "name": self.record.base_value("name"),
             "description": self.record["sample description"],
             "url": convert_to_https(self.record.base_value("sameAs")),
-            "productionDate": str(collection_date)
-            if (collection_date := self.record["collection date"])
-            else None,
+            "productionDate": handle_dates(self.record["collection date"]),
             "material": self.record["environmental medium"],
             "countryOfOrigin": self.record["geographic location (country and/or sea)"],
             "funding": {
@@ -697,7 +711,7 @@ class ActionBuilder(BaseBuilder):
                 "@type": "Product",
                 "@id": f"Product_{self.record.sample_id}.jsonld",
             },
-            "startTime": self.record["collection date"],
+            "startTime": handle_dates(self.record["collection date"]),
             "location": self.build_location(),
             "instrument": self.build_instrument(),
             "object": self.build_object(),
