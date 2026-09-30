@@ -41,7 +41,7 @@ def merge_entities_by_identifier(
 
     clusters = build_clusters(ids, g)
     # log some statistics
-    node_count = sum(len(nodes) for nodes in clusters.values())
+    node_count = sum(len(nodes) for nodes in clusters)
     logger.info(
         "Nodes sharing an identifier and type set with at least one other: %d",
         node_count,
@@ -51,7 +51,7 @@ def merge_entities_by_identifier(
         "Number of duplicates to remove from the graph: %d", node_count - len(clusters)
     )
 
-    for cluster in clusters.values():
+    for cluster in clusters:
         merge_into_golden_node(cluster, provenance_dir, g)
 
     g.serialize(output_path, format="ox-ttl")
@@ -79,7 +79,7 @@ def get_identifiers(g: Graph):
     return convert_result_to_pd(identifiers)
 
 
-def build_clusters(ids: pd.DataFrame, g: Graph) -> dict:
+def build_clusters(ids: pd.DataFrame, g: Graph) -> list[set[URIRef]]:
     """Clusters all nodes sharing the same identifier and being of the same type.
 
     Logs if an identifier occurs on nodes of different types and takes into account
@@ -99,9 +99,16 @@ def build_clusters(ids: pd.DataFrame, g: Graph) -> dict:
             "Identifiers occurring on nodes of different types: %s", mixed.to_dict()
         )
 
-    # cluster by type and identifier and collect all nodes as list
-    clusters = ids.groupby(["identifier", "types"])["s"].agg(list).to_dict()
-    return {key: nodes for key, nodes in clusters.items() if len(nodes) > 1}
+    # cluster by identifier and type ensuring that nodes with the same identifier
+    # but different type are not merged.
+    clusters = ids.groupby(["identifier", "types"])["s"].agg(list)
+    # transient relations between clusters can occur if nodes have more than one
+    # identifier: [a, b], [c, d, e, a]
+    # resolve them via connected components here
+    graph = nx.Graph()
+    for cluster in clusters:
+        nx.add_path(graph, cluster)
+    return [cluster for cluster in nx.connected_components(graph) if len(cluster) > 1]
 
 
 def get_types(node: URIRef, g: Graph) -> frozenset[str]:
