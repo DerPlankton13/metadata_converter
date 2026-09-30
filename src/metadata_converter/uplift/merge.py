@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from collections.abc import Iterable
 from pathlib import Path
 
 import networkx as nx
@@ -116,10 +117,13 @@ def get_types(node: URIRef, g: Graph) -> frozenset[str]:
     return frozenset(g.objects(node, RDF.type))
 
 
-def merge_into_golden_node(node_cluster: list[URIRef], provenance_dir: Path, g: Graph):
+def merge_into_golden_node(
+    node_cluster: Iterable[URIRef], provenance_dir: Path, g: Graph
+):
     """Merge all nodes of a cluster into a single golden node."""
+    # dedup, or a repeated golden node would be removed as its own donor
     ordered_nodes = sorted(
-        node_cluster, key=lambda n: (-calculate_node_richness(n, g), str(n))
+        set(node_cluster), key=lambda n: (-calculate_node_richness(n, g), str(n))
     )
     golden_node, *donors = ordered_nodes
     golden_props = set(g.predicates(golden_node))
