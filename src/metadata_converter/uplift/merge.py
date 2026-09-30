@@ -1,11 +1,10 @@
 import logging
-from collections import defaultdict
 from collections.abc import Iterable
 from pathlib import Path
 
 import networkx as nx
 import pandas as pd
-from rdflib import RDF, SDO, Graph, Literal, URIRef
+from rdflib import RDF, SDO, Graph, URIRef
 
 from metadata_converter.graph_handling.helpers import (
     convert_result_to_pd,
@@ -21,21 +20,22 @@ logger = logging.getLogger(__name__)
 def merge_entities_by_identifier(
     graph_path: Path, output_path: Path, provenance_dir: Path
 ) -> None:
-    """Merges entities sharing the same identifier.
+    """Merge entities sharing the same identifier into golden nodes.
 
-    This is the final deduplication step. The graph is loaded, all entities that have
-    an identifier are extracted together with the identifier. Then the nodes are
-    clustered by identifier and node type. The type is taken into account to prevent
-    false positives, i.e. that the identifier could denote a person and a book.
+    This is the final deduplication step. All entities carrying an identifier are
+    clustered by identifier and type, where the type prevents false positives such
+    as a person and a book sharing an identifier. Each cluster is merged into a single
+    golden node (see `merge_into_golden_node`), all links to the other nodes of the
+    cluster are redirected to the golden node, and the other nodes are deleted.
 
-    The nodes of these clusters are merged into a single, golden node and all links to
-    the other nodes of the cluster are replaced by links to the golden node. Afterwards,
-    the old nodes are deleted.
-    The merging into the golden node is done as follows:
-    1.
-
-    Finally, the updated graph is serialised as turtle into the output_path.
-
+    Parameters
+    ----------
+    graph_path : Path
+        Turtle file of the graph to deduplicate.
+    output_path : Path
+        Turtle file the deduplicated graph is written to.
+    provenance_dir : Path
+        Directory receiving one provenance file per golden node.
     """
     g = load_graph(graph_path)
     ids = get_identifiers(g)
@@ -44,7 +44,7 @@ def merge_entities_by_identifier(
     # log some statistics
     node_count = sum(len(nodes) for nodes in clusters)
     logger.info(
-        "Nodes sharing an identifier and type set with at least one other: %d",
+        "Nodes sharing an identifier and type with at least one other: %d",
         node_count,
     )
     logger.info("Number of clusters: %d", len(clusters))
@@ -58,14 +58,25 @@ def merge_entities_by_identifier(
     g.serialize(output_path, format="ox-ttl")
 
 
-def get_identifiers(g: Graph):
-    """Extracts all nodes with an identifier.
+def get_identifiers(g: Graph) -> pd.DataFrame:
+    """Extract all nodes carrying an identifier.
 
     The node IRI together with its predicates and objects as well as the identifier is
     returned. The identifier value is either extracted from the top level identifier
     object or, if the identifier is of type PropertyValue from the value property of
     the PropertyValue.
 
+    Parameters
+    ----------
+    g : Graph
+        Graph to query.
+
+    Returns
+    -------
+    pd.DataFrame
+        One row per identifier with columns ``s`` (the node), ``p``
+        (``schema:identifier``), ``o`` (the raw identifier object) and ``identifier``
+        (the value of ``o``, or of its ``schema:value`` if ``o`` is a PropertyValue).
     """
     identifiers = g.query(
         """
@@ -81,10 +92,25 @@ def get_identifiers(g: Graph):
 
 
 def build_clusters(ids: pd.DataFrame, g: Graph) -> list[set[URIRef]]:
-    """Clusters all nodes sharing the same identifier and being of the same type.
+    """Cluster nodes connected through shared identifiers within the same type.
 
-    Logs if an identifier occurs on nodes of different types and takes into account
-    that a node could be of more than one type, by using a set of unique types as type.
+    Nodes are clustered by identifier and type; a node may carry several types, so
+    its full set of types is compared. If nodes contain more than one identifier, there
+    can be a transitive link between clusters. These links are resolved by combining
+    clusters sharing a node. Identifiers occurring on nodes of different types are
+    logged as a warning.
+
+    Parameters
+    ----------
+    ids : pd.DataFrame
+        Identifier table as returned by `get_identifiers`.
+    g : Graph
+        Graph the nodes' types are read from.
+
+    Returns
+    -------
+    list[set[URIRef]]
+        Clusters of at least two nodes each; no node occurs in more than one cluster.
     """
 
     # remove any possible duplicate identifier entries
@@ -112,15 +138,31 @@ def build_clusters(ids: pd.DataFrame, g: Graph) -> list[set[URIRef]]:
     return [cluster for cluster in nx.connected_components(graph) if len(cluster) > 1]
 
 
-def get_types(node: URIRef, g: Graph) -> frozenset[str]:
-    """Returns the types of a node, can be multiple."""
+def get_types(node: URIRef, g: Graph) -> frozenset[URIRef]:
+    """Return all types of a node."""
     return frozenset(g.objects(node, RDF.type))
 
 
 def merge_into_golden_node(
     node_cluster: Iterable[URIRef], provenance_dir: Path, g: Graph
-):
-    """Merge all nodes of a cluster into a single golden node."""
+) -> None:
+    """Merge all nodes of a cluster into a single golden node, modifying `g` in place.
+
+    The richest node (most triples, ties broken by IRI) becomes the golden node. The
+    other nodes donate, in the same order (most triples, ties broken by IRI), every
+    property the golden node does not yet have, with all of its values.
+    References to the donors are redirected to the golden node, the donors are deleted,
+    and a provenance file is written.
+
+    Parameters
+    ----------
+    node_cluster : Iterable[URIRef]
+        Nodes to merge; duplicates are ignored.
+    provenance_dir : Path
+        Directory the provenance file of the golden node is written to.
+    g : Graph
+        Graph containing the nodes.
+    """
     # dedup, or a repeated golden node would be removed as its own donor
     ordered_nodes = sorted(
         set(node_cluster), key=lambda n: (-calculate_node_richness(n, g), str(n))
@@ -149,6 +191,6 @@ def merge_into_golden_node(
     )
 
 
-def calculate_node_richness(node, g: Graph) -> int:
-    """Count the number of properties of a node."""
+def calculate_node_richness(node: URIRef, g: Graph) -> int:
+    """Count the triples with the node as subject."""
     return len(list(g.predicate_objects(node)))
