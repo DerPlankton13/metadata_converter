@@ -5,6 +5,7 @@ uplift package's config into the discriminated unions used by the CLI
 (``parse.py``). Each phase maps to exactly one config model or union, so the phase
 itself does the discriminating between generic and source-specific uplift.
 """
+
 from __future__ import annotations
 
 import logging
@@ -19,7 +20,7 @@ from metadata_converter.biosamples.config import (
     BiosamplesUpliftRecordConfig,
 )
 from metadata_converter.flat_data.config import FlatDataConfig
-from metadata_converter.uplift.config import GenericUpliftConfig
+from metadata_converter.uplift.config import GenericUpliftConfig, UpliftMergeConfig
 
 # Discriminated union of the three data-source config types.
 # Used by load_source_config for the fetch and load phases.
@@ -88,5 +89,14 @@ def load_uplift_record_config(path: str) -> BiosamplesUpliftRecordConfig:
     config = load_toml(path)
     try:
         return BiosamplesUpliftRecordConfig.model_validate(config)
+    except ValidationError as e:
+        handle_validation_error(e)
+
+
+def load_uplift_merge_config(path: str) -> UpliftMergeConfig:
+    """Load and validate the merge specific config from a TOML file."""
+    config = load_toml(path)
+    try:
+        return UpliftMergeConfig.model_validate(config)
     except ValidationError as e:
         handle_validation_error(e)
