@@ -10,17 +10,27 @@ from metadata_converter.config import (
     GenericUpliftConfig,
     load_source_config,
     load_uplift_config,
+    load_uplift_merge_config,
     load_uplift_record_config,
 )
+from metadata_converter.uplift.config import UpliftMergeConfig
 
 UpliftConfig = BiosamplesUpliftRecordConfig | GenericUpliftConfig
 
 
-def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingConfig | UpliftConfig, int]:
+def parse_cli() -> tuple[
+    str,
+    FlatDataConfig
+    | BiosamplesConfig
+    | ApiFetchingConfig
+    | UpliftConfig
+    | UpliftMergeConfig,
+    int,
+]:
     parser = argparse.ArgumentParser(description="Metadata Converter")
     parser.add_argument(
         "phase",
-        choices=["fetch", "load", "uplift_record", "uplift"],
+        choices=["fetch", "load", "uplift_record", "uplift", "uplift_merge"],
         help="Pipeline phase to execute",
     )
     parser.add_argument("config", type=Path, help="Path to TOML config file")
@@ -37,6 +47,8 @@ def parse_cli() -> tuple[str, FlatDataConfig | BiosamplesConfig | ApiFetchingCon
         config = load_uplift_config(args.config)
     elif args.phase == "uplift_record":
         config = load_uplift_record_config(args.config)
+    elif args.phase == "uplift_merge":
+        config = load_uplift_merge_config(args.config)
     else:
         config = load_source_config(args.config)
 
