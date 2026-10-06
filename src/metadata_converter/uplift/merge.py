@@ -91,6 +91,11 @@ def get_identifiers(g: Graph) -> pd.DataFrame:
     return convert_result_to_pd(identifiers)
 
 
+def describe_types(types: frozenset[URIRef]) -> str:
+    """Return the types' local names joined by ``+``, e.g. ``Dataset+Product``."""
+    return "+".join(sorted(str(t).rsplit("/", 1)[-1].rsplit("#", 1)[-1] for t in types))
+
+
 def build_clusters(ids: pd.DataFrame, g: Graph) -> list[set[URIRef]]:
     """Cluster nodes connected through shared identifiers within the same type.
 
@@ -121,9 +126,12 @@ def build_clusters(ids: pd.DataFrame, g: Graph) -> list[set[URIRef]]:
     # log, if any identifier belongs to more than one type
     types_per_identifier = ids.groupby("identifier")["types"].agg(set)
     mixed = types_per_identifier[types_per_identifier.map(len) > 1]
-    if not mixed.empty:
+    for identifier, type_sets in mixed.items():
+        # one line per identifier: the pipeline's log scan only prints lines containing WARNING
         logger.warning(
-            "Identifiers occurring on nodes of different types: %s", mixed.to_dict()
+            "Identifier %s occurs on nodes of different types: %s",
+            identifier,
+            " vs ".join(sorted(describe_types(types) for types in type_sets)),
         )
 
     # cluster by identifier and type ensuring that nodes with the same identifier
@@ -188,6 +196,7 @@ def merge_into_golden_node(
         str(golden_node),
         provenance_dir,
         [str(golden_node), *[str(donor) for donor in donors]],
+        "uplift_merge",
     )
 
 
