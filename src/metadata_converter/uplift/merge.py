@@ -6,7 +6,7 @@ import networkx as nx
 import pandas as pd
 from rdflib import RDF, SDO, Graph, URIRef
 
-from metadata_converter.graph_handling.helpers import (
+from metadata_converter.utils.graph_helpers import (
     convert_result_to_pd,
     load_graph,
 )
