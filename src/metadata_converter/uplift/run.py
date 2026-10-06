@@ -8,10 +8,11 @@ import logging
 
 from metadata_converter.uplift.add import AddApplier
 from metadata_converter.uplift.atomize import AtomizeApplier
-from metadata_converter.uplift.config import GenericUpliftConfig
+from metadata_converter.uplift.config import GenericUpliftConfig, UpliftMergeConfig
 from metadata_converter.uplift.enrichment import EnrichmentApplier
 from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.uplift.link import LinkApplier
+from metadata_converter.uplift.merge import merge_entities_by_identifier
 from metadata_converter.uplift.remove import RemoveApplier
 from metadata_converter.uplift.rename import RenameApplier
 from metadata_converter.utils.provenance_writer import write_provenance_file
@@ -80,3 +81,18 @@ def run_uplift(config: GenericUpliftConfig) -> None:
                 continue
             write_provenance_file(atom_id, config.provenance_dir, origins, "uplift")
     logger.info("Uplift complete. Output: %s", config.output_dir)
+
+
+def run_uplift_merge(config: UpliftMergeConfig) -> None:
+    """Merge entities"""
+    logger.info("------------- uplift merge -------------")
+    logger.info("Start merging entities by identifier on: %s", config.graph_input_path)
+    merge_entities_by_identifier(
+        config.graph_input_path,
+        config.graph_output_path,
+        config.provenance_dir,
+    )
+    logger.info(
+        "Merged entities by identifiers. The resulting graph has been written to: %s",
+        config.graph_output_path,
+    )

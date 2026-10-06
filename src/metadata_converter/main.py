@@ -17,7 +17,7 @@ from metadata_converter.flat_data.run import load_flat_data
 from metadata_converter.parse import parse_cli
 from metadata_converter.uplift import run_uplift
 from metadata_converter.uplift.config import UpliftMergeConfig
-from metadata_converter.uplift.run import run_merge_on_uplifted_graph
+from metadata_converter.uplift.run import run_uplift_merge
 from metadata_converter.utils.log_setup import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -43,7 +43,7 @@ def main():
         case ("uplift", GenericUpliftConfig()):
             run_uplift(config)
         case ("uplift_merge", UpliftMergeConfig()):
-            run_merge_on_uplifted_graph(config)
+            run_uplift_merge(config)
         case _:
             source = getattr(config, "source_type", "uplift")
             logger.error(
