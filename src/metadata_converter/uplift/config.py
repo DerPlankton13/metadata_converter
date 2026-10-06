@@ -202,3 +202,15 @@ class GenericUpliftConfig(BaseModel):
 
 
 GenericUpliftConfig.model_rebuild()
+
+
+class UpliftMergeConfig(BaseModel):
+    """The config for performing the merge during the uplift phase."""
+
+    graph_input_path: Path = Field(
+        description="Path to the graph file built from the atomised files.",
+    )
+    graph_output_path: Path = Field(
+        description="Path to the graph file where duplicated entities have been merged.",
+    )
+    provenance_dir: Path
