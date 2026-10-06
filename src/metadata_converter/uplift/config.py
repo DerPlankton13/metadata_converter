@@ -159,7 +159,7 @@ class GenericUpliftConfig(BaseModel):
         "already-uplifted sibling source). Entities found here are available to "
         "LinkApplier but are never written to output_dir or provenance_dir.",
     )
-    provenance_dir: Path | None = None
+    provenance_dir: Path
     links: list[LinkRule] = Field(default_factory=list)
     enrichments: list[EnrichmentRule] = Field(default_factory=list)
     additions: list[AdditionRule] = Field(default_factory=list)
