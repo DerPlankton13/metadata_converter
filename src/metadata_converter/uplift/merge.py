@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 def merge_entities_by_identifier(
-    graph_path: Path, output_path: Path, provenance_dir: Path
+    graph_input_path: Path, graph_output_path: Path, provenance_dir: Path
 ) -> None:
     """Merge entities sharing the same identifier into golden nodes.
 
@@ -30,14 +30,14 @@ def merge_entities_by_identifier(
 
     Parameters
     ----------
-    graph_path : Path
+    graph_input_path : Path
         Turtle file of the graph to deduplicate.
-    output_path : Path
+    graph_output_path : Path
         Turtle file the deduplicated graph is written to.
     provenance_dir : Path
         Directory receiving one provenance file per golden node.
     """
-    g = load_graph(graph_path)
+    g = load_graph(graph_input_path)
     ids = get_identifiers(g)
 
     clusters = build_clusters(ids, g)
@@ -55,7 +55,7 @@ def merge_entities_by_identifier(
     for cluster in clusters:
         merge_into_golden_node(cluster, provenance_dir, g)
 
-    g.serialize(output_path, format="ox-ttl")
+    g.serialize(graph_output_path, format="ox-ttl")
 
 
 def get_identifiers(g: Graph) -> pd.DataFrame:
