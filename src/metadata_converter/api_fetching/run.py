@@ -103,8 +103,9 @@ def load_api_data(config: ApiFetchingConfig) -> None:
             )
 
     if failures:
-        raise RuntimeError(
-            f"{failures} of {len(fetched_files)} record(s) failed to load — "
-            "check the log for details"
+        logger.warning(
+            "%d of %d record(s) failed to load — check the log for details",
+            failures,
+            len(fetched_files),
         )
-    logger.info("API load complete. Output: %s", config.output_dir)
+    logger.info("API load finished. Output: %s", config.output_dir)
