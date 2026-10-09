@@ -3,15 +3,8 @@
     "@vocab": "https://schema.org/"
   },
   "@type": "Dataset",
-  "@id": "Dataset_886LGaLyMRe4bTUUpiVrVn.jsonld",
-  "additionalProperty": [
-    {
-      "@type": "PropertyValue",
-      "name": "file:analysis",
-      "value": "Metabarcoding",
-      "description": "Helper Property for linking this Dataset to Action.result."
-    }
-  ],
+  "@id": "Dataset_ADiahyGvC3qOUpY075lWIo.jsonld",
+  "identifier": "B5D_file_886LGaLyMRe4bTUUpiVrVn",
   "description": "file description 1",
   "url": "https://example.com/file1",
   "name": "file1.fastq.gz",

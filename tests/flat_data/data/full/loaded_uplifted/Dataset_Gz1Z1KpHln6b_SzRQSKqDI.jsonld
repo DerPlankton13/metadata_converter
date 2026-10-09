@@ -3,15 +3,16 @@
     "@vocab": "https://schema.org/"
   },
   "@type": "Dataset",
-  "@id": "Dataset_886LGaLyMRe4bTUUpiVrVn.jsonld",
-  "description": "file description 1",
-  "url": "https://example.com/file1",
-  "name": "file1.fastq.gz",
-  "encodingFormat": "fastq",
-  "comment": "file comment 1",
+  "@id": "Dataset_Gz1Z1KpHln6b_SzRQSKqDI.jsonld",
+  "identifier": "B5D_file_pCj7rshUkzVWm0xuJvOK1p",
+  "description": "file description 4",
+  "url": "https://example.com/file4",
+  "name": "file4.png",
+  "encodingFormat": "png",
+  "comment": "file comment 4",
   "about": {
     "@type": "Product",
-    "identifier": "SAMEA118673891"
+    "identifier": "SAMEA118673815"
   },
   "funding": {
     "@type": "MonetaryGrant",

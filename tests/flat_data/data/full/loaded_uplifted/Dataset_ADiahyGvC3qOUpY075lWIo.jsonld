@@ -3,11 +3,17 @@
     "@vocab": "https://schema.org/"
   },
   "@type": "Dataset",
-  "@id": "Dataset_rB6_5DDUl6KF5nh2vetiM9.jsonld",
-  "description": "file description 3",
-  "name": "file3.fastq.gz",
+  "@id": "Dataset_ADiahyGvC3qOUpY075lWIo.jsonld",
+  "identifier": "B5D_file_886LGaLyMRe4bTUUpiVrVn",
+  "description": "file description 1",
+  "url": "https://example.com/file1",
+  "name": "file1.fastq.gz",
   "encodingFormat": "fastq",
-  "comment": "file comment 3",
+  "comment": "file comment 1",
+  "about": {
+    "@type": "Product",
+    "identifier": "SAMEA118673891"
+  },
   "funding": {
     "@type": "MonetaryGrant",
     "@id": "https://example.com/super-funding-agency.jsonld"

@@ -3,15 +3,15 @@
     "@vocab": "https://schema.org/"
   },
   "@type": "DigitalDocument",
-  "@id": "Provenance_uplift_Action_K0TQdPiTgJsT2l1k2HI3PX.jsonld",
+  "@id": "Provenance_load_Dataset_mJqkxqEjVs1OTCehLjpAd0.jsonld",
   "about": {
     "@type": "Thing",
-    "@id": "Action_K0TQdPiTgJsT2l1k2HI3PX.jsonld"
+    "@id": "Dataset_mJqkxqEjVs1OTCehLjpAd0.jsonld"
   },
   "isBasedOn": {
     "@type": "CreativeWork",
-    "@id": "Action_K0TQdPiTgJsT2l1k2HI3PX.jsonld"
+    "@id": "/home/user/biocean5d/data/input.xlsx"
   },
-  "description": "stage: uplift",
+  "description": "stage: load",
   "dateCreated": "2026-07-01T12:00:00Z"
 }

@@ -3,15 +3,8 @@
     "@vocab": "https://schema.org/"
   },
   "@type": "Dataset",
-  "@id": "Dataset_zhfzWo9Gs7S9Z_oMh9Tn6-.jsonld",
-  "additionalProperty": [
-    {
-      "@type": "PropertyValue",
-      "name": "file:analysis",
-      "value": "Imaging",
-      "description": "Helper Property for linking this Dataset to Action.result."
-    }
-  ],
+  "@id": "Dataset_wUWOL1dIkAujGkgr4E5iij.jsonld",
+  "identifier": "B5D_file_zhfzWo9Gs7S9Z_oMh9Tn6-",
   "description": "file description 2",
   "name": "file2.png",
   "encodingFormat": "png",
