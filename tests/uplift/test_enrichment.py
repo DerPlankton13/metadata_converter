@@ -7,7 +7,7 @@ metadata fields (url, name, propertyID, etc.).
 
 import pytest
 
-from metadata_converter.uplift.config import EnrichmentRule, GenericUpliftConfig, LinkRule
+from metadata_converter.uplift.config import EnrichmentRule, GenericUpliftConfig
 from metadata_converter.uplift.enrichment import EnrichmentApplier
 from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.custom_models import Orcid
@@ -153,30 +153,6 @@ def test_two_enrichments_on_same_target_raise_at_config_load(tmp_path):
                 ),
                 EnrichmentRule(
                     on_type="Person", target_property="identifier", enrich_as="DOI"
-                ),
-            ],
-        )
-
-
-def test_link_and_enrichment_on_same_target_raise_at_config_load(tmp_path):
-    with pytest.raises(
-        ValueError, match=r"Person\.identifier.*'link'.*'enrichment'"
-    ):
-        GenericUpliftConfig(
-            input_dir=tmp_path / "in",
-            output_dir=tmp_path / "out",
-            links=[
-                LinkRule(
-                    on_type="Person",
-                    target_property="identifier",
-                    match_literal="x",
-                    in_type="Orcid",
-                    in_property="value",
-                ),
-            ],
-            enrichments=[
-                EnrichmentRule(
-                    on_type="Person", target_property="identifier", enrich_as="Orcid"
                 ),
             ],
         )

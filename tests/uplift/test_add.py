@@ -13,8 +13,8 @@ import pytest
 from metadata_converter.uplift.add import AddApplier
 from metadata_converter.uplift.config import (
     AdditionRule,
+    EnrichmentRule,
     GenericUpliftConfig,
-    LinkRule,
 )
 from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.schemaorg_models import (
@@ -216,18 +216,17 @@ def test_add_unknown_field_becomes_additional_property():
 # ---------------------------------------------------------------------------
 
 
-def test_link_and_add_on_same_target_raises(tmp_path):
-    with pytest.raises(ValueError, match="Person.memberOf is targeted by multiple"):
+def test_enrichment_and_add_on_same_target_raises(tmp_path):
+    with pytest.raises(
+        ValueError, match=r"Person\.memberOf.*'enrichment'.*'addition'"
+    ):
         GenericUpliftConfig(
             input_dir=tmp_path / "in",
             output_dir=tmp_path / "out",
-            links=[
-                LinkRule(
-                    on_type="Person",
-                    target_property="memberOf",
-                    match_literal="1",
-                    in_type="Project",
-                    in_property="identifier",
+            provenance_dir=tmp_path / "provenance",
+            enrichments=[
+                EnrichmentRule(
+                    on_type="Person", target_property="memberOf", enrich_as="Orcid"
                 ),
             ],
             additions=[

@@ -60,7 +60,7 @@ def test_generic_uplift_config_rejects_a_list_input_dir(tmp_path):
     """The writable input is a single directory, deliberately.
 
     Naming a sibling source here would copy it into this source's output_dir and
-    record it as based on itself; reference_dirs is the read-only way to reach one.
+    record it as based on itself.
     """
     path = write_toml(
         tmp_path / "uplift.toml",

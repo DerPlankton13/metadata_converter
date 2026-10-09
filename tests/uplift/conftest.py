@@ -2,7 +2,7 @@
 
 The ``loaded_base`` fixture writes a minimal datahub-shaped JSON-LD corpus into
 ``tmp_path / "loaded_base"``. ``config_factory`` builds a ``GenericUpliftConfig``
-against it with optional rule/drop overrides. ``uplifted`` runs the engine and
+against it with optional overrides. ``uplifted`` runs the engine and
 returns the loaded output files keyed by filename.
 """
 import json
@@ -11,41 +11,7 @@ from pathlib import Path
 import pytest
 
 from metadata_converter.uplift import run_uplift
-from metadata_converter.uplift.config import GenericUpliftConfig, LinkRule
-
-
-# Module-level constant: the 5 datahub-style link rules used across many tests.
-# Covers forward lookup, reverse lookup (via additionalProperty), and literal matching.
-DATAHUB_RULES: list[LinkRule] = [
-    LinkRule(
-        on_type="Action", target_property="agent",
-        match_value="agent.identifier",
-        in_type="Person", in_property="identifier",
-    ),
-    LinkRule(
-        on_type="Action", target_property="object",
-        match_value="identifier",
-        in_type="Product",
-        in_additional_property="sample:analysis-pid",
-    ),
-    LinkRule(
-        on_type="Action", target_property="result",
-        match_value="identifier",
-        in_type="Dataset",
-        in_additional_property="file:analysis",
-    ),
-    LinkRule(
-        on_type="DataCatalog", target_property="creator",
-        match_literal="1",
-        in_type="Person",
-        in_additional_property="author:is-dataset-author",
-    ),
-    LinkRule(
-        on_type="Dataset", target_property="about",
-        match_value="about.identifier",
-        in_type="Product", in_property="identifier",
-    ),
-]
+from metadata_converter.uplift.config import GenericUpliftConfig
 
 
 def write_jsonld(path: Path, data: dict) -> None:
@@ -122,17 +88,13 @@ def config_factory(loaded_base, tmp_path):
     """Returns a callable that builds a GenericUpliftConfig with optional overrides."""
     def make(
         *,
-        rules: list[LinkRule] | None = None,
         out_name: str = "uplifted",
         provenance_dir: Path | None = None,
-        reference_dirs: Path | list[Path] | None = None,
         atomize: bool = False,
     ) -> GenericUpliftConfig:
         return GenericUpliftConfig(
             input_dir=loaded_base,
             output_dir=tmp_path / out_name,
-            reference_dirs=reference_dirs,
-            links=rules if rules is not None else DATAHUB_RULES,
             provenance_dir=provenance_dir,
             atomize=atomize,
         )
@@ -141,7 +103,7 @@ def config_factory(loaded_base, tmp_path):
 
 @pytest.fixture
 def uplifted(config_factory) -> dict[str, dict]:
-    """Run the default datahub uplift and return ``{filename → loaded dict}``."""
+    """Run the default uplift and return ``{filename → loaded dict}``."""
     cfg = config_factory()
     run_uplift(cfg)
     return {p.name: load_jsonld(p) for p in cfg.output_dir.glob("*.jsonld")}
