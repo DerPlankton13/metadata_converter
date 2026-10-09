@@ -11,7 +11,6 @@ import copy
 
 import pandas as pd
 import pytest
-from pydantic import ValidationError
 
 from metadata_converter.config_shared import ExcelExtractorConfig
 from metadata_converter.flat_data.config import (
