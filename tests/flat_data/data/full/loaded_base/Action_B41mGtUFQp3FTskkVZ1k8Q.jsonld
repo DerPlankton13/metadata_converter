@@ -3,7 +3,7 @@
     "@vocab": "https://schema.org/"
   },
   "@type": "Action",
-  "@id": "Action_K0TQdPiTgJsT2l1k2HI3PX.jsonld",
+  "@id": "Action_B41mGtUFQp3FTskkVZ1k8Q.jsonld",
   "description": "description method 1",
   "name": "Metabarcodes from Helgoland Samples",
   "identifier": "Metabarcoding",
@@ -25,6 +25,20 @@
     {
       "@type": "Person",
       "identifier": "0000-0001-0004-1234"
+    }
+  ],
+  "result": [
+    {
+      "@type": "Dataset",
+      "identifier": "B5D_file_886LGaLyMRe4bTUUpiVrVn"
+    },
+    {
+      "@type": "Dataset",
+      "identifier": "B5D_file_jirnMOdaI19BVLwCsPEMJJ"
+    },
+    {
+      "@type": "Dataset",
+      "identifier": "B5D_file_rB6_5DDUl6KF5nh2vetiM9"
     }
   ]
 }
