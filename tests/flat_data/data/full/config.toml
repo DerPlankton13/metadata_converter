@@ -14,7 +14,7 @@ strip_cell_whitespace = true
 sentinels_to_na = false
 placeholders_to_na = false
 plugin_dir = "plugins"
-plugin_name = "attach_samples_to_analyses.py"
+plugin_name = ["attach_samples_to_analyses.py", "attach_files_to_analyses.py"]
 
 # Columns to create by concatenating existing columns with a space.
 [combined_columns.author]
@@ -74,9 +74,3 @@ description = "file:description"
 comment = "file:comment"
 about.type = "Product"
 about.identifier = "file:sample"            # forward: uplift resolves to Product_<pid>.jsonld
-
-[[mapping.file.additionalProperty]]
-type = "PropertyValue"
-name = "Literal:file:analysis"
-value = "file:analysis"
-description = "Literal:Helper Property for linking this Dataset to Action.result."
