@@ -11,11 +11,11 @@
   "about": [
     {
       "@type": "Product",
-      "@id": "Product_SAMEA118673891.jsonld"
+      "identifier": "SAMEA118673891"
     },
     {
       "@type": "Product",
-      "@id": "Product_SAMEA118673815.jsonld"
+      "identifier": "SAMEA118673815"
     }
   ],
   "funding": {

@@ -11,7 +11,7 @@
   "comment": "file comment 1",
   "about": {
     "@type": "Product",
-    "@id": "Product_SAMEA118673891.jsonld"
+    "identifier": "SAMEA118673891"
   },
   "funding": {
     "@type": "MonetaryGrant",
