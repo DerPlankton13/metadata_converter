@@ -1,7 +1,7 @@
 import logging
 from pathlib import Path
 
-from metadata_converter.flat_data.config import FlatDataConfig
+from metadata_converter.flat_data.config import BroadcastIdRef, FlatDataConfig
 from metadata_converter.flat_data.extract import extract_data
 from metadata_converter.flat_data.transform.add_columns import add_columns
 from metadata_converter.flat_data.transform.clean import clean
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 def load_flat_data(config: FlatDataConfig) -> None:
     """Entry point: dispatch single file vs directory of Excel files."""
     logger.info("Starting flat-data workflow")
-    extract_inline_id_ref_broadcasts(config)
+    refs = extract_inline_id_ref_broadcasts(config)
     input = config.extractor.input
     if input.is_dir():
         files = sorted(input.glob("*.xlsx")) + sorted(input.glob("*.xls"))
@@ -33,21 +33,23 @@ def load_flat_data(config: FlatDataConfig) -> None:
             raise SystemExit(1)
         logger.info("Found %d file(s) in %s", len(files), input)
         for excel_file in files:
-            load_single(config, excel_file)
+            load_single(config, excel_file, refs)
     else:
-        load_single(config, input)
+        load_single(config, input, refs)
 
 
-def load_single(config: FlatDataConfig, input: Path) -> None:
+def load_single(
+    config: FlatDataConfig, input: Path, refs: list[BroadcastIdRef]
+) -> None:
     """Run the load pipeline for a single input file."""
     logger.info("Loading %s", input.name)
     data = extract_data(config, input=input)
     data = clean(data, config)
     data = add_columns(data, config)
-    refs = prepare_id_ref_broadcast(data, config)
+    collected = prepare_id_ref_broadcast(data, refs, config)
     data = reshape(data, config)
     schemas = build_schemas(data, config)
-    schemas = broadcast_id_refs(schemas, refs)
+    schemas = broadcast_id_refs(schemas, collected)
     if config.provenance_dir:
         for schema_list in schemas.values():
             for schema in schema_list:

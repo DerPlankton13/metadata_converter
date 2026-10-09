@@ -273,17 +273,8 @@ dataset = { type = "Dataset", id = { from_sheet = "file" } }
 from `from_sheet`. Comparison is normalised: `1` (int), `1.0` (float), and `"1"`
 (string) all match; booleans compare as `"true"` / `"false"`.
 
-These inline entries are lifted out of the mapping into the config's
-`broadcast_id_refs` before schema building; you can also declare them explicitly:
-
-```toml
-[[broadcast_id_refs]]
-on_sheet      = "dataset"
-property      = "creator"
-from_sheet    = "author"
-filter_column = "author:is-dataset-author"
-filter_value  = 1
-```
+These inline entries are lifted out of the mapping before schema building and
+applied to the built entities afterwards, so the schema builder never sees them.
 
 ---
 

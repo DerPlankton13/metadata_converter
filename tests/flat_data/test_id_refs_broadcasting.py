@@ -1,7 +1,7 @@
 """Tests for the flat_data broadcast @id reference pipeline.
 
 Covers extract_inline_id_ref_broadcasts (facade that lifts inline mapping entries
-into config.broadcast_id_refs), prepare_id_ref_broadcast (wide-format DataFrame
+out of the mapping and returns them as rules), prepare_id_ref_broadcast (wide-format DataFrame
 access), and broadcast_id_refs (schema object manipulation) in isolation so the
 full Excel-file pipeline is not needed. to_lookup_key itself is tested in
 tests/utils/test_lookup_key.py.
@@ -11,6 +11,7 @@ import copy
 
 import pandas as pd
 import pytest
+from pydantic import ValidationError
 
 from metadata_converter.config_shared import ExcelExtractorConfig
 from metadata_converter.flat_data.config import (
@@ -19,20 +20,19 @@ from metadata_converter.flat_data.config import (
     FlatDataConfig,
 )
 from metadata_converter.flat_data.transform.id_refs_broadcasting import (
-    prepare_id_ref_broadcast,
-    extract_inline_id_ref_broadcasts,
     broadcast_id_refs,
+    extract_inline_id_ref_broadcasts,
+    prepare_id_ref_broadcast,
 )
 from metadata_converter.schema_org_models.schemaorg_models import DataCatalog, Person
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
 
-def make_config(tmp_path, refs: list[BroadcastIdRef]) -> FlatDataConfig:
-    """Build a FlatDataConfig where everything except broadcast_id_refs is boilerplate."""
+def make_config(tmp_path) -> FlatDataConfig:
+    """Build a FlatDataConfig with an author and a dataset sheet; everything else is boilerplate."""
     return FlatDataConfig(
         extractor=ExcelExtractorConfig(
             input=tmp_path / "dummy.xlsx",
@@ -44,7 +44,6 @@ def make_config(tmp_path, refs: list[BroadcastIdRef]) -> FlatDataConfig:
             "author": {"type": "Person"},
             "dataset": {"type": "DataCatalog"},
         },
-        broadcast_id_refs=refs,
     )
 
 
@@ -72,10 +71,12 @@ def test_prepare_filter_returns_ref_type_and_matching_ids(tmp_path):
         filter_column="author:is-dataset-author",
         filter_value=1,
     )
-    config = make_config(tmp_path, [ref])
+    config = make_config(tmp_path)
     data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
 
-    [(returned_ref, ref_type, ids)] = prepare_id_ref_broadcast(data_dict, config)
+    [(returned_ref, ref_type, ids)] = prepare_id_ref_broadcast(
+        data_dict, [ref], config
+    )
 
     assert returned_ref is ref
     assert ref_type == "Person"
@@ -84,10 +85,10 @@ def test_prepare_filter_returns_ref_type_and_matching_ids(tmp_path):
 
 def test_prepare_no_filter_returns_all_ids(tmp_path):
     ref = BroadcastIdRef(on_sheet="dataset", property="creator", from_sheet="author")
-    config = make_config(tmp_path, [ref])
+    config = make_config(tmp_path)
     data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
 
-    _, _, ids = prepare_id_ref_broadcast(data_dict, config)[0]
+    _, _, ids = prepare_id_ref_broadcast(data_dict, [ref], config)[0]
 
     assert ids == ["Person_alice.jsonld", "Person_bob.jsonld"]
 
@@ -100,13 +101,13 @@ def test_prepare_returns_empty_ids_when_filter_matches_nothing(tmp_path):
         filter_column="author:is-dataset-author",
         filter_value=1,
     )
-    config = make_config(tmp_path, [ref])
+    config = make_config(tmp_path)
     data_dict = {
         "author": author_df(is_dataset_author=(0, 0)),
         "dataset": pd.DataFrame(),
     }
 
-    _, _, ids = prepare_id_ref_broadcast(data_dict, config)[0]
+    _, _, ids = prepare_id_ref_broadcast(data_dict, [ref], config)[0]
 
     assert ids == []
 
@@ -167,11 +168,11 @@ def test_integration_collect_then_inject_applies_filter(tmp_path):
         filter_column="author:is-dataset-author",
         filter_value=1,
     )
-    config = make_config(tmp_path, [ref])
+    config = make_config(tmp_path)
     data_dict = {"author": author_df(), "dataset": pd.DataFrame()}
     catalog = DataCatalog(id="DataCatalog_main.jsonld")
 
-    collected = prepare_id_ref_broadcast(data_dict, config)
+    collected = prepare_id_ref_broadcast(data_dict, [ref], config)
     results = broadcast_id_refs({"dataset": [catalog]}, collected)
 
     creator = results["dataset"][0].creator
@@ -185,7 +186,7 @@ def test_integration_collect_then_inject_applies_filter(tmp_path):
 
 
 def make_config_with_mapping(tmp_path, mapping: dict) -> FlatDataConfig:
-    """Build a FlatDataConfig with an arbitrary mapping; no broadcast_id_refs to start."""
+    """Build a FlatDataConfig with an arbitrary mapping."""
     return FlatDataConfig(
         extractor=ExcelExtractorConfig(
             input=tmp_path / "dummy.xlsx",
@@ -216,10 +217,10 @@ def test_inline_broadcast_id_ref_with_filter_extracted_correctly(tmp_path):
         },
     )
 
-    extract_inline_id_ref_broadcasts(cfg)
+    refs = extract_inline_id_ref_broadcasts(cfg)
 
-    assert len(cfg.broadcast_id_refs) == 1
-    ref = cfg.broadcast_id_refs[0]
+    assert len(refs) == 1
+    ref = refs[0]
     assert ref.on_sheet == "dataset"
     assert ref.property == "creator"
     assert ref.from_sheet == "author"
@@ -239,9 +240,9 @@ def test_inline_broadcast_id_ref_without_filter_extracted_correctly(tmp_path):
         },
     )
 
-    extract_inline_id_ref_broadcasts(cfg)
+    refs = extract_inline_id_ref_broadcasts(cfg)
 
-    [ref] = cfg.broadcast_id_refs
+    [ref] = refs
     assert ref.from_sheet == "file"
     assert ref.filter_column is None
     assert ref.filter_value is None
@@ -281,41 +282,13 @@ def test_multiple_inline_broadcast_id_refs_all_extracted(tmp_path):
         },
     )
 
-    extract_inline_id_ref_broadcasts(cfg)
+    refs = extract_inline_id_ref_broadcasts(cfg)
 
-    creator_ref, dataset_ref = cfg.broadcast_id_refs
+    creator_ref, dataset_ref = refs
     assert creator_ref.property == "creator"
     assert dataset_ref.property == "dataset"
     assert "creator" not in cfg.mapping["dataset"]
     assert "dataset" not in cfg.mapping["dataset"]
-
-
-def test_inline_broadcast_id_refs_appended_to_existing_broadcast_id_refs(tmp_path):
-    existing = BroadcastIdRef(
-        on_sheet="dataset", property="dataset", from_sheet="file"
-    )
-    cfg = FlatDataConfig(
-        extractor=ExcelExtractorConfig(
-            input=tmp_path / "dummy.xlsx", sheet_name=["author", "file", "dataset"]
-        ),
-        cleaning=CleaningConfig(),
-        output_dir=tmp_path / "out",
-        mapping={
-            "author": {"type": "Person"},
-            "file": {"type": "Dataset"},
-            "dataset": {
-                "type": "DataCatalog",
-                "creator": {"type": "Person", "id": {"from_sheet": "author"}},
-            },
-        },
-        broadcast_id_refs=[existing],
-    )
-
-    extract_inline_id_ref_broadcasts(cfg)
-
-    assert len(cfg.broadcast_id_refs) == 2
-    assert cfg.broadcast_id_refs[0] is existing
-    assert cfg.broadcast_id_refs[1].property == "creator"
 
 
 def test_extract_is_idempotent_on_second_call(tmp_path):
@@ -332,10 +305,9 @@ def test_extract_is_idempotent_on_second_call(tmp_path):
 
     extract_inline_id_ref_broadcasts(cfg)
     mapping_after_first = copy.deepcopy(cfg.mapping)
-    refs_after_first = list(cfg.broadcast_id_refs)
-    extract_inline_id_ref_broadcasts(cfg)
+    second_refs = extract_inline_id_ref_broadcasts(cfg)
 
-    assert cfg.broadcast_id_refs == refs_after_first
+    assert second_refs == []
     assert cfg.mapping == mapping_after_first
 
 
@@ -350,9 +322,9 @@ def test_dict_with_id_as_string_passes_through_unchanged(tmp_path):
         },
     )
 
-    extract_inline_id_ref_broadcasts(cfg)
+    refs = extract_inline_id_ref_broadcasts(cfg)
 
-    assert cfg.broadcast_id_refs == []
+    assert refs == []
     assert cfg.mapping["dataset"]["creator"] == {
         "type": "Person",
         "id": "author:pid",
@@ -373,9 +345,9 @@ def test_dict_with_id_dict_without_from_sheet_passes_through_unchanged(tmp_path)
         },
     )
 
-    extract_inline_id_ref_broadcasts(cfg)
+    refs = extract_inline_id_ref_broadcasts(cfg)
 
-    assert cfg.broadcast_id_refs == []
+    assert refs == []
     assert cfg.mapping["dataset"]["creator"] == {
         "type": "Person",
         "id": {"something_else": "foo"},

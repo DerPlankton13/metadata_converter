@@ -71,7 +71,6 @@ class FlatDataConfig(BaseModel):
         ),
     )
     split_fields: dict[str, list[str]] = Field(default_factory=dict)
-    broadcast_id_refs: list[BroadcastIdRef] = Field(default_factory=list)
 
 
 FlatDataConfig.model_rebuild()
