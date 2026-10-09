@@ -6,48 +6,6 @@ from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
-class RemovalWhere(BaseModel):
-    """Predicate selecting which items to remove from a list-valued property.
-
-    Reads ``property`` (a possibly nested dot-selector) on each item and compares
-    on string form. Exactly one of ``equals`` (exact) or ``contains`` (substring)
-    must be set; both are case-sensitive.
-    """
-
-    model_config = ConfigDict(extra="forbid", populate_by_name=True)
-    property: str = Field(
-        description="Dot-selector on each item to test (e.g. 'name', 'valueReference.termCode')."
-    )
-    equals: str | None = Field(
-        default=None, description="Exact match. Mutually exclusive with contains."
-    )
-    contains: str | None = Field(
-        default=None, description="Substring match. Mutually exclusive with equals."
-    )
-
-    @model_validator(mode="after")
-    def _exactly_one_mode(self) -> RemovalWhere:
-        if (self.equals is None) == (self.contains is None):
-            raise ValueError(
-                "exactly one of 'equals' or 'contains' must be set in `where`"
-            )
-        return self
-
-
-class RemovalRule(BaseModel):
-    """Filter items out of a list-valued property at uplift time.
-
-    For each entity of ``on_type``, items of ``target_property`` matching ``where``
-    are removed. A single (non-list) value is treated as a one-item collection; an
-    emptied collection collapses to ``None``.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-    on_type: str = Field(description="@type of entities to modify.")
-    target_property: str = Field(description="List-valued property to filter.")
-    where: RemovalWhere = Field(description="Predicate selecting items to remove.")
-
-
 class EnrichmentRule(BaseModel):
     """Wrap a scalar property value in a custom PropertyValue subclass at uplift time.
 
@@ -100,47 +58,6 @@ class RenameRule(BaseModel):
     target_property: str = Field(description="Property to move the value to.")
 
 
-class LinkRule(BaseModel):
-    """Declarative cross-reference rule for the generic uplift engine."""
-
-    model_config = ConfigDict(extra="forbid")
-    on_type: str = Field(description="@type of entities to modify.")
-    target_property: str = Field(description="Property to set on each on_type entity.")
-    match_value: str | None = Field(
-        None,
-        description="Dot-selector on the entity to compute the lookup value. Mutually exclusive with match_literal.",
-    )
-    match_literal: str | None = Field(
-        None,
-        description="Constant lookup value applied to all on_type entities. Mutually exclusive with match_value.",
-    )
-    in_type: str = Field(description="@type of candidate entities to link to.")
-    in_property: str | None = Field(
-        None,
-        description="Dot-selector on candidates to index by. Mutually exclusive with in_additional_property.",
-    )
-    in_additional_property: str | None = Field(
-        None,
-        description="Named additionalProperty entry on candidates to index by. Mutually exclusive with in_property.",
-    )
-    ref_id_template: str | None = Field(
-        None,
-        description="Template for constructing the ref @id from the matched candidate. "
-        "Use {prop} placeholders for candidate property values, e.g. 'Product_{identifier}.jsonld'. "
-        "When omitted the candidate's own @id is used.",
-    )
-
-    @model_validator(mode="after")
-    def _check_match_and_in(self) -> LinkRule:
-        if (self.match_value is None) == (self.match_literal is None):
-            raise ValueError("exactly one of match_value or match_literal must be set")
-        if (self.in_property is None) == (self.in_additional_property is None):
-            raise ValueError(
-                "exactly one of in_property or in_additional_property must be set"
-            )
-        return self
-
-
 class GenericUpliftConfig(BaseModel):
     """Source-independent uplift config, driven entirely by declarative rules."""
 
@@ -149,22 +66,13 @@ class GenericUpliftConfig(BaseModel):
         description="The single directory of loaded JSON-LD to uplift. Deliberately not "
         "a list: everything loaded here is written back to output_dir and recorded in "
         "provenance_dir, so naming a sibling source would copy it into this source's "
-        "output and attribute its entities to themselves. Read another source through "
-        "reference_dirs instead, which is never written."
+        "output and attribute its entities to themselves."
     )
     output_dir: Path
-    reference_dirs: Path | list[Path] | None = Field(
-        default=None,
-        description="Directories read only for link-candidate lookup (e.g. an "
-        "already-uplifted sibling source). Entities found here are available to "
-        "LinkApplier but are never written to output_dir or provenance_dir.",
-    )
     provenance_dir: Path
-    links: list[LinkRule] = Field(default_factory=list)
     enrichments: list[EnrichmentRule] = Field(default_factory=list)
     additions: list[AdditionRule] = Field(default_factory=list)
     renames: list[RenameRule] = Field(default_factory=list)
-    removals: list[RemovalRule] = Field(default_factory=list)
     atomize: bool = Field(
         default=True,
         description="Extract every blank node reachable from any entity into its own "
@@ -177,14 +85,13 @@ class GenericUpliftConfig(BaseModel):
         """Reject configs that have two rules targeting the same on_type.target_property.
 
         Each ``(on_type, target_property)`` may be touched by at most one rule across
-        ``links``, ``enrichments`` and ``additions`` combined. The pair is the
-        contract for what gets written; overlap would mean the last rule silently
-        overwrites the others. ``removals`` and ``renames`` are exempt — they
-        legitimately undo, refine, or repoint what another rule (or load) produced.
+        ``enrichments`` and ``additions`` combined. The pair is the contract for
+        what gets written; overlap would mean the last rule silently overwrites the
+        others. ``renames`` are exempt — they legitimately repoint what another rule
+        (or load) produced.
         """
         seen: dict[tuple[str, str], str] = {}
         rules_by_kind = (
-            *(("link", r) for r in self.links),
             *(("enrichment", r) for r in self.enrichments),
             *(("addition", r) for r in self.additions),
         )

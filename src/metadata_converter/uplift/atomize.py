@@ -3,7 +3,7 @@
 A "blank node" in JSON-LD is a typed property which does not have its own @id. In the
  pydantic models this corresponds to a nested ``SchemaOrgBase`` instance with no
 ``@id`` of its own. Atomizing replaces the nested model with a bare reference
-(mirroring the ref shape ``LinkApplier`` produces via ``target_cls(id=...)``) and
+(``target_cls(id=...)``) and
 returns it as a separate entity with an ``@id`` built from its content hash. This hash
 is identical for identical content, independent of which models contain the nested model.
 That determinism is what turns a mechanical "pull it out" into atomizing:
