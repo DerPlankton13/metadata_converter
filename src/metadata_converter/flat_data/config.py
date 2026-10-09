@@ -61,7 +61,6 @@ class FlatDataConfig(BaseModel):
     cleaning: CleaningConfig
     output_dir: Path
     provenance_dir: Path | None = None
-    sheet_type_mapping: dict[str, str] | None = None
     mapping: dict[str, dict[str, Any]]
     combined_columns: dict[str, dict[str, list[str]]] = Field(
         default_factory=dict,
