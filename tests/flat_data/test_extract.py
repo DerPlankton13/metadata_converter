@@ -85,6 +85,7 @@ def build_flat_data_config(tmp_path: Path, **extractor_kwargs) -> FlatDataConfig
         extractor=ExcelExtractorConfig(**extractor_kwargs),
         cleaning={},
         output_dir=tmp_path / "output",
+        provenance_dir=tmp_path / "provenance",
         mapping={},
     )
 

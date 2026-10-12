@@ -80,20 +80,3 @@ def test_get_metadata_writes_fetch_provenance(tmp_path, monkeypatch):
     assert re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", json_provenance["dateCreated"]
     )
-
-
-def test_get_metadata_without_provenance_dir_writes_nothing(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    monkeypatch.setattr(
-        "metadata_converter.biosamples.fetch.fetch_metadata", fake_fetch_metadata
-    )
-    (tmp_path / "fetched").mkdir()
-
-    get_metadata(
-        "SAMEA1",
-        session=None,
-        fetched_path=tmp_path / "fetched",
-        provenance_dir=None,
-    )
-
-    assert not (tmp_path / "provenance").exists()

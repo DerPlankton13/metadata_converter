@@ -29,13 +29,13 @@ def test_fetch_to_uplift_produces_expected_product_and_action(tmp_path, sample_i
     loaded_dir = tmp_path / "loaded"
     uplifted_dir = tmp_path / "uplifted"
 
-    load_biosamples(biosamples_config(fetched_dir, loaded_dir, None))
+    load_biosamples(biosamples_config(fetched_dir, loaded_dir, tmp_path / "provenance"))
     uplift_record_biosamples(
         BiosamplesUpliftRecordConfig(
             source_type="biosamples",
             input_dir=loaded_dir,
             output_dir=uplifted_dir,
-            provenance_dir=None,
+            provenance_dir=tmp_path / "provenance",
         )
     )
 

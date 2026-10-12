@@ -44,7 +44,7 @@ def test_uplift_record_biosamples_writes_expected_product_and_action(
         source_type="biosamples",
         input_dir=input_dir,
         output_dir=tmp_path / "uplifted",
-        provenance_dir=None,
+        provenance_dir=tmp_path / "provenance",
     )
 
     uplift_record_biosamples(config)
@@ -90,19 +90,3 @@ def test_biosamples_uplift_writes_provenance(tmp_path, loaded_sample):
         "@id": f"CreativeWork_{sid}.jsonld",
     }
     assert action_doc["description"] == "stage: uplift_record"
-
-
-def test_biosamples_uplift_without_provenance_dir_writes_nothing(
-    tmp_path, loaded_sample
-):
-    input_dir, _ = loaded_sample
-    config = BiosamplesUpliftRecordConfig(
-        source_type="biosamples",
-        input_dir=input_dir,
-        output_dir=tmp_path / "uplifted",
-        provenance_dir=None,
-    )
-
-    uplift_record_biosamples(config)
-
-    assert not (tmp_path / "provenance").exists()

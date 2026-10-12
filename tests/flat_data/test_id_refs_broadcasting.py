@@ -39,6 +39,7 @@ def make_config(tmp_path) -> FlatDataConfig:
         ),
         cleaning=CleaningConfig(),
         output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
         mapping={
             "author": {"type": "Person"},
             "dataset": {"type": "DataCatalog"},
@@ -193,6 +194,7 @@ def make_config_with_mapping(tmp_path, mapping: dict) -> FlatDataConfig:
         ),
         cleaning=CleaningConfig(),
         output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
         mapping=mapping,
     )
 

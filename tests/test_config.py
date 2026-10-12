@@ -40,7 +40,10 @@ def test_load_uplift_config_rejects_an_uplift_record_config(tmp_path):
     """
     path = write_toml(
         tmp_path / "uplift.toml",
-        'source_type = "biosamples"\ninput_dir = "in"\noutput_dir = "out"\n',
+        'source_type = "biosamples"\n'
+        'input_dir = "in"\n'
+        'output_dir = "out"\n'
+        'provenance_dir = "provenance"\n',
     )
 
     with pytest.raises(SystemExit):
@@ -50,7 +53,10 @@ def test_load_uplift_config_rejects_an_uplift_record_config(tmp_path):
 def test_load_uplift_record_config_reads_a_biosamples_config(tmp_path):
     path = write_toml(
         tmp_path / "uplift_record.toml",
-        'source_type = "biosamples"\ninput_dir = "in"\noutput_dir = "out"\n',
+        'source_type = "biosamples"\n'
+        'input_dir = "in"\n'
+        'output_dir = "out"\n'
+        'provenance_dir = "provenance"\n',
     )
 
     cfg = load_uplift_record_config(path)

@@ -2,6 +2,7 @@
 # Paths below are placeholders — the test overrides them with tmp_path locations.
 source_type = "flat_data"
 output_dir = "loaded_base"
+provenance_dir = "provenance"
 
 [extractor]
 input = "input.xlsx"

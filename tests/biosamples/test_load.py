@@ -36,7 +36,7 @@ def test_load_biosamples_writes_expected_creativework(tmp_path, sample_id):
     fetched_dir.mkdir()
     shutil.copy(DATA_DIR / f"{sample_id}.ldjson", fetched_dir)
     shutil.copy(DATA_DIR / f"{sample_id}.json", fetched_dir)
-    config = biosamples_config(fetched_dir, tmp_path / "loaded", None)
+    config = biosamples_config(fetched_dir, tmp_path / "loaded", tmp_path / "provenance")
 
     load_biosamples(config)
 
@@ -82,15 +82,3 @@ def test_load_biosamples_writes_provenance(tmp_path, monkeypatch):
     assert re.fullmatch(
         r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", provenance["dateCreated"]
     )
-
-
-def test_load_biosamples_without_provenance_dir_writes_nothing(tmp_path, monkeypatch):
-    monkeypatch.chdir(tmp_path)
-    fetched_dir = tmp_path / "fetched"
-    fetched_dir.mkdir()
-    write_fetched_sample(fetched_dir, "SAMEA1")
-    config = biosamples_config(fetched_dir, tmp_path / "loaded_base", None)
-
-    load_biosamples(config)
-
-    assert not (tmp_path / "provenance").exists()
