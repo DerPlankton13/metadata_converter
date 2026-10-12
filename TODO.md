@@ -99,6 +99,11 @@ the DRY violation, or convert the builders to plain functions taking a
 `SampleRecord`? Largely tangled with the "extract project-specific code"
 item — defer until that direction is settled.
 
+### Remove the `rename` uplift operation
+`uplift/rename.py` (`RenameRule`, `RenameApplier`, `GenericUpliftConfig.renames`)
+is not needed by any current config. Delete it together with its tests, its
+docs in `docs/usage.md` and `CLAUDE.md`, and the `run_uplift` step.
+
 ### Plugin feature — keep or remove?
 `CleaningConfig.load_plugins_from_dir` imports arbitrary Python during config
 validation. User-leaning toward removing the feature entirely. If kept: move
