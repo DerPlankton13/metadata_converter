@@ -1,7 +1,9 @@
 """Tests for the pure ``atomize_blank_nodes`` transform in ``uplift/atomize.py``."""
 
 import pytest
+from pydantic import AnyUrl
 
+from metadata_converter.schema_org_models.custom_models import Orcid
 from metadata_converter.schema_org_models.schemaorg_models import (
     CreativeWork,
     Organization,
@@ -41,6 +43,33 @@ def test_atomize_blank_nodes_scalar_blank_node_extracted_and_replaced_with_ref()
             context=SCHEMA_ORG_DEFAULT_CONTEXT,
         )
     ]
+
+
+def test_atomize_blank_nodes_subclass_with_defaults_ref_has_only_type_and_id():
+    entity = CreativeWork(
+        id="CreativeWork_1.jsonld",
+        name="Sample dataset",
+        identifier=Orcid(value="0000-0001-0002-1234"),
+    )
+
+    result, atomized = atomize_blank_nodes(entity)
+
+    assert result.identifier.model_dump(by_alias=True, exclude_none=True) == {
+        "@type": "PropertyValue",
+        "@id": "PropertyValue_Vr3xWX90YJRJvLNC7onNCT.jsonld",
+    }
+    assert atomized[0].model_dump(by_alias=True, exclude_none=True) == {
+        "@context": SCHEMA_ORG_DEFAULT_CONTEXT,
+        "@type": "PropertyValue",
+        "@id": "PropertyValue_Vr3xWX90YJRJvLNC7onNCT.jsonld",
+        "name": "Open Researcher and Contributor ID",
+        "alternateName": "ORCID",
+        "propertyID": AnyUrl("https://registry.identifiers.org/registry/orcid"),
+        "url": "https://orcid.org/0000-0001-0002-1234",
+        "value": "0000-0001-0002-1234",
+    }
+    assert result.id == "CreativeWork_1.jsonld"
+    assert result.name == "Sample dataset"
 
 
 def test_atomize_blank_nodes_nested_blank_node_extracted_bottom_up():
