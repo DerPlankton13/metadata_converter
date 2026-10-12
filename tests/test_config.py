@@ -20,7 +20,9 @@ def write_toml(path, body: str) -> str:
 def test_load_uplift_config_reads_a_generic_config(tmp_path):
     path = write_toml(
         tmp_path / "uplift.toml",
-        'input_dir = "in"\noutput_dir = "out"\n',
+        'input_dir = "in"\n'
+        'output_dir = "out"\n'
+        'provenance_dir = "provenance"\n',
     )
 
     cfg = load_uplift_config(path)

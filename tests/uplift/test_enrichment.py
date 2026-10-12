@@ -147,6 +147,7 @@ def test_two_enrichments_on_same_target_raise_at_config_load(tmp_path):
         GenericUpliftConfig(
             input_dir=tmp_path / "in",
             output_dir=tmp_path / "out",
+            provenance_dir=tmp_path / "provenance",
             enrichments=[
                 EnrichmentRule(
                     on_type="Person", target_property="identifier", enrich_as="Orcid"

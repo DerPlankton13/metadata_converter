@@ -89,13 +89,12 @@ def config_factory(loaded_base, tmp_path):
     def make(
         *,
         out_name: str = "uplifted",
-        provenance_dir: Path | None = None,
         atomize: bool = False,
     ) -> GenericUpliftConfig:
         return GenericUpliftConfig(
             input_dir=loaded_base,
             output_dir=tmp_path / out_name,
-            provenance_dir=provenance_dir,
+            provenance_dir=tmp_path / "provenance",
             atomize=atomize,
         )
     return make

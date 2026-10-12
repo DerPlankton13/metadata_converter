@@ -10,7 +10,7 @@ from tests.uplift.conftest import load_jsonld, write_jsonld
 
 
 def test_uplift_writes_provenance(config_factory, tmp_path):
-    cfg = config_factory(provenance_dir=tmp_path / "provenance")
+    cfg = config_factory()
 
     run_uplift(cfg)
 
@@ -40,14 +40,6 @@ def test_uplift_writes_provenance(config_factory, tmp_path):
     assert bob["description"] == "stage: uplift"
 
 
-def test_uplift_without_provenance_dir_writes_nothing(config_factory, tmp_path):
-    cfg = config_factory(provenance_dir=None)
-
-    run_uplift(cfg)
-
-    assert not (tmp_path / "provenance").exists()
-
-
 # ---------------------------------------------------------------------------
 # atomize wiring: config flag, ordering relative to write/provenance
 # ---------------------------------------------------------------------------
@@ -55,7 +47,9 @@ def test_uplift_without_provenance_dir_writes_nothing(config_factory, tmp_path):
 
 def test_uplift_atomize_default_true_extracts_blank_nodes(loaded_base, tmp_path):
     cfg = GenericUpliftConfig(
-        input_dir=loaded_base, output_dir=tmp_path / "out"
+        input_dir=loaded_base,
+        output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
     )
 
     run_uplift(cfg)
