@@ -81,7 +81,8 @@ def get_identifiers(g: Graph) -> pd.DataFrame:
     identifiers = g.query(
         """
             SELECT ?s ?p ?o ?identifier
-            WHERE { BIND(schema:identifier AS ?p) .                                                                                             ?s ?p ?o .
+            WHERE { BIND(schema:identifier AS ?p) .                                                                                             
+                    ?s ?p ?o .
                     OPTIONAL { ?o a schema:PropertyValue. ?o schema:value ?value }
                     BIND(COALESCE(?value, ?o) AS ?identifier)
             }
