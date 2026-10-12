@@ -205,16 +205,15 @@ def load_biosamples(config: BiosamplesConfig):
 
         load_to_jsonld(schema, output_dir=config.output_dir)
 
-        if config.provenance_dir is not None:
-            # we need to expand the @id as we are not keeping the context in the
-            # provenance file and the CURIE becomes unresolvable otherwise
-            structured_id = expand_curie(structured["@id"], structured["@context"])
-            write_provenance_file(
-                sample["@id"],
-                config.provenance_dir,
-                [structured_id, os.path.relpath(json_file)],
-                "load",
-            )
+        # we need to expand the @id as we are not keeping the context in the
+        # provenance file and the CURIE becomes unresolvable otherwise
+        structured_id = expand_curie(structured["@id"], structured["@context"])
+        write_provenance_file(
+            sample["@id"],
+            config.provenance_dir,
+            [structured_id, os.path.relpath(json_file)],
+            "load",
+        )
 
     if failures:
         raise RuntimeError(
@@ -247,10 +246,9 @@ def uplift_record_biosamples(config: BiosamplesUpliftRecordConfig):
         try:
             product = Product(**product_dict)
             load_to_jsonld(product, output_dir=config.output_dir)
-            if config.provenance_dir is not None:
-                write_provenance_file(
-                    product.id, config.provenance_dir, data["@id"], "uplift_record"
-                )
+            write_provenance_file(
+                product.id, config.provenance_dir, data["@id"], "uplift_record"
+            )
         except ValidationError as e:
             logger.error("Failed to build Product for %s.", path.name)
             log_validation_error(e, logger)
@@ -258,10 +256,9 @@ def uplift_record_biosamples(config: BiosamplesUpliftRecordConfig):
         try:
             action = Action(**action_dict)
             load_to_jsonld(action, output_dir=config.output_dir)
-            if config.provenance_dir is not None:
-                write_provenance_file(
-                    action.id, config.provenance_dir, data["@id"], "uplift_record"
-                )
+            write_provenance_file(
+                action.id, config.provenance_dir, data["@id"], "uplift_record"
+            )
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)
             log_validation_error(e, logger)

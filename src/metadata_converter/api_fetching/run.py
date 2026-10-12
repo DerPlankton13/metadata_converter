@@ -40,16 +40,15 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
         logger.debug("Writing fetched JSON-LD to %s", fetched_file)
         write_json(jsonld, fetched_file)
 
-        if config.provenance_dir is not None:
-            if config.fetcher.fetch_strategy == "export_endpoint":
-                source_url = config.fetcher.export_url_template.format(
-                    record_id=record.source_id
-                )
-            else:
-                source_url = record.url
-            write_provenance_file(
-                fetched_file.name, config.provenance_dir, source_url, "fetch"
+        if config.fetcher.fetch_strategy == "export_endpoint":
+            source_url = config.fetcher.export_url_template.format(
+                record_id=record.source_id
             )
+        else:
+            source_url = record.url
+        write_provenance_file(
+            fetched_file.name, config.provenance_dir, source_url, "fetch"
+        )
 
     logger.info("API fetch complete. Output: %s", fetched_path)
 
@@ -97,10 +96,9 @@ def load_api_data(config: ApiFetchingConfig) -> None:
 
         load_to_jsonld(schema, output_dir=config.output_dir)
 
-        if config.provenance_dir is not None:
-            write_provenance_file(
-                schema.id, config.provenance_dir, fetched_file.name, "load"
-            )
+        write_provenance_file(
+            schema.id, config.provenance_dir, fetched_file.name, "load"
+        )
 
     if failures:
         logger.warning(

@@ -50,12 +50,9 @@ def load_single(
     data = reshape(data, config)
     schemas = build_schemas(data, config)
     schemas = broadcast_id_refs(schemas, collected)
-    if config.provenance_dir:
-        for schema_list in schemas.values():
-            for schema in schema_list:
-                write_provenance_file(
-                    schema.id, config.provenance_dir, str(input), "load"
-                )
+    for schema_list in schemas.values():
+        for schema in schema_list:
+            write_provenance_file(schema.id, config.provenance_dir, str(input), "load")
     write_schemas(schemas, config.output_dir)
 
 
