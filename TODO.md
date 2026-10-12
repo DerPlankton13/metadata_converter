@@ -67,13 +67,9 @@ Pydantic coercing `int 1` to `float 1.0` in certain union fields:
 if isinstance(value, float) and value.is_integer():
     return str(int(value))
 ```
-The same workaround is now *also* duplicated in
-`src/metadata_converter/uplift/remove.py:_stringify` — so the extraction
-fixed the module coupling but not the duplication; there are two copies of
-this normalization today instead of one. If the underlying union types in the
-schema.org models were tightened or ordered differently, both could go away.
-Worth investigating once the schema.org generator is touched again, along with
-whether `_stringify` and `to_lookup_key` should simply share one function.
+If the underlying union types in the schema.org models were tightened or
+ordered differently, the workaround could go away. Worth investigating once the
+schema.org generator is touched again.
 
 ### Inline `parse.py` (24 lines) and `http.py` (9 lines)
 Both modules are too small to justify their own files. `parse.py` is only

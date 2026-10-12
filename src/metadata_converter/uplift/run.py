@@ -33,8 +33,9 @@ def run_uplift(config: GenericUpliftConfig) -> None:
        entity's full nested content, which the earlier stages may have changed).
     6. **Write** — export every entity to ``config.output_dir``.
 
-    Provenance is written for every entity in the output. An entity present before atomize is based on the loaded entity of the same
-    ``@id``. An atomized entity has no *single* origin, so it records all of them: the
+    Provenance is written for every entity in the output. An entity present before
+    atomize is based on the loaded entity of the same ``@id``. An atomized entity has no
+    *single* origin, so it records all of them: the
     top-level entities it was extracted from, as collected in ``AtomizeApplier.origins``.
     That keeps the chain walkable — an atom points at the entities containing it, each of
     which points at what it was loaded from.

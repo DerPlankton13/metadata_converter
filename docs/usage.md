@@ -2,7 +2,7 @@
 
 `metadata_converter` is a CLI tool that converts source-specific metadata into
 JSON-LD files conforming to schema.org, driven by a TOML config. It supports
-three independent load workflows and a separate uplift/linking step.
+three independent load workflows and a separate uplift step.
 
 ---
 
@@ -22,18 +22,23 @@ pip install metadata_converter
 converter <phase> <config.toml>
 ```
 
-`phase` is one of `fetch`, `load`, or `uplift`. The `source_type` key in the
+`phase` is one of `fetch`, `load`, `uplift_record`, `uplift`, or `uplift_merge`. The `source_type` key in the
 config identifies the data source; the phase selects the step to execute:
 
 | Phase | Applicable source types | What it does |
 |---|---|---|
 | `fetch` | `biosamples`, `api` | Download raw records from external APIs |
 | `load` | `flat_data`, `biosamples`, `api` | Transform raw/tabular data into schema.org JSON-LD (`loaded_base`) |
-| `uplift` | *(uplift config, no source_type)* | Resolve cross-references, enrich, add, and remove across loaded JSON-LD |
+| `uplift_record` | `biosamples` | Per-record uplift of loaded biosamples into `Product` + `Action` JSON-LD pairs |
+| `uplift` | *(uplift config, no source_type)* | Enrich, add, rename, and atomize across loaded JSON-LD |
+| `uplift_merge` | *(uplift merge config)* | Merge entities that share an identifier in the built graph |
 
 Source configs (`flat_data`, `biosamples`, `api`) use `source_type` as their
 discriminator. The uplift config has no `source_type` — it is a separate config
 kind loaded only when the phase is `uplift`.
+
+Every config requires a `provenance_dir`: each phase writes one provenance record
+per entity it produces there, so no run goes unrecorded.
 
 Add `--log-level debug` for verbose output.
 
@@ -57,10 +62,6 @@ Consequences to keep in mind:
 - **Cross-file references** like `{"@type": "Person", "@id": "Person_abc123.jsonld"}`
   are relative IRI references. They resolve correctly when the graph is loaded
   with a consistent base IRI or when all files share the same directory.
-- **`ref_id_template`** constructs an `@id` from a domain identifier (e.g.
-  `Product_{identifier}.jsonld` → `Product_SAMEA001.jsonld`). The template must
-  produce a value that matches the `@id` the canonical file will carry — whether
-  that is a relative path now or a full IRI later.
 - When the files are eventually hosted, the base IRI must be applied consistently
   across all files and all cross-references so the graph stays internally
   consistent.
@@ -78,6 +79,7 @@ and writes one JSON-LD file per entity.
 source_type = "flat_data"
 
 output_dir = "data/loaded_base/my_source"
+provenance_dir = "data/provenance/load/my_source"
 
 [extractor]
 input      = "data/raw/input.xlsx"   # an .xlsx file, or a directory of them
@@ -226,8 +228,8 @@ another**, and wrong when it merely **describes** a node whose identity comes
 from a different column.
 
 Two ORCIDs are two people, so `agent.identifier` must fan out. Collapsing it
-would assert a single person holding both ORCIDs, and the uplift `LinkRule` that
-resolves `identifier` → `@id` would then have no single entity to match.
+would assert a single person holding both ORCIDs, and the identifier-based merge
+would then have no single entity to match.
 
 Two keywords, however, are not two protocols. Putting a descriptive multi-value
 column inside a block identified by another column splits one node into
@@ -288,6 +290,7 @@ JSON-LD pair (the `uplift` phase).
 source_type = "biosamples"
 fetched_dir = "data/fetched/biosamples"   # where `fetch` writes and `load` reads
 output_dir  = "data/loaded_base/biosamples"
+provenance_dir = "data/provenance/load/biosamples"
 
 [extractor]                        # reads the sample-id list from Excel
 input            = "data/raw/biosamples"
@@ -309,6 +312,7 @@ Queries external repositories (currently Zenodo) and fetches JSON-LD records.
 source_type = "api"
 fetched_dir = "data/fetched/zenodo"     # where `fetch` writes and `load` reads
 output_dir  = "data/loaded_base/zenodo"
+provenance_dir = "data/provenance/load/zenodo"
 
 [fetcher]
 api_url             = "https://zenodo.org/api/records"
@@ -324,109 +328,57 @@ value = "biocean5d"
 
 ## Uplift phase config
 
-Post-processes already-loaded JSON-LD: resolves cross-references, enriches
-scalars, adds fixed values, and removes scaffolding. It runs *after* all `load`
-workflows have completed. The uplift config has no `source_type`; it is used
-exclusively with `converter uplift`.
+Post-processes already-loaded JSON-LD: enriches scalars, adds fixed values,
+renames properties, and extracts blank nodes into their own entities. It runs
+*after* all `load` workflows have completed. The uplift config has no
+`source_type`; it is used exclusively with `converter uplift`. Matching entities
+across sources is not done here; it happens in graph space (see `uplift_merge`).
 
 ```toml
-[flat_data]
-# One directory, or several merged into a single store (e.g. one per loaded
-# source). A duplicate @id across directories is an error.
-input_dir  = ["data/loaded_base/datahub", "data/loaded_base/biosamples"]
-output_dir = "data/uplifted/datahub"
+input_dir      = "data/loaded_base/datahub"      # one directory, never a list
+output_dir     = "data/loaded_uplifted/datahub"
+provenance_dir = "data/provenance/uplift/datahub"
+atomize        = true                            # default
 
-[[flat_data.links]]
-on_type         = "Action"
-target_property = "agent"
-match_value     = "agent.identifier"
-in_type         = "Person"
-in_property     = "identifier"
-
-[[flat_data.enrichments]]
+[[enrichments]]
 on_type         = "Person"
 target_property = "identifier"
 enrich_as       = "Orcid"
 
-[[flat_data.additions]]
+[[additions]]
 on_type         = "DataCatalog"
 target_property = "funding"
 value.type      = "MonetaryGrant"
 value.id        = "https://example.org/grant.jsonld"
 
-[[flat_data.removals]]
+[[renames]]
 on_type         = "Dataset"
-target_property = "additionalProperty"
-where           = { property = "description", contains = "Helper Property for" }
+source_property = "comment"
+target_property = "description"
 ```
 
-Operations are applied in a fixed order: **link → enrich → add → remove → write**.
-A config validator rejects two `link`/`enrich`/`add` rules that target the same
-`(on_type, target_property)`; `removals` are exempt (they refine other rules'
-output). Output shape throughout collapses to the shortest form: 0 → omitted,
-1 → scalar, ≥2 → list.
+`input_dir` is a single directory on purpose: everything in it is written back to
+`output_dir` and recorded in `provenance_dir`, so naming a second source would
+copy it into this one's output.
 
-### Link rule fields
+Operations are applied in a fixed order:
+**enrich → add → rename → atomize → write**. A config validator rejects two
+`enrich`/`add` rules that target the same `(on_type, target_property)`; `renames`
+are exempt (they move a value elsewhere rather than duplicating a target). Output
+shape throughout collapses to the shortest form: 0 → omitted, 1 → scalar, ≥2 → list.
 
-| Field | Required | Description |
-|---|---|---|
-| `on_type` | yes | `@type` of entities to modify |
-| `target_property` | yes | Property name to set on each matched entity |
-| `match_value` | one of two | Dot-selector to read from the entity (mutually exclusive with `match_literal`) |
-| `match_literal` | one of two | Constant value applied to every entity of `on_type` |
-| `in_type` | yes | `@type` of candidates to search |
-| `in_property` | one of two | Dot-selector to index candidates by (mutually exclusive with `in_additional_property`) |
-| `in_additional_property` | one of two | Name of an `additionalProperty` entry on candidates to index by |
-| `ref_id_template` | no | Template for the ref `@id`, e.g. `"Product_{identifier}.jsonld"`. When omitted, the candidate's own `@id` is used. |
-
-### Enrichment / addition / removal rules
+### Rules
 
 | Rule | Key fields | Effect |
 |---|---|---|
-| `enrichments` | `on_type`, `target_property`, `enrich_as` | Wrap the scalar value in a custom `PropertyValue` subclass (e.g. `Orcid`, `DOI`); its validators fill out `url`/`name`/`propertyID`. At most one value per entity. |
-| `additions` | `on_type`, `target_property`, `value` | Set `target_property` to a fixed constant on every entity. `value` is a literal, or a `node` table (`value.type` + `value.id` + fields) built and validated against the schema.org models, or a list. Overwrites any existing value. |
-| `removals` | `on_type`, `target_property`, `where` | Filter items out of a list-valued property. `where` is `{ property = "<dot-selector>", equals = "…" }` or `{ …, contains = "…" }` (exactly one; case-sensitive, string-form). |
+| `enrichments` | `on_type`, `target_property`, `enrich_as` | Wrap the scalar value in a custom `PropertyValue` subclass (e.g. `Orcid`, `DOI`); its validators fill out `url`/`name`/`propertyID`. At most one value per entity. Applies to nested nodes of `on_type` as well as top-level entities. |
+| `additions` | `on_type`, `target_property`, `value` | Set `target_property` to a fixed constant on every entity. `value` is a literal, or a `node` table (`value.type` + `value.id` + fields) built and validated against the schema.org models, or a list. Overwrites any existing value. `target_property` must be a plain property name; a dotted path such as `a.b` is not supported. |
+| `renames` | `on_type`, `source_property`, `target_property` | Move the value at `source_property` to `target_property` (overwriting any value there) and clear `source_property`. Entities without a value at `source_property` are left untouched. |
 
-### Dot-selectors
+### Atomizing
 
-Selectors are dot-separated field names walked left-to-right on the model:
-
-- `identifier` — read a single field
-- `about.identifier` — descend into a nested object, then read a field
-- `agent.identifier` — if `agent` is a list, the selector is applied to each
-  element and all results are merged
-
-When the final field holds a `PropertyValue`-like model (one that carries a
-`value` attribute — e.g. `Orcid`, `PropertyValue`), the inner value is extracted
-automatically. No need to append `.value` to the selector.
-
-### `ref_id_template`
-
-By default the engine links to `{"@type": "X", "@id": <candidate's own @id>}`.
-When `ref_id_template` is set, the `@id` is constructed from the candidate's
-properties instead:
-
-```toml
-ref_id_template = "Product_{identifier}.jsonld"
-```
-
-`{identifier}` is replaced with the value returned by
-`select_values(candidate, "identifier")`. This is useful when the load-time stub
-carries a different `@id` than the canonical file produced by another workflow —
-`ref_id_template` bridges the naming gap.
-
-If any placeholder cannot be resolved for a particular candidate, that candidate
-is skipped and a warning is logged. If no candidates survive, the
-`target_property` is left untouched.
-
-### Value normalisation
-
-All value comparisons in link rules go through the same normalisation:
-
-- `None` → never matches
-- `bool` → `"true"` / `"false"` (so `match_literal = "true"` matches a Python `True`)
-- `float` with integer value (e.g. `1.0`) → `"1"` (Pydantic sometimes coerces int→float)
-- everything else → `str(v).strip().lower()`
-
-This means `1` (int), `1.0` (float), and `"1"` (string) all compare equal. Booleans
-do **not** match integers: `True` → `"true"`, not `"1"`.
+With `atomize = true` (the default), every blank node (a nested object without
+its own `@id`) is moved into its own file and replaced by a bare reference
+holding only `@type` and `@id`. The `@id` is a content hash, so identical nodes
+collapse into one shared entity. Atomizing runs last, so it sees the result of all
+rules above. Set `atomize = false` to keep nested nodes embedded.
