@@ -1,0 +1,11 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_NspCdQy0qq9T-nsmen-cpj.jsonld",
+  "identifier": {
+    "@type": "PropertyValue",
+    "@id": "PropertyValue_CckzGEQ6ZlXpLdnVU8RR32.jsonld"
+  }
+}

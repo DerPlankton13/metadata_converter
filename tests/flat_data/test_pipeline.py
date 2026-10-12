@@ -23,8 +23,14 @@ from metadata_converter.flat_data.run import load_flat_data
 from metadata_converter.uplift import run_uplift
 
 DATA_DIR = Path(__file__).parent / "data"
-LOAD_SCENARIOS = sorted(p.parent for p in DATA_DIR.glob("*/config.toml"))
-UPLIFT_SCENARIOS = sorted(p.parent for p in DATA_DIR.glob("*/uplift_*/uplift.toml"))
+LOAD_SCENARIOS = [
+    pytest.param(DATA_DIR / "minimal", id="minimal"),
+    pytest.param(DATA_DIR / "full", id="full"),
+]
+UPLIFT_SCENARIOS = [
+    pytest.param(DATA_DIR / "full" / "uplift_atomize_false", id="full-atomize_false"),
+    pytest.param(DATA_DIR / "full" / "uplift_atomize_true", id="full-atomize_true"),
+]
 
 
 def build_xlsx(input_dir: Path, target: Path) -> Path:
@@ -82,7 +88,7 @@ def assert_provenance_matches(produced_dir: Path, golden_dir: Path, stage: str) 
         ), f"mismatch in {filename}"
 
 
-@pytest.mark.parametrize("scenario_dir", LOAD_SCENARIOS, ids=lambda p: p.name)
+@pytest.mark.parametrize("scenario_dir", LOAD_SCENARIOS)
 def test_load_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     xlsx = build_xlsx(scenario_dir / "input", tmp_path / "input.xlsx")
     output_dir = tmp_path / "loaded_base"
@@ -100,9 +106,7 @@ def test_load_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     )
 
 
-@pytest.mark.parametrize(
-    "scenario_dir", UPLIFT_SCENARIOS, ids=lambda p: f"{p.parent.name}/{p.name}"
-)
+@pytest.mark.parametrize("scenario_dir", UPLIFT_SCENARIOS)
 def test_uplift_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     output_dir = tmp_path / "loaded_uplifted"
 

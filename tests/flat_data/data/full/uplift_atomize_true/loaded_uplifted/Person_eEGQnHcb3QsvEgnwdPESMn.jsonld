@@ -1,0 +1,27 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_eEGQnHcb3QsvEgnwdPESMn.jsonld",
+  "name": "Bob Builder",
+  "identifier": {
+    "@type": "PropertyValue",
+    "@id": "PropertyValue_XcWa2Suk0e2ov7bSVlVttX.jsonld"
+  },
+  "givenName": "Bob",
+  "email": "b.builder@institude.com",
+  "familyName": "Builder",
+  "affiliation": {
+    "@type": "Organization",
+    "@id": "Organization_91b-az1c6RZpTfvggRK3Mx.jsonld"
+  },
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://example.com/super-funding-agency.jsonld"
+  },
+  "memberOf": {
+    "@type": "Project",
+    "@id": "https://example.com/super-funded-project.jsonld"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_eO5j5Fw4jJgY77YD5B2Bp3.jsonld",
+  "name": "Ada Lovelace",
+  "identifier": {
+    "@type": "PropertyValue",
+    "@id": "PropertyValue_Vr3xWX90YJRJvLNC7onNCT.jsonld"
+  },
+  "givenName": "Ada",
+  "email": "a.lovelace@institue.com",
+  "familyName": "Lovelace",
+  "affiliation": {
+    "@type": "Organization",
+    "@id": "Organization_siNVj41T-ram_sXCdgwN-D.jsonld"
+  },
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://example.com/super-funding-agency.jsonld"
+  },
+  "memberOf": {
+    "@type": "Project",
+    "@id": "https://example.com/super-funded-project.jsonld"
+  }
+}

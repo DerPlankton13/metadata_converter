@@ -1,0 +1,12 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "PropertyValue",
+  "@id": "PropertyValue_CckzGEQ6ZlXpLdnVU8RR32.jsonld",
+  "alternateName": "ORCID",
+  "name": "Open Researcher and Contributor ID",
+  "url": "https://orcid.org/0000-0001-0004-1234",
+  "propertyID": "https://registry.identifiers.org/registry/orcid",
+  "value": "0000-0001-0004-1234"
+}

@@ -1,0 +1,57 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "DataCatalog",
+  "@id": "DataCatalog_j-vhEq1u5YcZgqK0tjYQlH.jsonld",
+  "name": "Helgoland Sediment Collection",
+  "dateCreated": "2026-06-16",
+  "license": "MIT",
+  "creator": [
+    {
+      "@type": "Person",
+      "@id": "Person_eO5j5Fw4jJgY77YD5B2Bp3.jsonld"
+    },
+    {
+      "@type": "Person",
+      "@id": "Person_K5wlCRfqw97XI27QWkbJlM.jsonld"
+    }
+  ],
+  "keywords": [
+    "sediment",
+    "DNA",
+    "plankton"
+  ],
+  "inLanguage": "en",
+  "abstract": "This dataset was collected from sediment samples taken before Helgoland.",
+  "dataset": [
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_ADiahyGvC3qOUpY075lWIo.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_wUWOL1dIkAujGkgr4E5iij.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_54mFck-PrXwxW6E3MbsdRU.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_Gz1Z1KpHln6b_SzRQSKqDI.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_mJqkxqEjVs1OTCehLjpAd0.jsonld"
+    }
+  ],
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://example.com/super-funding-agency.jsonld"
+  },
+  "sourceOrganization": {
+    "@type": "Project",
+    "@id": "https://example.com/super-funded-project.jsonld"
+  }
+}

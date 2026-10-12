@@ -1,0 +1,44 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Action",
+  "@id": "Action_B41mGtUFQp3FTskkVZ1k8Q.jsonld",
+  "description": "description method 1",
+  "name": "Metabarcodes from Helgoland Samples",
+  "identifier": "Metabarcoding",
+  "result": [
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_jxhehwyxtkZ-b8rP2KFm5s.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_mCButIZMGmVf1StKg6yokj.jsonld"
+    },
+    {
+      "@type": "Dataset",
+      "@id": "Dataset_c3gAcOuviu_c2vKchp2qWi.jsonld"
+    }
+  ],
+  "object": [
+    {
+      "@type": "Product",
+      "@id": "Product_I3LXwzb5ExzeeO2y91rN2j.jsonld"
+    },
+    {
+      "@type": "Product",
+      "@id": "Product_AinP3yhZn9nH7HYdGG0WRu.jsonld"
+    }
+  ],
+  "agent": [
+    {
+      "@type": "Person",
+      "@id": "Person_BWLDqVYY0_zLlw5-hYjtfj.jsonld"
+    },
+    {
+      "@type": "Person",
+      "@id": "Person_NspCdQy0qq9T-nsmen-cpj.jsonld"
+    }
+  ]
+}
