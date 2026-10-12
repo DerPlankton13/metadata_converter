@@ -17,13 +17,13 @@ from typing import Any
 
 from pydantic import ValidationError
 
-from metadata_converter.uplift.config import EnrichmentRule
-from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import (
     PropertyValue,
     SchemaOrgBase,
 )
+from metadata_converter.uplift.config import EnrichmentRule
+from metadata_converter.uplift.entity_store import EntityStore
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,7 @@ class EnrichmentApplier:
        - Singleton list → unwrap to its element, then proceed.
        - List with more than one entry → raise.
        - Already an instance of the target class → skip (identity preserved).
+       - A plain ``PropertyValue`` → take its ``value`` (its other fields are not kept).
        - Otherwise → wrap as ``cls(value=current)`` and reassign.
     """
 
@@ -88,9 +89,7 @@ class EnrichmentApplier:
         for rule in rules:
             self.apply(rule)
 
-    def nodes_of_type(
-        self, type_name: str
-    ) -> list[tuple[SchemaOrgBase, str | None]]:
+    def nodes_of_type(self, type_name: str) -> list[tuple[SchemaOrgBase, str | None]]:
         """Return every node of exactly ``type_name``, top-level or nested, with its log name."""
         # a list, not a generator: apply() mutates nodes while looping over the result
         return [
@@ -114,22 +113,35 @@ class EnrichmentApplier:
                 skipped_no_value += 1
                 logger.debug(
                     "Enrichment %s.%s → %s: %s has no value; skipping.",
-                    rule.on_type, rule.target_property, rule.enrich_as, where,
+                    rule.on_type,
+                    rule.target_property,
+                    rule.enrich_as,
+                    where,
                 )
                 continue
             if isinstance(value, cls):
                 skipped_already_wrapped += 1
                 logger.debug(
                     "Enrichment %s.%s → %s: %s already wrapped; skipping.",
-                    rule.on_type, rule.target_property, rule.enrich_as, where,
+                    rule.on_type,
+                    rule.target_property,
+                    rule.enrich_as,
+                    where,
                 )
                 continue
+            if isinstance(value, PropertyValue):
+                value = value.value
             try:
                 wrapped = cls(value=value)
             except ValidationError as e:
                 logger.warning(
                     "Enrichment %s.%s → %s: could not wrap %r on %s — %s",
-                    rule.on_type, rule.target_property, rule.enrich_as, value, where, e,
+                    rule.on_type,
+                    rule.target_property,
+                    rule.enrich_as,
+                    value,
+                    where,
+                    e,
                 )
                 continue
             try:
@@ -137,7 +149,11 @@ class EnrichmentApplier:
             except ValidationError as e:
                 logger.warning(
                     "Enrichment %s.%s → %s: assignment failed for %s — %s",
-                    rule.on_type, rule.target_property, rule.enrich_as, where, e,
+                    rule.on_type,
+                    rule.target_property,
+                    rule.enrich_as,
+                    where,
+                    e,
                 )
                 continue
             wrapped_count += 1
@@ -146,8 +162,12 @@ class EnrichmentApplier:
         log(
             "Enrichment %s.%s → %s: wrapped %d (skipped %d with no value, "
             "%d already wrapped).",
-            rule.on_type, rule.target_property, rule.enrich_as,
-            wrapped_count, skipped_no_value, skipped_already_wrapped,
+            rule.on_type,
+            rule.target_property,
+            rule.enrich_as,
+            wrapped_count,
+            skipped_no_value,
+            skipped_already_wrapped,
         )
 
     @staticmethod
