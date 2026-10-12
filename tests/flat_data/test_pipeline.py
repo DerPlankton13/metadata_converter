@@ -1,13 +1,14 @@
 """Integration tests for the flat_data pipeline.
 
 Each subdirectory of ``data/`` is one scenario. A scenario contains
-``config.toml`` (load), ``uplift.toml`` (uplift), or both. Inputs live under
-``input/`` (CSVs for load, JSON-LD for uplift-only scenarios). Expected
-outputs live under ``loaded_base/`` and ``loaded_uplifted/``.
+``config.toml`` (load) with its ``input/`` CSVs and expected ``loaded_base/``,
+and one or more uplift variants, each a subdirectory ``uplift_*/`` holding its
+own ``uplift.toml`` and expected ``loaded_uplifted/`` and ``provenance/``.
 
-For full-pipeline scenarios (both TOMLs present), the uplift test consumes
-``loaded_base/`` as its input — this keeps the two stage tests
-independent, so a single bug fails one test rather than cascading through both.
+Every uplift variant of a scenario consumes the shared ``loaded_base/`` as its
+input — this keeps the two stage tests independent, so a single bug fails one
+test rather than cascading through both, and lets variants differ in one setting
+(e.g. ``atomize``) only.
 """
 
 import json
@@ -23,7 +24,7 @@ from metadata_converter.uplift import run_uplift
 
 DATA_DIR = Path(__file__).parent / "data"
 LOAD_SCENARIOS = sorted(p.parent for p in DATA_DIR.glob("*/config.toml"))
-UPLIFT_SCENARIOS = sorted(p.parent for p in DATA_DIR.glob("*/uplift.toml"))
+UPLIFT_SCENARIOS = sorted(p.parent for p in DATA_DIR.glob("*/uplift_*/uplift.toml"))
 
 
 def build_xlsx(input_dir: Path, target: Path) -> Path:
@@ -99,7 +100,9 @@ def test_load_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     )
 
 
-@pytest.mark.parametrize("scenario_dir", UPLIFT_SCENARIOS, ids=lambda p: p.name)
+@pytest.mark.parametrize(
+    "scenario_dir", UPLIFT_SCENARIOS, ids=lambda p: f"{p.parent.name}/{p.name}"
+)
 def test_uplift_produces_expected_jsonld_corpus(scenario_dir, tmp_path):
     output_dir = tmp_path / "loaded_uplifted"
 

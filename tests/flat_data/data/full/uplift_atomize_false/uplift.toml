@@ -1,4 +1,4 @@
-input_dir = "loaded_base"
+input_dir = "../loaded_base"
 output_dir = "loaded_uplifted"
 provenance_dir = "provenance"
 atomize = false
