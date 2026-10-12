@@ -81,7 +81,7 @@ class ApiFetchingConfig(BaseModel):
     )
     fetched_dir: Path
     output_dir: Path
-    provenance_dir: Path | None = None
+    provenance_dir: Path
 
     @field_validator("fixers", mode="before")
     @classmethod

@@ -33,7 +33,7 @@ class BiosamplesConfig(BaseModel):
     )
     fetched_dir: Path
     output_dir: Path
-    provenance_dir: Path | None = None
+    provenance_dir: Path
 
 
 class BiosamplesUpliftRecordConfig(BaseModel):
@@ -43,7 +43,7 @@ class BiosamplesUpliftRecordConfig(BaseModel):
     source_type: Literal["biosamples"] = "biosamples"
     input_dir: Path
     output_dir: Path
-    provenance_dir: Path | None = None
+    provenance_dir: Path
 
 
 BiosamplesConfig.model_rebuild()

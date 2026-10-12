@@ -60,7 +60,7 @@ class FlatDataConfig(BaseModel):
     extractor: ExcelExtractorConfig
     cleaning: CleaningConfig
     output_dir: Path
-    provenance_dir: Path | None = None
+    provenance_dir: Path
     mapping: dict[str, dict[str, Any]]
     combined_columns: dict[str, dict[str, list[str]]] = Field(
         default_factory=dict,
