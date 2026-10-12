@@ -12,6 +12,7 @@ graph gaining deduplication and cross-linking in the graph which was not present
 when each blank node property was directly embedded.
 """
 
+from metadata_converter.schema_org_models.custom_models import get_schema
 from metadata_converter.schema_org_models.schemaorg_models import SchemaOrgBase
 from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.utils.hashing import hashed_id
@@ -63,7 +64,7 @@ def _rebuild_entity_with_references(
     schema.org vocabulary too, so a blank node nested under one of those is atomized the
     same way as a declared field. Note that if the extra property contains invalid types
     (i.e. not a SchemaOrgBase subclass) it will stay a dict during Pydantics validation
-    and will thus not be atomized, but be kept as the typed dict it is. 
+    and will thus not be atomized, but be kept as the typed dict it is.
 
     Parameters
     ----------
@@ -143,7 +144,8 @@ def _atomize_node(
     -------
     SchemaOrgBase
         `node` unchanged if it already carries an `@id`; otherwise a bare instance of
-        `type(node)` with only `id` set, pointing at the newly atomized entity.
+        the schema.org class named by `node.type` with only `id` set, pointing at the
+        newly atomized entity.
     """
     if node.id is not None:
         return node
@@ -158,7 +160,9 @@ def _atomize_node(
         update={"id": node_id, "context": dict(SCHEMA_ORG_DEFAULT_CONTEXT)}
     )
     atomized.setdefault(node_id, resolved)
-    return type(resolved)(id=node_id)
+    # we need to build from the defined type, as enriched classes such as an ORCID
+    # would otherwise add defaults, as opposed to the previous type(resolved)
+    return get_schema(node.type)(id=node_id)
 
 
 class AtomizeApplier:
