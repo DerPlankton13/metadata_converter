@@ -40,17 +40,23 @@ logger = logging.getLogger(__name__)
 def get_sample_ids(
     excel_file: Path, config: BiosamplesExtractorConfig
 ) -> set[str] | None:
-    df = pd.read_excel(
-        excel_file,
-        sheet_name=config.sheet_name,
-        header=config.header,
-        skiprows=config.skiprows,
-    )
+    with pd.ExcelFile(excel_file) as xl:
+        if config.sheet_name not in xl.sheet_names:
+            logger.error(
+                "Sheet '%s' not found in '%s'. Skipping this file now.",
+                config.sheet_name,
+                excel_file.name,
+            )
+            return None
+        df = xl.parse(config.sheet_name, header=config.header, skiprows=config.skiprows)
     df = df.dropna(how="all")
 
     if config.sample_id_column not in df.columns:
         logger.error(
-            f"Column '{config.sample_id_column}' not found in sheet '{config.sheet_name}' of '{excel_file.name}'. Skipping this file now."
+            "Column '%s' not found in sheet '%s' of '%s'. Skipping this file now.",
+            config.sample_id_column,
+            config.sheet_name,
+            excel_file.name,
         )
         return None
 
@@ -78,6 +84,7 @@ def fetch_biosamples(config: BiosamplesConfig):
         logger.error("No Excel files found in %s", input_cfg.input)
         return
     logger.info("Found %d Excel file(s) in %s", len(excel_files), input_cfg.input)
+    logger.debug("The following excel files were found: %s", excel_files)
 
     all_sample_ids: set[str] = set()
     for excel_file in excel_files:
