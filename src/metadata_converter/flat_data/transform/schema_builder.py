@@ -238,6 +238,19 @@ def build_nested(mapping: Nested, row: dict[str, list[Any]]) -> list[SchemaOrgBa
     against a row where ``col = ["a", "b"]`` produces two PropertyValues:
     one with ``value="a"`` and one with ``value="b"`` — both with the same
     broadcast ``name="label"``.
+
+    Notes
+    -----
+    Fan-out is unconditional: any multi-value column in the block drives it,
+    since nothing here can tell an identity-bearing column from a descriptive
+    one. That distinction is the config author's to make, and getting it wrong
+    fails silently. Fanning ``agent.identifier`` is right — two ORCIDs are two
+    people — while fanning a descriptor such as ``keywords`` over a block
+    identified by ``name`` yields near-duplicate nodes differing only in the
+    descriptor, which additionally defeats the content-hash deduplication in
+    ``uplift/atomize.py``. A descriptive multi-value column belongs on the
+    parent entity instead; see "Splitting multi-value cells" in
+    ``docs/usage.md``.
     """
     column, nested, literal = resolve_fields(mapping, row)
     # Literals carry content only when the mapping itself doesn't depend on the row.

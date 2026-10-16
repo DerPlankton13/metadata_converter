@@ -48,21 +48,20 @@ def get_metadata(
     sample_id: str,
     session: requests.Session,
     fetched_path: Path,
-    provenance_dir: Path | None = None,
+    provenance_dir: Path,
 ) -> None:
     ldjson_url, json_url = sample_source_urls(sample_id)
     structured = fetch_metadata(ldjson_url, session)
     unstructured = fetch_metadata(json_url, session)
     write_json(structured, fetched_path / f"{sample_id}.ldjson")
     write_json(unstructured, fetched_path / f"{sample_id}.json")
-    if provenance_dir is not None:
-        write_provenance_file(
-            os.path.relpath(fetched_path / f"{sample_id}.json"),
-            provenance_dir,
-            json_url,
-            "fetch",
-        )
-        # we need to expand the @id as we are not keeping the context in the
-        # provenance file and the CURIE becomes unresolvable otherwise
-        structured_id = expand_curie(structured["@id"], structured["@context"])
-        write_provenance_file(structured_id, provenance_dir, ldjson_url, "fetch")
+    write_provenance_file(
+        os.path.relpath(fetched_path / f"{sample_id}.json"),
+        provenance_dir,
+        json_url,
+        "fetch",
+    )
+    # we need to expand the @id as we are not keeping the context in the
+    # provenance file and the CURIE becomes unresolvable otherwise
+    structured_id = expand_curie(structured["@id"], structured["@context"])
+    write_provenance_file(structured_id, provenance_dir, ldjson_url, "fetch")

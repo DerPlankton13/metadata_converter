@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 Broadcast = tuple[BroadcastIdRef, str, list[str]]
 
 
-def extract_inline_id_ref_broadcasts(config: FlatDataConfig) -> None:
-    """Lift inline ``id = { from_sheet = ... }`` mapping entries into ``config.broadcast_id_refs``.
+def extract_inline_id_ref_broadcasts(config: FlatDataConfig) -> list[BroadcastIdRef]:
+    """Lift inline ``id = { from_sheet = ... }`` mapping entries out of the mapping and return them as rules.
 
-    Mutates ``config.mapping`` and ``config.broadcast_id_refs`` in place. Idempotent —
-    on a second call there are no inline entries left to extract.
+    Mutates ``config.mapping`` in place. A second call returns ``[]`` — the inline
+    entries are already gone — so call it once and reuse the result.
 
     A property whose value matches the shape::
 
@@ -35,12 +35,14 @@ def extract_inline_id_ref_broadcasts(config: FlatDataConfig) -> None:
     is removed from the mapping and re-expressed as a ``BroadcastIdRef``. The schema
     builder then sees only embedded sub-objects and column refs.
     """
+    refs: list[BroadcastIdRef] = []
     for sheet_name, sheet_mapping in config.mapping.items():
         for prop in list(sheet_mapping.keys()):
             ref = _try_extract(sheet_mapping[prop], sheet_name, prop, config.mapping)
             if ref is not None:
-                config.broadcast_id_refs.append(BroadcastIdRef(**ref))
+                refs.append(BroadcastIdRef(**ref))
                 del sheet_mapping[prop]
+    return refs
 
 
 def _try_extract(
@@ -105,7 +107,9 @@ def _try_extract(
 
 
 def prepare_id_ref_broadcast(
-    data_dict: dict[str, pd.DataFrame], config: FlatDataConfig
+    data_dict: dict[str, pd.DataFrame],
+    refs: list[BroadcastIdRef],
+    config: FlatDataConfig,
 ) -> list[Broadcast]:
     """Collect @id lists for each broadcast @id ref rule while data is still wide-format.
 
@@ -113,7 +117,7 @@ def prepare_id_ref_broadcast(
     The ref_type is captured now so the injection step needs no access to the config.
     """
     collected: list[Broadcast] = []
-    for ref in config.broadcast_id_refs:
+    for ref in refs:
         src = data_dict[ref.from_sheet]
         if ref.filter_column is not None:
             filter_key = to_lookup_key(ref.filter_value)

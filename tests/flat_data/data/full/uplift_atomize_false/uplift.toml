@@ -1,0 +1,48 @@
+input_dir = "../loaded_base"
+output_dir = "loaded_uplifted"
+provenance_dir = "provenance"
+atomize = false
+
+[[enrichments]]
+on_type = "Person"
+target_property = "identifier"
+enrich_as = "Orcid"
+
+# ===================================================================
+# Add funding information
+# ===================================================================
+[[additions]]
+on_type = "DataCatalog"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[additions]]
+on_type = "DataCatalog"
+target_property = "sourceOrganization"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"
+
+[[additions]]
+on_type = "Dataset"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[additions]]
+on_type = "Dataset"
+target_property = "sourceOrganization"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"
+
+[[additions]]
+on_type = "Person"
+target_property = "funding"
+value.type = "MonetaryGrant"
+value.id = "https://example.com/super-funding-agency.jsonld"
+
+[[additions]]
+on_type = "Person"
+target_property = "memberOf"
+value.type = "Project"
+value.id = "https://example.com/super-funded-project.jsonld"

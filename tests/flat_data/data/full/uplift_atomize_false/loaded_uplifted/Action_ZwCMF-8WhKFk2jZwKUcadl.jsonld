@@ -1,0 +1,41 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Action",
+  "@id": "Action_ZwCMF-8WhKFk2jZwKUcadl.jsonld",
+  "description": "description method 2",
+  "name": "Images from Helgoland Samples",
+  "identifier": "Imaging",
+  "result": [
+    {
+      "@type": "Dataset",
+      "identifier": "B5D_file_jirnMOdaI19BVLwCsPEMJJ"
+    },
+    {
+      "@type": "Dataset",
+      "identifier": "B5D_file_zhfzWo9Gs7S9Z_oMh9Tn6-"
+    }
+  ],
+  "object": [
+    {
+      "@type": "Product",
+      "identifier": "SAMEA118673815"
+    },
+    {
+      "@type": "Product",
+      "identifier": "SAMEA118673891"
+    }
+  ],
+  "agent": {
+    "@type": "Person",
+    "identifier": {
+      "@type": "PropertyValue",
+      "alternateName": "ORCID",
+      "name": "Open Researcher and Contributor ID",
+      "url": "https://orcid.org/0000-0001-0002-1234",
+      "propertyID": "https://registry.identifiers.org/registry/orcid",
+      "value": "0000-0001-0002-1234"
+    }
+  }
+}

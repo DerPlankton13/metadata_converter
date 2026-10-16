@@ -10,24 +10,52 @@ strict : False
 from __future__ import annotations
 
 import functools
+import logging
 from datetime import date, datetime, time, timedelta
+from types import UnionType
 from typing import Any, Union, get_args, get_origin
 
-from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    AnyUrl,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
 
 _SCHEMA_TYPE_REGISTRY: dict[str, type] = {}
+logger = logging.getLogger(__name__)
 
 
 class SchemaOrgBase(BaseModel):
     """
-    Base class for all schema.org Pydantic models.
+    Base class for all schema.org based Pydantic models.
 
-    Provides the two fields common to all JSON-LD nodes and configures
-    Pydantic to accept both Python attribute names and JSON-LD @-prefixed
-    aliases interchangeably.
-    Defers build until first model validation to massively reduce run
-    time as most models are not used and ensures that each new
-    assignment is also validated.
+    Provides the fields common to all JSON-LD nodes (``@context``, ``@type``,
+    ``@id``, ``additionalProperty``) and registers every subclass in
+    ``_SCHEMA_TYPE_REGISTRY`` as it is built (see ``__init_subclass__``). That
+    registration also covers project-specific ``PropertyValue`` subtypes such as
+    ``Orcid`` and ``DOI`` in ``custom_models.py``.
+
+    Notes
+    -----
+    Each ``model_config`` setting serves a distinct purpose:
+
+    - ``extra="allow"`` lets unknown fields through instead of rejecting them, so
+      source properties outside the schema.org definition survive — they are
+      folded into ``additionalProperty`` rather than left in ``model_extra``.
+    - ``populate_by_name`` accepts both Python attribute names and the JSON-LD
+      ``@``-prefixed aliases interchangeably.
+    - ``defer_build`` postpones schema build until first validation, massively
+      reducing run time since most models are never used.
+    - ``validate_assignment`` re-validates each attribute on assignment.
+    - ``polymorphic_serialization`` is required because a field typed as a bare
+      schema.org class (e.g. ``Thing``) holding a subtype instance (e.g.
+      ``Product``, resolved by ``discriminate_typed_fields``) would otherwise
+      serialize using the declared class's fields only, silently dropping
+      subtype-only fields like ``category`` — see
+      ``tests/schema/test_polymorphic_serialization.py``.
     """
 
     model_config = ConfigDict(
@@ -35,6 +63,7 @@ class SchemaOrgBase(BaseModel):
         populate_by_name=True,
         defer_build=True,
         validate_assignment=True,
+        polymorphic_serialization=True,
     )
 
     # these are all not schema.org properties, but they are needed for jsonld
@@ -43,33 +72,144 @@ class SchemaOrgBase(BaseModel):
     type: str = Field(alias="@type")
     id: str | None = Field(default=None, alias="@id")
 
-    # this is our modification of schema.org, saying, that we always allow additionalProperty
+    # this is our modification of schema.org: always allowing additionalProperty
     additionalProperty: PropertyValue | str | list[str | PropertyValue] | None = Field(
         default=None
     )
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Register every subclass in ``_SCHEMA_TYPE_REGISTRY`` as it is defined.
+        """Register every subclass in ``_SCHEMA_TYPE_REGISTRY`` as it is built.
 
-        This is a plain Python hook that is also used by Pydantic, so we do the
-        ``super()`` call to not interfere with pydantic. This covers subclasses
-        defined after this module too (e.g. ``custom_models.py``'s ``Orcid``/``DOI``).
+        This hook is called by Python at class-creation time (i.e. the instantiation of
+        the metaclass for classes).
+        As soon as a SchemaOrgBase subclass is built (e.g. during an import), this hook
+        is called and each subclass is registering itself, independent of where it is
+        defined. In this manner, the subclasses defined outside of this module (e.g.
+        ``custom_models.py``'s ``Orcid``/``DOI``) are registered as well after importing
+        these modules.
         """
+        # Always call super() in __init_subclass__, so any other hook further along
+        # the MRO still runs.
         super().__init_subclass__(**kwargs)
         _SCHEMA_TYPE_REGISTRY[cls.__name__] = cls
+
+    @classmethod
+    @functools.cache
+    def declared_names(cls) -> frozenset[str]:
+        """Return every name a declared property can be addressed by.
+
+        Both the Python field name and its JSON-LD alias count, since
+        ``populate_by_name`` accepts either spelling (``id`` and ``@id`` name the same
+        property). Cached per class: the fields are fixed once the class is built, and
+        ``__setattr__`` consults this on every single assignment.
+
+        Returns
+        -------
+        frozenset[str]
+            The declared field names together with the aliases of those that have one.
+        """
+        return frozenset(
+            {
+                *cls.model_fields.keys(),
+                *(
+                    field_info.alias
+                    for field_info in cls.model_fields.values()
+                    if field_info.alias
+                ),
+            }
+        )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Route assignment of an undeclared property into ``additionalProperty``.
+
+        Construction and assignment must leave the same model: ``Person(bogus="x")``
+        and ``person.bogus = "x"`` have to agree. Construction is covered by the
+        ``convert_extra_props_to_additional_property`` validator below, but that
+        validator cannot cover assignment: Pydantic picks the destination from ``name``
+        before any validator runs, so an undeclared name lands in ``model_extra``, and
+        no return value can retract it — the same data would sit in two places.
+        Intercepting the name here, before Pydantic sees it, is the only point at which
+        the two can be made to agree.
+
+        Parameters
+        ----------
+        name : str
+            Attribute being assigned. Declared properties (by field name or alias) and
+            private attributes are passed straight through to Pydantic.
+        value : Any
+            The value to assign. For an undeclared property it is converted by
+            ``_build_extra_property_value`` and merged into ``additionalProperty``;
+            a value that cannot be converted is dropped, with a logged error.
+        """
+        # a private attribute is machinery, not data, so it must never be published as
+        # a property — it is excluded here rather than left to fall through as an extra
+        if name in type(self).declared_names() or name.startswith("_"):
+            super().__setattr__(name, value)
+            return
+
+        # an undeclared property has no field to clear, so there is nothing to record
+        if value is None:
+            return
+
+        owner = f"{type(self).__name__} {self.id}" if self.id else type(self).__name__
+        built = _build_extra_property_value(name, value, owner)
+        if built is None:
+            return
+
+        # written through Pydantic, so the merged value is validated like any other
+        super().__setattr__(
+            "additionalProperty",
+            _merge_additional_property(self.additionalProperty, [built]),
+        )
 
     @model_validator(mode="before")
     @classmethod
     def discriminate_typed_fields(cls, data: Any) -> Any:
-        """
-        Resolve ``@type``-tagged dict fields to their declared subtype before parsing.
+        """Discriminate Pydantic model fields by the @type/type values from input data.
 
-        A field typed as a bare schema.org class (e.g. ``Thing``) otherwise accepts
-        any dict regardless of its ``@type``. For each field whose annotation names a
-        schema.org class, looks the value's ``@type``/``type`` up in
-        ``_SCHEMA_TYPE_REGISTRY`` and parses it as that subtype instead; raises if
-        ``@type`` is unregistered or not actually a subtype of the field's declared
-        class.
+        This method looks into Pydantic input data (e.g. a dictionary containing
+        key-value pairs that map to the properties and values of a schema.org object)
+        and attempts to discover if any keys in that dictionary map to values that are,
+        themselves, dictionaries that contain a type (@type/type) key. Both spellings
+        are supported. When found, this nested dictionary is converted into an instance
+        of a Pydantic class corresponding to the name of the type (e.g. ``Product``).
+        Thus, the key in the top level dictionary (e.g. instrument) no longer maps to a
+        nested dictionary as a value, but to an instance of a Pydantic class. Since
+        Pydantic does not re-validate already built models, this substitutes for
+        Pydantic's discriminated-union support, which schema.org's hierarchy cannot use
+        directly (its ``type`` field is a plain ``str``, not a ``Literal``-tagged
+        discriminator). This is necessary since Pydantic fails to correctly discriminate
+        child types for complex type annotations containing unions, as it is the case
+        with the schema.org models. In this manner we can ensure that e.g. in the
+        ``Action`` model the instrument property (which is annotated as ``Thing``) is
+        built correctly as ``Product`` (which is a subclass of ``Thing``) if so declared
+        in the input. Otherwise, the instrument would be built as an instance of
+        ``Thing`` with additional properties and a value of ``Product`` for type.
+
+        Parameters
+        ----------
+        cls : type[SchemaOrgBase]
+            The model subclass being validated (e.g. ``Action``); provides
+            ``model_fields`` used to look up each field's annotation.
+        data : Any
+            Raw input which is often a dict[str, Any] but could also be an instance of
+            the model itself or anything else since you can pass arbitrary objects into
+            model_validate.
+
+        Returns
+        -------
+        data : Any
+            The possibly modified input from which the Pydantic model will be built.
+
+        Raises
+        ------
+        pydantic.ValidationError
+            Raised when a nested value's ``@type``/``type`` names a class absent
+            from ``_SCHEMA_TYPE_REGISTRY``, or a registered class that is not a
+            subtype of the field's own annotation. ``_discriminate_value`` raises
+            a plain ``ValueError`` in both cases; Pydantic catches it inside this
+            ``model_validator(mode="before")`` and re-raises it as
+            ``pydantic.ValidationError``.
         """
         if not isinstance(data, dict):
             return data
@@ -81,113 +221,373 @@ class SchemaOrgBase(BaseModel):
                 key = field_info.alias
             else:
                 continue
-            base_classes = _referenced_subtypes(field_info.annotation)
-            if base_classes:
-                data[key] = _discriminate_value(
-                    data[key], base_classes, _SCHEMA_TYPE_REGISTRY
-                )
+            data[key] = _discriminate_value(data[key], field_info.annotation)
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def convert_extra_props_to_additional_property(cls, data: Any) -> Any:
+        """Move input keys that aren't declared properties into ``additionalProperty``.
+
+        Because ``model_config`` sets ``extra="allow"``, keys absent from
+        ``cls.model_fields`` (corresponding to the official schema.org definition) would
+        otherwise be kept unvalidated in ``model_extra``. This validator instead pops
+        every such key, converts each of its values to a ``PropertyValue`` via
+        ``_build_extra_property_value`` (dropping values that cannot be represented,
+        with a logged warning/error), and appends the results to any
+        ``additionalProperty`` already present in the input data. The final list is
+        collapsed to a scalar when it holds exactly one item. Input carrying no extras
+        is left alone, so an ``additionalProperty`` given explicitly keeps its shape.
+
+        Parameters
+        ----------
+        cls : type[SchemaOrgBase]
+            The model subclass being validated; provides ``model_fields`` used to
+            distinguish declared properties (and their aliases) from extras.
+        data : Any
+            Raw input, typically a ``dict[str, Any]`` but possibly any other object
+            passed to ``model_validate``.
+
+        Returns
+        -------
+        data : Any
+            The input with extra keys removed and folded into
+            ``additionalProperty``. Non-dict input is returned unchanged.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+
+        # identify not specified properties, in the order the document lists them.
+        # in this manner we keep the order deterministic ensuring exact reproducibility
+        # of the results
+        extra_props = [name for name in data if name not in cls.declared_names()]
+
+        # names the entity in log messages about converted or dropped values, so a
+        # user can tell which record a complaint refers to and judge whether it matters
+        entity_id = data.get("@id") or data.get("id")
+        owner = f"{cls.__name__} {entity_id}" if entity_id else cls.__name__
+
+        converted = []
+        for prop in extra_props:
+            value = data.pop(prop)
+            if not isinstance(value, list):
+                value = [value]
+            for item in value:
+                built = _build_extra_property_value(prop, item, owner)
+                if built is not None:
+                    converted.append(built)
+
+        # avoid accidentally modifying a present additionalProperty if nothing converted
+        if converted:
+            data["additionalProperty"] = _merge_additional_property(
+                data.get("additionalProperty"), converted
+            )
         return data
 
 
-def validate_strict(model) -> None:
-    """Raise if a parsed model — or any nested model — has fields not in the schema.
+def _merge_additional_property(existing: Any, new_props: list[PropertyValue]) -> Any:
+    """Merge freshly built ``PropertyValue``s into an existing ``additionalProperty``.
 
-    Models parse with ``extra="allow"``, which keeps unknown fields in ``model_extra``
-    instead of rejecting them. This walks the parsed object and raises on the first
-    offender, at any depth.
-    """
-    if isinstance(model, list):
-        for item in model:
-            validate_strict(item)
-        return
-    if not isinstance(model, BaseModel):
-        return
-    if model.model_extra:
-        raise ValueError(
-            f"{type(model).__name__} has fields outside the schema.org model: "
-            f"{sorted(model.model_extra)}"
-        )
-    for field_name in type(model).model_fields:
-        validate_strict(getattr(model, field_name))
-
-
-def _is_union(origin: Any) -> bool:
-    """Return whether a ``get_origin()`` result is a union — either ``Union[X, Y]`` or ``X | Y``.
-
-    The two spellings produce different origins (``typing.Union`` vs. ``types.UnionType``),
-    so both must be checked.
-    """
-    return origin is Union or getattr(origin, "__name__", "") == "UnionType"
-
-
-@functools.lru_cache(maxsize=None)
-def _referenced_subtypes(annotation: Any) -> set[type]:
-    """
-    Return the ``SchemaOrgBase`` subclasses referenced in a field annotation.
-
-    Recurses through ``Union``/``X | Y`` and ``list``/``set``/``tuple`` wrappers.
-    Memoized: the same annotation object is checked once per validated instance of
-    every class carrying that field.
+    The property holds either a single value or a list of them, so the existing value is
+    normalised to a list, extended, and collapsed back to a scalar if only one item
+    remains.
 
     Parameters
     ----------
-    annotation : Any
-        A resolved (non-string) field type annotation.
-
-    Returns
-    -------
-    set[type]
-        The schema.org classes referenced in ``annotation``, possibly empty.
-    """
-    origin = get_origin(annotation)
-    bases: set[type] = set()
-    if _is_union(origin) or origin in (list, set, tuple):
-        for arg in get_args(annotation):
-            bases |= _referenced_subtypes(arg)
-    elif isinstance(annotation, type) and issubclass(annotation, SchemaOrgBase):
-        bases.add(annotation)
-    return bases
-
-
-def _discriminate_value(
-    value: Any, base_classes: set[type], registry: dict[str, type]
-) -> Any:
-    """
-    Resolve a raw field value's ``@type``-tagged dict(s) to a registered subtype.
-
-    Parameters
-    ----------
-    value : Any
-        The raw value assigned to a field — a dict, a list, or anything else.
-    base_classes : set[type]
-        The schema.org classes declared for this field (from ``_referenced_subtypes``).
-    registry : dict[str, type]
-        Maps schema.org type names to their Pydantic model classes.
+    existing : Any
+        The current ``additionalProperty``: ``None``, a single item, or a list. Never
+        modified in place, since it may still be referenced by the caller's input.
+    new_props : list[PropertyValue]
+        The values to append. Expected to be non-empty — an empty list would collapse a
+        single existing item out of its list, changing shape for no reason.
 
     Returns
     -------
     Any
-        ``value`` with any resolvable dict(s) replaced by parsed subtype instances.
-        Non-dict values, and dicts with no ``@type``/``type`` key, pass through
+        The merged value: a list, or the item itself when exactly one remains.
+    """
+    if existing is None:
+        merged = []
+    elif isinstance(existing, list):
+        merged = list(existing)
+    else:
+        merged = [existing]
+
+    merged.extend(new_props)
+    return merged if len(merged) > 1 else merged[0]
+
+
+def _build_extra_property_value(
+    prop: str, item: Any, owner: str
+) -> PropertyValue | None:
+    """Build a ``PropertyValue`` for one extra-property item, or drop it.
+
+    Date/time/URL values are stringified first, since ``PropertyValue.value`` does not
+    accept those types directly. A plain ``PropertyValue`` is then built directly
+    when possible. If that fails and ``item`` is a dict or an already-built model, it is
+    retried as a ``valueReference`` carrying the object's ``name`` as the ``value`` —
+    the schema.org-sanctioned way to point a property value at a controlled-vocabulary
+    term. Otherwise, the item is dropped, with a logged error.
+
+    Parameters
+    ----------
+    prop : str
+        The property name ``item`` was found under; carried as ``name`` on the
+        returned ``PropertyValue``.
+    item : Any
+        One value of the extra property; a plain scalar, or a nested schema.org object
+        given either as a dict or as an already-built model.
+    owner : str
+        The entity ``item`` was found on — its ``@type``, plus its ``@id`` when it has
+        one. Only used to identify the record in log messages, so that a conversion
+        that deviated from schema.org or dropped data can be traced back to it.
+
+    Returns
+    -------
+    PropertyValue or None
+        A ``PropertyValue`` wrapping ``item`` (or an object built from it), or
+        ``None`` if ``item`` could not be converted and was dropped.
+
+    Raises
+    ------
+    NotImplementedError
+        If ``item`` is an instance of a class listed in
+        ``_unsupported_nested_value_types`` — a type that could only be represented
+        by widening ``PropertyValue.value`` past the schema.org definition. How to
+        handle those is undecided, so the case is surfaced rather than guessed at.
+    """
+    # except anything that can easily be converted to a string and do not notify about it
+    if isinstance(item, (date, datetime, time, timedelta, AnyUrl)):
+        item = str(item)
+    try:
+        return PropertyValue(name=prop, value=item)
+    except ValidationError:
+        logger.debug(
+            "%s: could not directly build a PropertyValue for %s from %s",
+            owner,
+            prop,
+            item,
+        )
+
+    # normalise item to be a dict, so an already-built model takes the same path as a
+    # freshly constructed one
+    if isinstance(item, SchemaOrgBase):
+        item = item.model_dump(by_alias=True, exclude_none=True)
+
+    if isinstance(item, dict):
+        type_name = item.get("@type") or item.get("type")
+        # a list-valued or absent name has no single literal to represent the term,
+        # so value stays unset; valueReference still carries the whole object
+        name = item.get("name")
+        try:
+            return PropertyValue(
+                name=prop,
+                value=name if isinstance(name, str) else None,
+                valueReference=item,
+            )
+        except ValidationError:
+            logger.debug(
+                "%s: could not use %s as a valueReference for %s",
+                owner,
+                type_name,
+                prop,
+            )
+
+        resolved = _SCHEMA_TYPE_REGISTRY.get(type_name)
+        if resolved is not None and issubclass(
+            resolved, _additional_property_extra_types()
+        ):
+            raise NotImplementedError(
+                f"{owner}: {prop}={item} can only be represented by widening "
+                f"PropertyValue.value beyond the schema.org definition to admit "
+                f"{type_name}. Such a value cannot be read back by normal "
+                f"validation, so it is not written. Decide whether {type_name} "
+                f"should become readable or be dropped, then handle it explicitly."
+            )
+            # unreachable while the decision above is open; kept as the widening
+            # implementation to restore once it is made
+            try:
+                built = resolved(**item)
+            except ValidationError:
+                logger.error("Could not build %s for %s from %s", type_name, prop, item)
+                return None
+            logger.info(
+                "Created a PropertyValue using a value of type %s which "
+                "is outside of the schema.org definition.",
+                type_name,
+            )
+            return PropertyValue.model_construct(name=prop, value=built)
+
+    logger.error(
+        "%s: could not add %s to additionalProperty since %s could not be "
+        "converted to a PropertyValue. Dropping %s from the data now.",
+        owner,
+        prop,
+        item,
+        prop,
+    )
+    return None
+
+
+@functools.cache
+def _additional_property_extra_types() -> tuple[type, ...]:
+    """Return the schema.org classes allowed as a nested ``PropertyValue.value``.
+
+    This is the extension point for widening what ``_build_extra_property_value``
+    accepts as a nested value inside ``additionalProperty``: add a class name here
+    (resolved via ``_SCHEMA_TYPE_REGISTRY``) to permit instances of it, beyond
+    the primitive value types ``PropertyValue.value`` already accepts. Cached since
+    the registry is stable once all modules have been imported.
+
+    Widening is currently not implemented: reaching a listed class raises
+    ``NotImplementedError``, because such a value can be written but not read back
+    by normal validation, which makes load and uplift disagree about the same file.
+    ``DefinedTerm`` is deliberately absent — it is expressible as a
+    ``valueReference``, so a ``DefinedTerm`` reaching the fallback is a malformed
+    instance (a data problem) rather than an unrepresentable type (a design
+    decision), and is dropped with a logged error like any other unconvertible item.
+
+    Returns
+    -------
+    tuple[type, ...]
+        The classes (currently only ``PropertyValueSpecification``) that would need
+        a widened ``PropertyValue.value`` to be carried inside an
+        ``additionalProperty`` entry.
+    """
+    return tuple(
+        _SCHEMA_TYPE_REGISTRY[name] for name in ("PropertyValueSpecification",)
+    )
+
+
+def _discriminate_value(raw_input: Any, annotation: Any) -> Any:
+    """
+    Resolve ``raw_input``'s concrete type from its ``@type``/``type`` key, if present.
+
+    If the input specifies its own model type via its ``@type/type`` key, it is checked
+    that this specified model is a) a registered schema model (i.e. a member of
+    ``_SCHEMA_TYPE_REGISTRY``) and b) a child class of one of the model types specified
+    in the corresponding field annotation (``annotation``). If this is the case, it
+    builds a validated model of the specified type and returns it. In this manner,
+    Pydantic will skip validation for this property of the owning model.
+    Resolution reaches arbitrarily nested structures, not just the top level: list
+    items are resolved directly by this function, and a resolved dict's own nested
+    fields are resolved in turn as its subtype is validated.
+
+    Parameters
+    ----------
+    raw_input : Any
+        The raw, unvalidated data assigned to a field — a dict, a list, or anything
+        else.
+    annotation : Any
+        The field's resolved (non-string) type annotation, passed to
+        ``_collect_annotated_schema_types`` to determine the candidate subtypes.
+
+    Returns
+    -------
+    Any
+        A dict with a resolvable ``@type``/``type`` is replaced by a parsed subtype
+        instance. A list is replaced by a new list with each item resolved the same
+        way. Any other input, and dicts with no ``@type``/``type`` key, pass through
         unchanged.
 
     Raises
     ------
     ValueError
-        If ``@type``/``type`` names something not in ``registry``, or a registered
-        type that is not a subtype of any of ``base_classes``.
+        If ``@type``/``type`` names a type not in ``_SCHEMA_TYPE_REGISTRY``, or a
+        registered type that is not a subtype of any of the types referenced by
+        ``annotation``.
     """
-    if isinstance(value, list):
-        return [_discriminate_value(item, base_classes, registry) for item in value]
-    if isinstance(value, dict) and base_classes:
-        type_name = value.get("@type") or value.get("type")
+    # this inline call makes this function call part of the recursion, but since this
+    # function is cached, this should be cheap
+    annotated_schema_types = _collect_annotated_schema_types(annotation)
+    if isinstance(raw_input, list):
+        return [_discriminate_value(item, annotation) for item in raw_input]
+    # just return the raw input for non-dict (str, float, class) values and no
+    # annotated model
+    if isinstance(raw_input, dict) and annotated_schema_types:
+        type_name = raw_input.get("@type") or raw_input.get("type")
         if type_name is not None:
-            cls = registry.get(type_name)
-            if cls is None or not any(issubclass(cls, base) for base in base_classes):
-                declared = ", ".join(sorted(base.__name__ for base in base_classes))
+            cls = _SCHEMA_TYPE_REGISTRY.get(type_name)
+            if cls is None or not any(
+                issubclass(cls, schema_type) for schema_type in annotated_schema_types
+            ):
+                declared = ", ".join(
+                    sorted(
+                        schema_type.__name__ for schema_type in annotated_schema_types
+                    )
+                )
                 raise ValueError(f"{type_name!r} is not a known subtype of {declared}")
-            return cls.model_validate(value)
-    return value
+            return cls.model_validate(raw_input)
+    return raw_input
+
+
+@functools.lru_cache(maxsize=None)
+def _collect_annotated_schema_types(type_annotation: Any) -> set[type]:
+    """Collect all ``SchemaOrgBase`` subclasses contained in the type annotation.
+
+    If the type annotation is a ``Union``/``X | Y`` or ``list``/``set``/``tuple`` it
+    recursively searches for the SchemaOrgBase subclasses. Note that any class
+    subclassing from SchemaOrgBase is accepted, independent of the fact, whether it is
+    an actual representation of a schema.org type or a custom addition.
+
+    This function is cached (memoized) because it is called many times with exactly the
+    same input and thus caching saves a lot of redundant computation. The schema.org
+    models share many same type annotations, which would have to be recomputed during
+    each instantiation of a model.
+
+    Parameters
+    ----------
+    type_annotation : Any
+        A resolved (non-string) type annotation for a single Pydantic model field —
+        e.g. a class, a ``list``/``set``/``tuple`` generic alias, or a union.
+
+    Returns
+    -------
+    set[type]
+        The SchemaOrgBase child classes referenced in ``type_annotation``,
+        possibly empty.
+
+    Notes
+    -----
+    ``lru_cache`` returns the same ``set`` object on every call and not a copy,
+    so callers must not mutate the returned set.
+    """
+    annotated_schema_types: set[type] = set()
+    if _is_wrapped(type_annotation):
+        for arg in get_args(type_annotation):
+            annotated_schema_types |= _collect_annotated_schema_types(arg)
+    # we need to check that type_annotation is a class to safely call issubclass
+    elif isinstance(type_annotation, type) and issubclass(
+        type_annotation, SchemaOrgBase
+    ):
+        annotated_schema_types.add(type_annotation)
+    return annotated_schema_types
+
+
+def _is_wrapped(type_annotation: Any) -> bool:
+    """Return whether ``type_annotation`` is a union or a ``list``/``set``/``tuple``.
+
+    Both wrap other types in their ``get_args()`` rather than being a class
+    themselves, so the caller must unwrap them first to access the types.
+
+    Parameters
+    ----------
+    type_annotation : Any
+        A resolved (non-string) type annotation for a single Pydantic model field —
+        e.g. a class, a ``list``/``set``/``tuple`` generic alias, or a union.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``type_annotation`` is a union or a ``list``/``set``/``tuple``,
+        ``False`` otherwise.
+    """
+    type_origin = get_origin(type_annotation)
+    # Union is looked for twice, since it has two spellings with different origins
+    # (``typing.Union`` and ``types.UnionType``).
+    is_union = type_origin is Union or type_origin is UnionType
+    return is_union or type_origin in (list, set, tuple)
 
 
 class Thing(SchemaOrgBase):
@@ -323,7 +723,9 @@ class CreativeWork(Thing):
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
     copyrightNotice: str | list[str] | None = Field(default=None)
-    copyrightYear: float | str | list[float | str] | None = Field(default=None)
+    copyrightYear: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     correction: (
         CorrectionComment | str | AnyUrl | list[CorrectionComment | str | AnyUrl] | None
     ) = Field(default=None)
@@ -502,7 +904,7 @@ class CreativeWork(Thing):
     usageInfo: (
         CreativeWork | AnyUrl | str | list[CreativeWork | AnyUrl | str] | None
     ) = Field(default=None)
-    version: float | str | list[float | str] | None = Field(default=None)
+    version: int | float | str | list[int | float | str] | None = Field(default=None)
     video: Clip | VideoObject | str | list[Clip | VideoObject | str] | None = Field(
         default=None
     )
@@ -735,11 +1137,11 @@ class Place(Thing):
     keywords: DefinedTerm | str | AnyUrl | list[DefinedTerm | str | AnyUrl] | None = (
         Field(default=None)
     )
-    latitude: float | str | list[float | str] | None = Field(default=None)
+    latitude: int | float | str | list[int | float | str] | None = Field(default=None)
     logo: ImageObject | AnyUrl | str | list[ImageObject | AnyUrl | str] | None = Field(
         default=None
     )
-    longitude: float | str | list[float | str] | None = Field(default=None)
+    longitude: int | float | str | list[int | float | str] | None = Field(default=None)
     map: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     maps: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
     maximumAttendeeCapacity: int | str | list[int | str] | None = Field(default=None)
@@ -802,14 +1204,26 @@ class Accommodation(Place):
     ) = Field(default=None)
     numberOfBathroomsTotal: int | str | list[int | str] | None = Field(default=None)
     numberOfBedrooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
-    numberOfFullBathrooms: float | str | list[float | str] | None = Field(default=None)
-    numberOfPartialBathrooms: float | str | list[float | str] | None = Field(
+    numberOfFullBathrooms: int | float | str | list[int | float | str] | None = Field(
         default=None
     )
+    numberOfPartialBathrooms: int | float | str | list[int | float | str] | None = (
+        Field(default=None)
+    )
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -817,7 +1231,7 @@ class Accommodation(Place):
     permittedUsage: str | list[str] | None = Field(default=None)
     petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
     tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
-    yearBuilt: float | str | list[float | str] | None = Field(default=None)
+    yearBuilt: int | float | str | list[int | float | str] | None = Field(default=None)
 
 
 class Organization(Thing):
@@ -1312,7 +1726,7 @@ class Offer(Intangible):
     offeredBy: (
         Organization | Person | str | list[Organization | Person | str] | None
     ) = Field(default=None)
-    price: float | str | list[float | str] | None = Field(default=None)
+    price: int | float | str | list[int | float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     priceSpecification: (
         PriceSpecification | str | list[PriceSpecification | str] | None
@@ -1350,8 +1764,8 @@ class AggregateOffer(Offer):
     http://purl.org/goodrelations/v1#Sell if businessFunction is not explicitly defined."""
 
     type: str = Field(default="AggregateOffer", alias="@type")
-    highPrice: float | str | list[float | str] | None = Field(default=None)
-    lowPrice: float | str | list[float | str] | None = Field(default=None)
+    highPrice: int | float | str | list[int | float | str] | None = Field(default=None)
+    lowPrice: int | float | str | list[int | float | str] | None = Field(default=None)
     offerCount: int | str | list[int | str] | None = Field(default=None)
     offers: Demand | Offer | str | list[Demand | Offer | str] | None = Field(
         default=None
@@ -1365,13 +1779,17 @@ class Rating(Intangible):
     author: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    bestRating: float | str | list[float | str] | None = Field(default=None)
+    bestRating: int | float | str | list[int | float | str] | None = Field(default=None)
     ratingExplanation: str | list[str] | None = Field(default=None)
-    ratingValue: float | str | list[float | str] | None = Field(default=None)
+    ratingValue: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     reviewAspect: StructuredValue | str | list[StructuredValue | str] | None = Field(
         default=None
     )
-    worstRating: float | str | list[float | str] | None = Field(default=None)
+    worstRating: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class AggregateRating(Rating):
@@ -1665,7 +2083,12 @@ class Apartment(Accommodation):
 
     type: str = Field(default="Apartment", alias="@type")
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -1693,7 +2116,12 @@ class ApartmentComplex(Residence):
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
     numberOfBedrooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
     tourBookingPage: AnyUrl | str | list[AnyUrl | str] | None = Field(default=None)
@@ -2127,13 +2555,23 @@ class FinancialProduct(Service):
 
     type: str = Field(default="FinancialProduct", alias="@type")
     annualPercentageRate: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     feesAndCommissionsSpecification: str | AnyUrl | list[str | AnyUrl] | None = Field(
         default=None
     )
     interestRate: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
 
 
@@ -2220,7 +2658,12 @@ class LodgingBusiness(LocalBusiness):
         default=None
     )
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
     starRating: Rating | str | list[Rating | str] | None = Field(default=None)
@@ -2243,7 +2686,9 @@ class BedDetails(Intangible):
     development)."""
 
     type: str = Field(default="BedDetails", alias="@type")
-    numberOfBeds: float | str | list[float | str] | None = Field(default=None)
+    numberOfBeds: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     typeOfBed: BedType | str | list[BedType | str] | None = Field(default=None)
 
 
@@ -2471,7 +2916,12 @@ class Reservation(Intangible):
     ) = Field(default=None)
     reservedTicket: Ticket | str | list[Ticket | str] | None = Field(default=None)
     totalPrice: (
-        float | PriceSpecification | str | list[float | PriceSpecification | str] | None
+        int
+        | float
+        | PriceSpecification
+        | str
+        | list[int | float | PriceSpecification | str]
+        | None
     ) = Field(default=None)
     underName: (
         Organization | Person | str | list[Organization | Person | str] | None
@@ -2872,7 +3322,12 @@ class BroadcastFrequencySpecification(Intangible):
 
     type: str = Field(default="BroadcastFrequencySpecification", alias="@type")
     broadcastFrequencyValue: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     broadcastSignalModulation: (
         QualitativeValue | str | list[QualitativeValue | str] | None
@@ -2916,9 +3371,14 @@ class InvestmentOrDeposit(FinancialProduct):
     a financial service in return for potential beneficial financial return."""
 
     type: str = Field(default="InvestmentOrDeposit", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
 
 
 class BrokerageAccount(InvestmentOrDeposit):
@@ -3121,7 +3581,9 @@ class Vehicle(Product):
         | list[DriveWheelConfigurationValue | str]
         | None
     ) = Field(default=None)
-    emissionsCO2: float | str | list[float | str] | None = Field(default=None)
+    emissionsCO2: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     fuelCapacity: QuantitativeValue | str | list[QuantitativeValue | str] | None = (
         Field(default=None)
     )
@@ -3142,18 +3604,40 @@ class Vehicle(Product):
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
     modelDate: date | str | list[date | str] | None = Field(default=None)
-    numberOfAirbags: float | str | list[float | str] | None = Field(default=None)
+    numberOfAirbags: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     numberOfAxles: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     numberOfDoors: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     numberOfForwardGears: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     numberOfPreviousOwners: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     payload: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -3161,7 +3645,12 @@ class Vehicle(Product):
     productionDate: date | str | list[date | str] | None = Field(default=None)
     purchaseDate: date | str | list[date | str] | None = Field(default=None)
     seatingCapacity: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     speed: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -3184,7 +3673,12 @@ class Vehicle(Product):
     vehicleInteriorType: str | list[str] | None = Field(default=None)
     vehicleModelDate: date | str | list[date | str] | None = Field(default=None)
     vehicleSeatingCapacity: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     vehicleSpecialUsage: CarUsageType | str | list[CarUsageType | str] | None = Field(
         default=None
@@ -3304,7 +3798,7 @@ class TradeAction(Action):
     exchange for a one time or periodic payment."""
 
     type: str = Field(default="TradeAction", alias="@type")
-    price: float | str | list[float | str] | None = Field(default=None)
+    price: int | float | str | list[int | float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     priceSpecification: (
         PriceSpecification | str | list[PriceSpecification | str] | None
@@ -3349,21 +3843,41 @@ class CDCPMDRecord(StructuredValue):
     )
     cvdFacilityCounty: str | list[str] | None = Field(default=None)
     cvdFacilityId: str | list[str] | None = Field(default=None)
-    cvdNumBeds: float | str | list[float | str] | None = Field(default=None)
-    cvdNumBedsOcc: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19Died: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19HOPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19HospPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19MechVentPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumC19OFMechVentPats: float | str | list[float | str] | None = Field(
+    cvdNumBeds: int | float | str | list[int | float | str] | None = Field(default=None)
+    cvdNumBedsOcc: int | float | str | list[int | float | str] | None = Field(
         default=None
     )
-    cvdNumC19OverflowPats: float | str | list[float | str] | None = Field(default=None)
-    cvdNumICUBeds: float | str | list[float | str] | None = Field(default=None)
-    cvdNumICUBedsOcc: float | str | list[float | str] | None = Field(default=None)
-    cvdNumTotBeds: float | str | list[float | str] | None = Field(default=None)
-    cvdNumVent: float | str | list[float | str] | None = Field(default=None)
-    cvdNumVentUse: float | str | list[float | str] | None = Field(default=None)
+    cvdNumC19Died: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19HOPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19HospPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19MechVentPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19OFMechVentPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumC19OverflowPats: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumICUBeds: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumICUBedsOcc: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumTotBeds: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    cvdNumVent: int | float | str | list[int | float | str] | None = Field(default=None)
+    cvdNumVentUse: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     datePosted: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
@@ -3790,7 +4304,12 @@ class Clip(CreativeWork):
     director: Person | str | list[Person | str] | None = Field(default=None)
     directors: Person | str | list[Person | str] | None = Field(default=None)
     endOffset: (
-        HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
+        HyperTocEntry
+        | int
+        | float
+        | str
+        | list[HyperTocEntry | int | float | str]
+        | None
     ) = Field(default=None)
     musicBy: MusicGroup | Person | str | list[MusicGroup | Person | str] | None = Field(
         default=None
@@ -3803,7 +4322,12 @@ class Clip(CreativeWork):
         Field(default=None)
     )
     startOffset: (
-        HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
+        HyperTocEntry
+        | int
+        | float
+        | str
+        | list[HyperTocEntry | int | float | str]
+        | None
     ) = Field(default=None)
 
 
@@ -4060,12 +4584,17 @@ class PriceSpecification(StructuredValue):
     eligibleTransactionVolume: (
         PriceSpecification | str | list[PriceSpecification | str] | None
     ) = Field(default=None)
-    maxPrice: float | str | list[float | str] | None = Field(default=None)
+    maxPrice: int | float | str | list[int | float | str] | None = Field(default=None)
     membershipPointsEarned: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
-    minPrice: float | str | list[float | str] | None = Field(default=None)
-    price: float | str | list[float | str] | None = Field(default=None)
+    minPrice: int | float | str | list[int | float | str] | None = Field(default=None)
+    price: int | float | str | list[int | float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     validForMemberTier: (
         MemberProgramTier | str | list[MemberProgramTier | str] | None
@@ -4464,9 +4993,14 @@ class LoanOrCredit(FinancialProduct):
     agreed terms and charges."""
 
     type: str = Field(default="LoanOrCredit", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
     currency: str | list[str] | None = Field(default=None)
     gracePeriod: timedelta | str | list[timedelta | str] | None = Field(default=None)
     loanRepaymentForm: (
@@ -4508,13 +5042,20 @@ class PaymentCard(PaymentMethod, FinancialProduct):
     with an account."""
 
     type: str = Field(default="PaymentCard", alias="@type")
-    cashBack: bool | float | str | list[bool | float | str] | None = Field(default=None)
+    cashBack: bool | int | float | str | list[bool | int | float | str] | None = Field(
+        default=None
+    )
     contactlessPayment: bool | str | list[bool | str] | None = Field(default=None)
     floorLimit: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
     monthlyMinimumRepaymentAmount: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
 
 
@@ -4707,9 +5248,14 @@ class DatedMoneySpecification(StructuredValue):
     is recommended."""
 
     type: str = Field(default="DatedMoneySpecification", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
     currency: str | list[str] | None = Field(default=None)
     endDate: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
@@ -5185,7 +5731,7 @@ class DonateAction(TransferAction):
     philanthropic reasons."""
 
     type: str = Field(default="DonateAction", alias="@type")
-    price: float | str | list[float | str] | None = Field(default=None)
+    price: int | float | str | list[int | float | str] | None = Field(default=None)
     priceCurrency: str | list[str] | None = Field(default=None)
     priceSpecification: (
         PriceSpecification | str | list[PriceSpecification | str] | None
@@ -5207,7 +5753,12 @@ class DoseSchedule(MedicalIntangible):
     type: str = Field(default="DoseSchedule", alias="@type")
     doseUnit: str | list[str] | None = Field(default=None)
     doseValue: (
-        float | QualitativeValue | str | list[float | QualitativeValue | str] | None
+        int
+        | float
+        | QualitativeValue
+        | str
+        | list[int | float | QualitativeValue | str]
+        | None
     ) = Field(default=None)
     frequency: str | list[str] | None = Field(default=None)
     targetPopulation: str | list[str] | None = Field(default=None)
@@ -5327,7 +5878,12 @@ class DrugCost(MedicalEntity):
     costCurrency: str | list[str] | None = Field(default=None)
     costOrigin: str | list[str] | None = Field(default=None)
     costPerUnit: (
-        float | QualitativeValue | str | list[float | QualitativeValue | str] | None
+        int
+        | float
+        | QualitativeValue
+        | str
+        | list[int | float | QualitativeValue | str]
+        | None
     ) = Field(default=None)
     drugUnit: str | list[str] | None = Field(default=None)
 
@@ -5380,7 +5936,9 @@ class DrugStrength(MedicalIntangible):
         MaximumDoseSchedule | str | list[MaximumDoseSchedule | str] | None
     ) = Field(default=None)
     strengthUnit: str | list[str] | None = Field(default=None)
-    strengthValue: float | str | list[float | str] | None = Field(default=None)
+    strengthValue: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class DryCleaningOrLaundry(LocalBusiness):
@@ -5515,7 +6073,9 @@ class EducationalOccupationalProgram(Intangible):
         default=None
     )
     termDuration: timedelta | str | list[timedelta | str] | None = Field(default=None)
-    termsPerYear: float | str | list[float | str] | None = Field(default=None)
+    termsPerYear: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     timeOfDay: str | list[str] | None = Field(default=None)
     timeToComplete: timedelta | str | list[timedelta | str] | None = Field(default=None)
     trainingSalary: (
@@ -5650,7 +6210,9 @@ class OrganizationRole(Role):
     """A subclass of Role used to describe roles within organizations."""
 
     type: str = Field(default="OrganizationRole", alias="@type")
-    numberedPosition: float | str | list[float | str] | None = Field(default=None)
+    numberedPosition: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class EmployeeRole(OrganizationRole):
@@ -5659,10 +6221,11 @@ class EmployeeRole(OrganizationRole):
     type: str = Field(default="EmployeeRole", alias="@type")
     baseSalary: (
         MonetaryAmount
+        | int
         | float
         | PriceSpecification
         | str
-        | list[MonetaryAmount | float | PriceSpecification | str]
+        | list[MonetaryAmount | int | float | PriceSpecification | str]
         | None
     ) = Field(default=None)
     salaryCurrency: str | list[str] | None = Field(default=None)
@@ -5923,7 +6486,12 @@ class ExchangeRateSpecification(StructuredValue):
         UnitPriceSpecification | str | list[UnitPriceSpecification | str] | None
     ) = Field(default=None)
     exchangeRateSpread: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
 
 
@@ -6020,7 +6588,12 @@ class ExercisePlan(PhysicalActivity, CreativeWork):
         default=None
     )
     repetitions: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     restPeriods: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -6232,14 +6805,26 @@ class FloorPlan(Intangible):
     ) = Field(default=None)
     numberOfBathroomsTotal: int | str | list[int | str] | None = Field(default=None)
     numberOfBedrooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
-    numberOfFullBathrooms: float | str | list[float | str] | None = Field(default=None)
-    numberOfPartialBathrooms: float | str | list[float | str] | None = Field(
+    numberOfFullBathrooms: int | float | str | list[int | float | str] | None = Field(
         default=None
     )
+    numberOfPartialBathrooms: int | float | str | list[int | float | str] | None = (
+        Field(default=None)
+    )
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     petsAllowed: bool | str | list[bool | str] | None = Field(default=None)
 
@@ -6468,7 +7053,7 @@ class GeoShape(StructuredValue):
     addressCountry: Country | str | list[Country | str] | None = Field(default=None)
     box: str | list[str] | None = Field(default=None)
     circle: str | list[str] | None = Field(default=None)
-    elevation: float | str | list[float | str] | None = Field(default=None)
+    elevation: int | float | str | list[int | float | str] | None = Field(default=None)
     line: str | list[str] | None = Field(default=None)
     polygon: str | list[str] | None = Field(default=None)
     postalCode: str | list[str] | None = Field(default=None)
@@ -6487,9 +7072,9 @@ class GeoCircle(GeoShape):
     geoMidpoint: GeoCoordinates | str | list[GeoCoordinates | str] | None = Field(
         default=None
     )
-    geoRadius: Distance | float | str | list[Distance | float | str] | None = Field(
-        default=None
-    )
+    geoRadius: (
+        Distance | int | float | str | list[Distance | int | float | str] | None
+    ) = Field(default=None)
 
 
 class GeoCoordinates(StructuredValue):
@@ -6500,9 +7085,9 @@ class GeoCoordinates(StructuredValue):
         default=None
     )
     addressCountry: Country | str | list[Country | str] | None = Field(default=None)
-    elevation: float | str | list[float | str] | None = Field(default=None)
-    latitude: float | str | list[float | str] | None = Field(default=None)
-    longitude: float | str | list[float | str] | None = Field(default=None)
+    elevation: int | float | str | list[int | float | str] | None = Field(default=None)
+    latitude: int | float | str | list[int | float | str] | None = Field(default=None)
+    longitude: int | float | str | list[int | float | str] | None = Field(default=None)
     postalCode: str | list[str] | None = Field(default=None)
 
 
@@ -6764,8 +7349,8 @@ class HealthPlanCostSharingSpecification(Intangible):
 
     type: str = Field(default="HealthPlanCostSharingSpecification", alias="@type")
     healthPlanCoinsuranceOption: str | list[str] | None = Field(default=None)
-    healthPlanCoinsuranceRate: float | str | list[float | str] | None = Field(
-        default=None
+    healthPlanCoinsuranceRate: int | float | str | list[int | float | str] | None = (
+        Field(default=None)
     )
     healthPlanCopay: (
         PriceSpecification | str | list[PriceSpecification | str] | None
@@ -6932,7 +7517,12 @@ class House(Accommodation):
 
     type: str = Field(default="House", alias="@type")
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
 
 
@@ -7007,7 +7597,12 @@ class HowToItem(ListItem):
 
     type: str = Field(default="HowToItem", alias="@type")
     requiredQuantity: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
 
 
@@ -7470,10 +8065,11 @@ class JobPosting(Intangible):
     )
     baseSalary: (
         MonetaryAmount
+        | int
         | float
         | PriceSpecification
         | str
-        | list[MonetaryAmount | float | PriceSpecification | str]
+        | list[MonetaryAmount | int | float | PriceSpecification | str]
         | None
     ) = Field(default=None)
     benefits: str | list[str] | None = Field(default=None)
@@ -7496,9 +8092,10 @@ class JobPosting(Intangible):
     estimatedSalary: (
         MonetaryAmount
         | MonetaryAmountDistribution
+        | int
         | float
         | str
-        | list[MonetaryAmount | MonetaryAmountDistribution | float | str]
+        | list[MonetaryAmount | MonetaryAmountDistribution | int | float | str]
         | None
     ) = Field(default=None)
     experienceInPlaceOfEducation: bool | str | list[bool | str] | None = Field(
@@ -7793,7 +8390,7 @@ class PropertyValue(StructuredValue):
     """
 
     type: str = Field(default="PropertyValue", alias="@type")
-    maxValue: float | str | list[float | str] | None = Field(default=None)
+    maxValue: int | float | str | list[int | float | str] | None = Field(default=None)
     measurementMethod: (
         DefinedTerm
         | MeasurementMethodEnum
@@ -7810,16 +8407,17 @@ class PropertyValue(StructuredValue):
         | list[DefinedTerm | MeasurementMethodEnum | str | AnyUrl]
         | None
     ) = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
+    minValue: int | float | str | list[int | float | str] | None = Field(default=None)
     propertyID: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     unitText: str | list[str] | None = Field(default=None)
     value: (
         bool
+        | int
         | float
         | StructuredValue
         | str
-        | list[bool | float | StructuredValue | str]
+        | list[bool | int | float | StructuredValue | str]
         | None
     ) = Field(default=None)
     valueReference: (
@@ -8057,11 +8655,15 @@ class PeopleAudience(Audience):
     suggestedGender: GenderType | str | list[GenderType | str] | None = Field(
         default=None
     )
-    suggestedMaxAge: float | str | list[float | str] | None = Field(default=None)
+    suggestedMaxAge: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     suggestedMeasurement: (
         QuantitativeValue | str | list[QuantitativeValue | str] | None
     ) = Field(default=None)
-    suggestedMinAge: float | str | list[float | str] | None = Field(default=None)
+    suggestedMinAge: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class MedicalAudience(PeopleAudience, Audience):
@@ -8110,7 +8712,9 @@ class MedicalConditionStage(MedicalIntangible):
     """A stage of a medical condition, such as 'Stage IIIa'."""
 
     type: str = Field(default="MedicalConditionStage", alias="@type")
-    stageAsNumber: float | str | list[float | str] | None = Field(default=None)
+    stageAsNumber: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     subStageSuffix: str | list[str] | None = Field(default=None)
 
 
@@ -8494,7 +9098,12 @@ class MemberProgramTier(Intangible):
         default=None
     )
     membershipPointsEarned: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
 
 
@@ -8596,7 +9205,12 @@ class MerchantReturnPolicy(Intangible):
         RefundTypeEnumeration | str | list[RefundTypeEnumeration | str] | None
     ) = Field(default=None)
     restockingFee: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
     returnFees: (
         ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
@@ -8644,7 +9258,12 @@ class MerchantReturnPolicySeasonalOverride(Intangible):
         RefundTypeEnumeration | str | list[RefundTypeEnumeration | str] | None
     ) = Field(default=None)
     restockingFee: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
     returnFees: (
         ReturnFeesEnumeration | str | list[ReturnFeesEnumeration | str] | None
@@ -8766,8 +9385,8 @@ class MonetaryAmount(StructuredValue):
 
     type: str = Field(default="MonetaryAmount", alias="@type")
     currency: str | list[str] | None = Field(default=None)
-    maxValue: float | str | list[float | str] | None = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
+    maxValue: int | float | str | list[int | float | str] | None = Field(default=None)
+    minValue: int | float | str | list[int | float | str] | None = Field(default=None)
     validFrom: date | datetime | str | list[date | datetime | str] | None = Field(
         default=None
     )
@@ -8776,10 +9395,11 @@ class MonetaryAmount(StructuredValue):
     )
     value: (
         bool
+        | int
         | float
         | StructuredValue
         | str
-        | list[bool | float | StructuredValue | str]
+        | list[bool | int | float | StructuredValue | str]
         | None
     ) = Field(default=None)
 
@@ -8795,11 +9415,19 @@ class QuantitativeValueDistribution(StructuredValue):
         | list[timedelta | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    median: float | str | list[float | str] | None = Field(default=None)
-    percentile10: float | str | list[float | str] | None = Field(default=None)
-    percentile25: float | str | list[float | str] | None = Field(default=None)
-    percentile75: float | str | list[float | str] | None = Field(default=None)
-    percentile90: float | str | list[float | str] | None = Field(default=None)
+    median: int | float | str | list[int | float | str] | None = Field(default=None)
+    percentile10: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    percentile25: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    percentile75: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    percentile90: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class MonetaryAmountDistribution(QuantitativeValueDistribution):
@@ -8813,9 +9441,14 @@ class MonetaryGrant(Grant):
     """A monetary grant."""
 
     type: str = Field(default="MonetaryGrant", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
     funder: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
@@ -8826,9 +9459,14 @@ class MoneyTransfer(TransferAction):
     electronically or physically."""
 
     type: str = Field(default="MoneyTransfer", alias="@type")
-    amount: MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None = (
-        Field(default=None)
-    )
+    amount: (
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
+    ) = Field(default=None)
     beneficiaryBank: BankOrCreditUnion | str | list[BankOrCreditUnion | str] | None = (
         Field(default=None)
     )
@@ -8956,7 +9594,9 @@ class MovieTheater(CivicStructure, EntertainmentBusiness):
     """A movie theater."""
 
     type: str = Field(default="MovieTheater", alias="@type")
-    screenCount: float | str | list[float | str] | None = Field(default=None)
+    screenCount: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class MovingCompany(HomeAndConstructionBusiness):
@@ -9285,16 +9925,17 @@ class QuantitativeValue(StructuredValue):
     additionalProperty: PropertyValue | str | list[PropertyValue | str] | None = Field(
         default=None
     )
-    maxValue: float | str | list[float | str] | None = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
+    maxValue: int | float | str | list[int | float | str] | None = Field(default=None)
+    minValue: int | float | str | list[int | float | str] | None = Field(default=None)
     unitCode: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     unitText: str | list[str] | None = Field(default=None)
     value: (
         bool
+        | int
         | float
         | StructuredValue
         | str
-        | list[bool | float | StructuredValue | str]
+        | list[bool | int | float | StructuredValue | str]
         | None
     ) = Field(default=None)
     valueReference: (
@@ -9395,9 +10036,10 @@ class Occupation(Intangible):
     estimatedSalary: (
         MonetaryAmount
         | MonetaryAmountDistribution
+        | int
         | float
         | str
-        | list[MonetaryAmount | MonetaryAmountDistribution | float | str]
+        | list[MonetaryAmount | MonetaryAmountDistribution | int | float | str]
         | None
     ) = Field(default=None)
     experienceRequirements: (
@@ -9423,7 +10065,9 @@ class OccupationalExperienceRequirements(Intangible):
     """Indicates employment-related experience requirements, e.g. monthsOfExperience."""
 
     type: str = Field(default="OccupationalExperienceRequirements", alias="@type")
-    monthsOfExperience: float | str | list[float | str] | None = Field(default=None)
+    monthsOfExperience: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class OccupationalTherapy(MedicalTherapy):
@@ -9636,7 +10280,7 @@ class Order(Intangible):
     customer: Organization | Person | str | list[Organization | Person | str] | None = (
         Field(default=None)
     )
-    discount: float | str | list[float | str] | None = Field(default=None)
+    discount: int | float | str | list[int | float | str] | None = Field(default=None)
     discountCode: str | list[str] | None = Field(default=None)
     discountCurrency: str | list[str] | None = Field(default=None)
     isGift: bool | str | list[bool | str] | None = Field(default=None)
@@ -9698,7 +10342,12 @@ class OrderItem(StructuredValue):
         default=None
     )
     orderQuantity: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     orderedItem: (
         OrderItem
@@ -9793,8 +10442,12 @@ class ParentAudience(PeopleAudience):
     content."""
 
     type: str = Field(default="ParentAudience", alias="@type")
-    childMaxAge: float | str | list[float | str] | None = Field(default=None)
-    childMinAge: float | str | list[float | str] | None = Field(default=None)
+    childMaxAge: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    childMinAge: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class Park(CivicStructure):
@@ -10350,7 +11003,12 @@ class ProgramMembership(Intangible):
     )
     membershipNumber: str | list[str] | None = Field(default=None)
     membershipPointsEarned: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     program: MemberProgram | str | list[MemberProgram | str] | None = Field(
         default=None
@@ -10391,13 +11049,17 @@ class PropertyValueSpecification(Intangible):
 
     type: str = Field(default="PropertyValueSpecification", alias="@type")
     defaultValue: str | Thing | list[str | Thing] | None = Field(default=None)
-    maxValue: float | str | list[float | str] | None = Field(default=None)
-    minValue: float | str | list[float | str] | None = Field(default=None)
+    maxValue: int | float | str | list[int | float | str] | None = Field(default=None)
+    minValue: int | float | str | list[int | float | str] | None = Field(default=None)
     multipleValues: bool | str | list[bool | str] | None = Field(default=None)
     readonlyValue: bool | str | list[bool | str] | None = Field(default=None)
-    stepValue: float | str | list[float | str] | None = Field(default=None)
-    valueMaxLength: float | str | list[float | str] | None = Field(default=None)
-    valueMinLength: float | str | list[float | str] | None = Field(default=None)
+    stepValue: int | float | str | list[int | float | str] | None = Field(default=None)
+    valueMaxLength: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    valueMinLength: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     valueName: str | list[str] | None = Field(default=None)
     valuePattern: str | list[str] | None = Field(default=None)
     valueRequired: bool | str | list[bool | str] | None = Field(default=None)
@@ -10754,7 +11416,12 @@ class RepaymentSpecification(StructuredValue):
 
     type: str = Field(default="RepaymentSpecification", alias="@type")
     downPayment: (
-        MonetaryAmount | float | str | list[MonetaryAmount | float | str] | None
+        MonetaryAmount
+        | int
+        | float
+        | str
+        | list[MonetaryAmount | int | float | str]
+        | None
     ) = Field(default=None)
     earlyPrepaymentPenalty: MonetaryAmount | str | list[MonetaryAmount | str] | None = (
         Field(default=None)
@@ -10762,8 +11429,12 @@ class RepaymentSpecification(StructuredValue):
     loanPaymentAmount: MonetaryAmount | str | list[MonetaryAmount | str] | None = Field(
         default=None
     )
-    loanPaymentFrequency: float | str | list[float | str] | None = Field(default=None)
-    numberOfLoanPayments: float | str | list[float | str] | None = Field(default=None)
+    loanPaymentFrequency: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    numberOfLoanPayments: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class ReplaceAction(UpdateAction):
@@ -10974,8 +11645,8 @@ class RsvpAction(InformAction):
     event."""
 
     type: str = Field(default="RsvpAction", alias="@type")
-    additionalNumberOfGuests: float | str | list[float | str] | None = Field(
-        default=None
+    additionalNumberOfGuests: int | float | str | list[int | float | str] | None = (
+        Field(default=None)
     )
     comment: Comment | str | list[Comment | str] | None = Field(default=None)
     rsvpResponse: RsvpResponseType | str | list[RsvpResponseType | str] | None = Field(
@@ -11141,7 +11812,12 @@ class SeekToAction(Action):
 
     type: str = Field(default="SeekToAction", alias="@type")
     startOffset: (
-        HyperTocEntry | float | str | list[HyperTocEntry | float | str] | None
+        HyperTocEntry
+        | int
+        | float
+        | str
+        | list[HyperTocEntry | int | float | str]
+        | None
     ) = Field(default=None)
 
 
@@ -11363,7 +12039,9 @@ class ShippingRateSettings(StructuredValue):
         | None
     ) = Field(default=None)
     isUnlabelledFallback: bool | str | list[bool | str] | None = Field(default=None)
-    orderPercentage: float | str | list[float | str] | None = Field(default=None)
+    orderPercentage: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     shippingDestination: DefinedRegion | str | list[DefinedRegion | str] | None = Field(
         default=None
     )
@@ -11374,7 +12052,9 @@ class ShippingRateSettings(StructuredValue):
         | list[MonetaryAmount | ShippingRateSettings | str]
         | None
     ) = Field(default=None)
-    weightPercentage: float | str | list[float | str] | None = Field(default=None)
+    weightPercentage: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
 
 
 class ShippingService(StructuredValue):
@@ -11423,7 +12103,12 @@ class SingleFamilyResidence(House):
 
     type: str = Field(default="SingleFamilyResidence", alias="@type")
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -11860,7 +12545,12 @@ class Suite(Accommodation):
         default=None
     )
     numberOfRooms: (
-        float | QuantitativeValue | str | list[float | QuantitativeValue | str] | None
+        int
+        | float
+        | QuantitativeValue
+        | str
+        | list[int | float | QuantitativeValue | str]
+        | None
     ) = Field(default=None)
     occupancy: QuantitativeValue | str | list[QuantitativeValue | str] | None = Field(
         default=None
@@ -12131,7 +12821,12 @@ class Ticket(Intangible):
     ticketToken: str | AnyUrl | list[str | AnyUrl] | None = Field(default=None)
     ticketedSeat: Seat | str | list[Seat | str] | None = Field(default=None)
     totalPrice: (
-        float | PriceSpecification | str | list[float | PriceSpecification | str] | None
+        int
+        | float
+        | PriceSpecification
+        | str
+        | list[int | float | PriceSpecification | str]
+        | None
     ) = Field(default=None)
     underName: (
         Organization | Person | str | list[Organization | Person | str] | None
@@ -12301,7 +12996,9 @@ class TypeAndQuantityNode(StructuredValue):
     function of goods included in a bundle offer."""
 
     type: str = Field(default="TypeAndQuantityNode", alias="@type")
-    amountOfThisGood: float | str | list[float | str] | None = Field(default=None)
+    amountOfThisGood: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     businessFunction: BusinessFunction | str | list[BusinessFunction | str] | None = (
         Field(default=None)
     )
@@ -12345,14 +13042,19 @@ class UnitPriceSpecification(PriceSpecification):
     type: str = Field(default="UnitPriceSpecification", alias="@type")
     billingDuration: (
         timedelta
+        | int
         | float
         | QuantitativeValue
         | str
-        | list[timedelta | float | QuantitativeValue | str]
+        | list[timedelta | int | float | QuantitativeValue | str]
         | None
     ) = Field(default=None)
-    billingIncrement: float | str | list[float | str] | None = Field(default=None)
-    billingStart: float | str | list[float | str] | None = Field(default=None)
+    billingIncrement: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
+    billingStart: int | float | str | list[int | float | str] | None = Field(
+        default=None
+    )
     priceComponentType: (
         PriceComponentTypeEnumeration
         | str

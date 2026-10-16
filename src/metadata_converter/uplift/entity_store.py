@@ -46,7 +46,7 @@ class EntityStore:
             stops rather than silently keeping one entity over another.
         """
         input_dirs = [input_dir] if isinstance(input_dir, Path) else input_dir
-        store = cls()
+        models: list[SchemaOrgBase] = []
         seen_ids: dict[str, Path] = {}
         for directory in input_dirs:
             files = sorted(directory.glob("*.jsonld"))
@@ -65,23 +65,33 @@ class EntityStore:
                         f"across all input directories."
                     )
                 seen_ids[model.id] = path
-                store.by_type.setdefault(model.type, []).append(model)
-        total = sum(len(models) for models in store.by_type.values())
-        logger.info("Loaded %d entity file(s)", total)
+                models.append(model)
+        store = cls()
+        store.set_entities(models)
+        logger.info("Loaded %d entity file(s)", len(models))
         return store
 
     def of_type(self, type_name: str) -> list[SchemaOrgBase]:
         """Return the list of entities for a given ``@type`` (empty when none)."""
         return self.by_type.get(type_name, [])
 
+    def all_entities(self) -> list[SchemaOrgBase]:
+        """Return every held entity, across all ``@type`` buckets."""
+        return [entity for entities in self.by_type.values() for entity in entities]
+
+    def set_entities(self, entities: list[SchemaOrgBase]) -> None:
+        """Replace all held entities with ``entities``, regrouped by ``@type``."""
+        self.by_type = {}
+        for entity in entities:
+            self.by_type.setdefault(entity.type, []).append(entity)
+
     def write(self, output_dir: Path) -> None:
         """Export every held entity to ``output_dir`` via ``load_to_jsonld``."""
         output_dir.mkdir(parents=True, exist_ok=True)
         written = 0
-        for models in self.by_type.values():
-            for model in models:
-                load_to_jsonld(model, output_dir)
-                written += 1
+        for model in self.all_entities():
+            load_to_jsonld(model, output_dir)
+            written += 1
         logger.info("Wrote %d uplifted file(s) to %s", written, output_dir)
 
 

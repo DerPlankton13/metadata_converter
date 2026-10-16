@@ -67,13 +67,9 @@ Pydantic coercing `int 1` to `float 1.0` in certain union fields:
 if isinstance(value, float) and value.is_integer():
     return str(int(value))
 ```
-The same workaround is now *also* duplicated in
-`src/metadata_converter/uplift/remove.py:_stringify` — so the extraction
-fixed the module coupling but not the duplication; there are two copies of
-this normalization today instead of one. If the underlying union types in the
-schema.org models were tightened or ordered differently, both could go away.
-Worth investigating once the schema.org generator is touched again, along with
-whether `_stringify` and `to_lookup_key` should simply share one function.
+If the underlying union types in the schema.org models were tightened or
+ordered differently, the workaround could go away. Worth investigating once the
+schema.org generator is touched again.
 
 ### Inline `parse.py` (24 lines) and `http.py` (9 lines)
 Both modules are too small to justify their own files. `parse.py` is only
@@ -102,6 +98,11 @@ has no abstract `build()` and exercises no polymorphism. `unwrap_single` is
 the DRY violation, or convert the builders to plain functions taking a
 `SampleRecord`? Largely tangled with the "extract project-specific code"
 item — defer until that direction is settled.
+
+### Remove the `rename` uplift operation
+`uplift/rename.py` (`RenameRule`, `RenameApplier`, `GenericUpliftConfig.renames`)
+is not needed by any current config. Delete it together with its tests, its
+docs in `docs/usage.md` and `CLAUDE.md`, and the `run_uplift` step.
 
 ### Plugin feature — keep or remove?
 `CleaningConfig.load_plugins_from_dir` imports arbitrary Python during config

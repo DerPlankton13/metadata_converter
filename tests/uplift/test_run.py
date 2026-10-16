@@ -5,10 +5,12 @@ distinguishes them."""
 import json
 
 from metadata_converter.uplift import run_uplift
+from metadata_converter.uplift.config import GenericUpliftConfig
+from tests.uplift.conftest import load_jsonld, write_jsonld
 
 
 def test_uplift_writes_provenance(config_factory, tmp_path):
-    cfg = config_factory(provenance_dir=tmp_path / "provenance")
+    cfg = config_factory()
 
     run_uplift(cfg)
 
@@ -38,9 +40,87 @@ def test_uplift_writes_provenance(config_factory, tmp_path):
     assert bob["description"] == "stage: uplift"
 
 
-def test_uplift_without_provenance_dir_writes_nothing(config_factory, tmp_path):
-    cfg = config_factory(provenance_dir=None)
+# ---------------------------------------------------------------------------
+# atomize wiring: config flag, ordering relative to write/provenance
+# ---------------------------------------------------------------------------
+
+
+def test_uplift_atomize_default_true_extracts_blank_nodes(loaded_base, tmp_path):
+    cfg = GenericUpliftConfig(
+        input_dir=loaded_base,
+        output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
+    )
 
     run_uplift(cfg)
 
-    assert not (tmp_path / "provenance").exists()
+    action = load_jsonld(cfg.output_dir / "Action_analysis1.jsonld")
+    assert action["agent"] == {
+        "@type": "Person", "@id": "Person_Njtdsk7B9jXU3438K9WYXX.jsonld"
+    }
+    atom = load_jsonld(cfg.output_dir / "Person_Njtdsk7B9jXU3438K9WYXX.jsonld")
+    assert atom["identifier"] == "0000-0002-2222-2222"
+
+
+def test_uplift_atomize_false_leaves_blank_nodes_embedded(config_factory, tmp_path):
+    cfg = config_factory(out_name="no_atomize", atomize=False)
+
+    run_uplift(cfg)
+
+    action = load_jsonld(cfg.output_dir / "Action_analysis1.jsonld")
+    assert action["agent"] == {"@type": "Person", "identifier": "0000-0002-2222-2222"}
+    assert not (cfg.output_dir / "Person_Njtdsk7B9jXU3438K9WYXX.jsonld").exists()
+
+
+def test_uplift_atomize_extracted_entity_gets_provenance_naming_its_origin(
+        loaded_base, tmp_path
+):
+    cfg = GenericUpliftConfig(
+        input_dir=loaded_base,
+        output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
+        atomize=True,
+    )
+
+    run_uplift(cfg)
+
+    atom_id = "Person_Njtdsk7B9jXU3438K9WYXX.jsonld"
+    assert (cfg.output_dir / atom_id).exists()
+    # an atom has no single origin, so it records the entity it was extracted from
+    doc = load_jsonld(cfg.provenance_dir / f"Provenance_uplift_{atom_id}")
+    assert doc["about"] == {"@type": "Thing", "@id": atom_id}
+    assert doc["isBasedOn"] == {
+        "@type": "CreativeWork",
+        "@id": "Action_analysis1.jsonld",
+    }
+    # the original, now-mutated top-level entity still gets its own provenance file
+    assert (cfg.provenance_dir / "Provenance_uplift_Action_analysis1.jsonld").exists()
+
+
+def test_uplift_atomize_shared_atom_records_every_origin(tmp_path):
+    """One atom reached from two entities lists both — this is what makes the
+    provenance of a cross-source deduplicated atom correct once the graph merges it."""
+    input_dir = tmp_path / "in"
+    for id in ("Action_one.jsonld", "Action_two.jsonld"):
+        write_jsonld(input_dir / id, {
+            "@context": {"@vocab": "https://schema.org"},
+            "@type": "Action", "@id": id,
+            # identical blank node in both -> one shared atom
+            "agent": {"@type": "Person", "identifier": "0000-0002-2222-2222"},
+        })
+    cfg = GenericUpliftConfig(
+        input_dir=input_dir,
+        output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
+        atomize=True,
+    )
+
+    run_uplift(cfg)
+
+    atoms = sorted(p.name for p in cfg.output_dir.glob("Person_*.jsonld"))
+    assert len(atoms) == 1, atoms
+    doc = load_jsonld(cfg.provenance_dir / f"Provenance_uplift_{atoms[0]}")
+    assert sorted(ref["@id"] for ref in doc["isBasedOn"]) == [
+        "Action_one.jsonld",
+        "Action_two.jsonld",
+    ]

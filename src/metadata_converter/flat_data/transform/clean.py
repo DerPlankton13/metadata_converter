@@ -64,7 +64,7 @@ def strip_header_whitespace(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def strip_cell_whitespace(df: pd.DataFrame) -> pd.DataFrame:
-    str_cols = df.select_dtypes(include=["object", "str"]).columns
+    str_cols = df.select_dtypes(include=["object", "string"]).columns
     df[str_cols] = df[str_cols].apply(lambda col: col.map(clean_string))
     return df
 
@@ -76,7 +76,7 @@ def sentinels_to_na(df: pd.DataFrame, sentinels: list[str]) -> pd.DataFrame:
 
 def placeholders_to_na(df: pd.DataFrame, pattern: str) -> pd.DataFrame:
     """Replace cell values matching ``pattern`` with ``pd.NA`` in string columns."""
-    str_cols = df.select_dtypes(include=["object", "str"]).columns
+    str_cols = df.select_dtypes(include=["object", "string"]).columns
     df[str_cols] = df[str_cols].apply(
         lambda col: col.where(~col.str.match(pattern, na=False), other=pd.NA)
     )

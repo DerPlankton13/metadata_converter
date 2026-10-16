@@ -1,0 +1,17 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "DigitalDocument",
+  "@id": "Provenance_load_Action_B41mGtUFQp3FTskkVZ1k8Q.jsonld",
+  "about": {
+    "@type": "Thing",
+    "@id": "Action_B41mGtUFQp3FTskkVZ1k8Q.jsonld"
+  },
+  "isBasedOn": {
+    "@type": "CreativeWork",
+    "@id": "/home/user/biocean5d/data/input.xlsx"
+  },
+  "description": "stage: load",
+  "dateCreated": "2026-07-01T12:00:00Z"
+}

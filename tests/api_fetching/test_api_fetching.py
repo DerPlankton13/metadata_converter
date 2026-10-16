@@ -103,22 +103,6 @@ def test_api_fetch_html_jsonld_records_landing_url(tmp_path, monkeypatch):
     }
 
 
-def test_api_fetch_without_provenance_dir_writes_nothing(tmp_path, monkeypatch):
-    config = api_config(tmp_path / "fetched", tmp_path / "loaded_base", None)
-    record = Record(
-        doi="10.x/1",
-        title="T",
-        publisher="P",
-        url="https://zenodo.org/records/rec1",
-        source_id="rec1",
-    )
-    patch_query_and_fetch(monkeypatch, record)
-
-    fetch_api_data(config)
-
-    assert not (tmp_path / "provenance").exists()
-
-
 def test_api_load_records_fetched_file_and_rehashes_id(tmp_path):
     fetched = tmp_path / "fetched"
     fetched.mkdir()
@@ -152,16 +136,3 @@ def test_api_load_records_fetched_file_and_rehashes_id(tmp_path):
         "description": "stage: load",
         "dateCreated": provenance["dateCreated"],
     }
-
-
-def test_api_load_without_provenance_dir_writes_nothing(tmp_path):
-    fetched = tmp_path / "fetched"
-    fetched.mkdir()
-    (fetched / "rec1.jsonld").write_text(
-        json.dumps({"@type": "Dataset", "@id": "https://zenodo.org/records/rec1"})
-    )
-    config = api_config(fetched, tmp_path / "loaded_base", None)
-
-    load_api_data(config)
-
-    assert not (tmp_path / "provenance").exists()

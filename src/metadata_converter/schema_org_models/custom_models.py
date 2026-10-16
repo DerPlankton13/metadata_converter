@@ -34,7 +34,7 @@ def search_pattern(value: str, pattern: re.Pattern[str], type: str) -> str:
 class Orcid(PropertyValue):
     name: str = "Open Researcher and Contributor ID"
     alternateName: str = "ORCID"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/orcid"
+    propertyID: AnyUrl = AnyUrl("https://registry.identifiers.org/registry/orcid")
 
     @model_validator(mode="before")
     @classmethod
@@ -57,7 +57,7 @@ class Orcid(PropertyValue):
 class ISSN(PropertyValue):
     name: str = "International Standard Serial Number"
     alternateName: str = "ISSN"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/issn"
+    propertyID: AnyUrl = AnyUrl("https://registry.identifiers.org/registry/issn")
 
     @model_validator(mode="before")
     @classmethod
@@ -71,7 +71,7 @@ class ISSN(PropertyValue):
 class ISBN(PropertyValue):
     name: str = "International Standard Book Number"
     alternateName: str = "ISBN"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/isbn"
+    propertyID: AnyUrl = AnyUrl("https://registry.identifiers.org/registry/isbn")
 
     @model_validator(mode="before")
     @classmethod
@@ -85,7 +85,7 @@ class ISBN(PropertyValue):
 class DOI(PropertyValue):
     name: str = "Digital Object Identifier"
     alternateName: str = "DOI"
-    propertyID: AnyUrl = "https://registry.identifiers.org/registry/doi"
+    propertyID: AnyUrl = AnyUrl("https://registry.identifiers.org/registry/doi")
 
     @model_validator(mode="before")
     @classmethod
@@ -119,7 +119,7 @@ class UrlIdentifier(PropertyValue):
 # Dynamic lookup
 # ---------------------------------------------------------------------------
 SCHEMA_TYPE_REGISTRY: dict[str, type[SchemaOrgBase]] = {
-    k.lower(): v
+    k: v
     for k, v in globals().items()
     if isinstance(v, type) and issubclass(v, SchemaOrgBase)
 }
@@ -129,7 +129,8 @@ def get_schema(type_name: str) -> type[SchemaOrgBase]:
     """
     Return the Pydantic model class for a schema.org type name.
 
-    It works for all naming styles, as the comparison is done on the lowercase names.
+    The name must match the class name exactly, including case: a misspelled type
+    raises instead of being silently accepted.
 
     Parameters
     ----------
@@ -152,7 +153,7 @@ def get_schema(type_name: str) -> type[SchemaOrgBase]:
         cls = get_schema("Person")
         instance = cls(**data)
     """
-    cls = SCHEMA_TYPE_REGISTRY.get(type_name.lower())
+    cls = SCHEMA_TYPE_REGISTRY.get(type_name)
     if cls is None:
         raise KeyError(
             f"{type_name!r} is not a known schema.org type. Ensure that it is available in schema.org and update the Pydantic models if necessary."

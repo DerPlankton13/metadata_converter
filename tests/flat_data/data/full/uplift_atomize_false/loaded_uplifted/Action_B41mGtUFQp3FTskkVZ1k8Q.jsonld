@@ -1,0 +1,58 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Action",
+  "@id": "Action_B41mGtUFQp3FTskkVZ1k8Q.jsonld",
+  "description": "description method 1",
+  "name": "Metabarcodes from Helgoland Samples",
+  "identifier": "Metabarcoding",
+  "result": [
+    {
+      "@type": "Dataset",
+      "identifier": "B5D_file_886LGaLyMRe4bTUUpiVrVn"
+    },
+    {
+      "@type": "Dataset",
+      "identifier": "B5D_file_jirnMOdaI19BVLwCsPEMJJ"
+    },
+    {
+      "@type": "Dataset",
+      "identifier": "B5D_file_rB6_5DDUl6KF5nh2vetiM9"
+    }
+  ],
+  "object": [
+    {
+      "@type": "Product",
+      "identifier": "SAMEA118673815"
+    },
+    {
+      "@type": "Product",
+      "identifier": "SAMEA118673891"
+    }
+  ],
+  "agent": [
+    {
+      "@type": "Person",
+      "identifier": {
+        "@type": "PropertyValue",
+        "alternateName": "ORCID",
+        "name": "Open Researcher and Contributor ID",
+        "url": "https://orcid.org/0000-0001-0002-1234",
+        "propertyID": "https://registry.identifiers.org/registry/orcid",
+        "value": "0000-0001-0002-1234"
+      }
+    },
+    {
+      "@type": "Person",
+      "identifier": {
+        "@type": "PropertyValue",
+        "alternateName": "ORCID",
+        "name": "Open Researcher and Contributor ID",
+        "url": "https://orcid.org/0000-0001-0004-1234",
+        "propertyID": "https://registry.identifiers.org/registry/orcid",
+        "value": "0000-0001-0004-1234"
+      }
+    }
+  ]
+}

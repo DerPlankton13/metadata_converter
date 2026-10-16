@@ -6,14 +6,14 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import pandas as pd
-from boltons.iterutils import remap
 from pydantic import ValidationError
 from tqdm import tqdm
 
+from metadata_converter import get_schema
 from metadata_converter.biosamples.config import (
     BiosamplesConfig,
     BiosamplesExtractorConfig,
-    BiosamplesUpliftConfig,
+    BiosamplesUpliftRecordConfig,
 )
 from metadata_converter.biosamples.fetch import (
     fuse_metadata,
@@ -24,15 +24,12 @@ from metadata_converter.load import load_to_jsonld
 from metadata_converter.schema_org_models.schemaorg_models import (
     Action,
     Product,
-    validate_strict,
 )
 from metadata_converter.utils.http import make_session
-from metadata_converter.utils.io import write_json
 from metadata_converter.utils.jsonld import (
     expand_curie,
-    find_schema_namespace,
-    remove_base_namespace,
-    standardise_context,
+    inline_context_prefixes,
+    strip_schema_org_namespace,
 )
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
@@ -43,17 +40,23 @@ logger = logging.getLogger(__name__)
 def get_sample_ids(
     excel_file: Path, config: BiosamplesExtractorConfig
 ) -> set[str] | None:
-    df = pd.read_excel(
-        excel_file,
-        sheet_name=config.sheet_name,
-        header=config.header,
-        skiprows=config.skiprows,
-    )
+    with pd.ExcelFile(excel_file) as xl:
+        if config.sheet_name not in xl.sheet_names:
+            logger.error(
+                "Sheet '%s' not found in '%s'. Skipping this file now.",
+                config.sheet_name,
+                excel_file.name,
+            )
+            return None
+        df = xl.parse(config.sheet_name, header=config.header, skiprows=config.skiprows)
     df = df.dropna(how="all")
 
     if config.sample_id_column not in df.columns:
         logger.error(
-            f"Column '{config.sample_id_column}' not found in sheet '{config.sheet_name}' of '{excel_file.name}'. Skipping this file now."
+            "Column '%s' not found in sheet '%s' of '%s'. Skipping this file now.",
+            config.sample_id_column,
+            config.sheet_name,
+            excel_file.name,
         )
         return None
 
@@ -81,6 +84,7 @@ def fetch_biosamples(config: BiosamplesConfig):
         logger.error("No Excel files found in %s", input_cfg.input)
         return
     logger.info("Found %d Excel file(s) in %s", len(excel_files), input_cfg.input)
+    logger.debug("The following excel files were found: %s", excel_files)
 
     all_sample_ids: set[str] = set()
     for excel_file in excel_files:
@@ -155,19 +159,19 @@ def load_biosamples(config: BiosamplesConfig):
     config.output_dir.mkdir(parents=True, exist_ok=True)
 
     failures = 0
-    for ldjson_path in tqdm(
+    for ldjson_file in tqdm(
         ldjson_files, desc="Loading biosamples", unit="sample", file=sys.stdout
     ):
-        sample_id = ldjson_path.stem
-        json_path = fetched_path / f"{sample_id}.json"
-        if not json_path.exists():
+        sample_id = ldjson_file.stem
+        json_file = fetched_path / f"{sample_id}.json"
+        if not json_file.exists():
             logger.error("Missing unstructured metadata for %s, skipping", sample_id)
             failures += 1
             continue
 
-        with ldjson_path.open() as f:
+        with ldjson_file.open() as f:
             structured = json.load(f)
-        with json_path.open() as f:
+        with json_file.open() as f:
             unstructured = json.load(f)
 
         try:
@@ -177,25 +181,46 @@ def load_biosamples(config: BiosamplesConfig):
             failures += 1
             continue
 
-        sample = fix_obi(sample)
-        namespace = find_schema_namespace(sample.get("@context"))
-        if namespace is not None:
-            sample = remove_base_namespace(sample, namespace)
-        sample = standardise_context(sample)
+        # fix the types to have validating schema.org compliant models
+        sample["@type"] = "CreativeWork"
+        sample["mainEntity"]["additionalType"] = sample["mainEntity"]["@type"]
+        sample["mainEntity"]["@type"] = "Product"
+
+        # fix schema.id now, so it reflects the real final id for provenance
+        # for biosamples we keep the original accession number
         sample["@id"] = f"{sample['@type']}_{sample_id}.jsonld"
 
-        write_json(sample, config.output_dir / sample["@id"])
+        # resolve any CURIE's and use the standard context, to fulfill the load contract
+        sample = inline_context_prefixes(sample)
+        # remove the schema.org prefix from any value to ensure that the type entries
+        # are clean so the type discrimination works
+        sample = strip_schema_org_namespace(sample)
 
-        if config.provenance_dir is not None:
-            # we need to expand the @id as we are not keeping the context in the
-            # provenance file and the CURIE becomes unresolvable otherwise
-            structured_id = expand_curie(structured["@id"], structured["@context"])
-            write_provenance_file(
-                sample["@id"],
-                config.provenance_dir,
-                [structured_id, os.path.relpath(json_path)],
-                "load",
+        try:
+            schema = get_schema(sample.get("@type"))(**sample)
+        except ValidationError as e:
+            logger.error("Failed to load %s", ldjson_file.name)
+            log_validation_error(e, logger)
+            failures += 1
+            continue
+        except KeyError as e:
+            logger.error(
+                "Failed to load %s: unrecognized @type — %s", ldjson_file.name, e
             )
+            failures += 1
+            continue
+
+        load_to_jsonld(schema, output_dir=config.output_dir)
+
+        # we need to expand the @id as we are not keeping the context in the
+        # provenance file and the CURIE becomes unresolvable otherwise
+        structured_id = expand_curie(structured["@id"], structured["@context"])
+        write_provenance_file(
+            sample["@id"],
+            config.provenance_dir,
+            [structured_id, os.path.relpath(json_file)],
+            "load",
+        )
 
     if failures:
         raise RuntimeError(
@@ -205,8 +230,8 @@ def load_biosamples(config: BiosamplesConfig):
     logger.info("Biosamples load complete. Output: %s", config.output_dir)
 
 
-def uplift_biosamples(config: BiosamplesUpliftConfig):
-    logger.info("Starting biosamples uplift")
+def uplift_record_biosamples(config: BiosamplesUpliftRecordConfig):
+    logger.info("Starting biosamples uplift_record phase")
 
     files = list(config.input_dir.glob("**/*.jsonld"))
     logger.info("Found %d loaded file(s) in %s", len(files), config.input_dir)
@@ -228,16 +253,9 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
         try:
             product = Product(**product_dict)
             load_to_jsonld(product, output_dir=config.output_dir)
-            if config.provenance_dir is not None:
-                write_provenance_file(
-                    product.id, config.provenance_dir, data["@id"], "uplift"
-                )
-            try:
-                validate_strict(product)
-            except ValueError as e:
-                logger.warning(
-                    "Strict validation failed for Product from %s: %s", path.name, e
-                )
+            write_provenance_file(
+                product.id, config.provenance_dir, data["@id"], "uplift_record"
+            )
         except ValidationError as e:
             logger.error("Failed to build Product for %s.", path.name)
             log_validation_error(e, logger)
@@ -245,16 +263,9 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
         try:
             action = Action(**action_dict)
             load_to_jsonld(action, output_dir=config.output_dir)
-            if config.provenance_dir is not None:
-                write_provenance_file(
-                    action.id, config.provenance_dir, data["@id"], "uplift"
-                )
-            try:
-                validate_strict(action)
-            except ValueError as e:
-                logger.warning(
-                    "Strict validation failed for Action from %s: %s", path.name, e
-                )
+            write_provenance_file(
+                action.id, config.provenance_dir, data["@id"], "uplift_record"
+            )
         except ValidationError as e:
             logger.error("Failed to build Action for %s.", path.name)
             log_validation_error(e, logger)
@@ -269,26 +280,3 @@ def uplift_biosamples(config: BiosamplesUpliftConfig):
         )
     else:
         logger.info("Biosamples uplift complete. Output: %s", config.output_dir)
-
-
-def fix_obi(fused: dict) -> dict:
-    """Expand OBI compact IRIs to full https IRIs and drop the OBI context entry.
-
-    JSON-LD 1.1 only auto-expands a compact IRI like "OBI:0000747" when the
-    prefix's mapped IRI ends in a URI gen-delim character (e.g. ":", "/"); OBI's
-    mapped IRI ends in "_", so it no longer expands. Rewrite it to the full IRI
-    instead, to make the output JSON-LD version independent.
-    """
-    try:
-        obi_iri = fused["@context"][1].pop("OBI", None)
-    except (KeyError, IndexError, TypeError):
-        obi_iri = None
-    if obi_iri is None:
-        return fused
-
-    def replace_obi(path, key, value):
-        if isinstance(value, str) and value.startswith("OBI:"):
-            return key, obi_iri + value.removeprefix("OBI:")
-        return key, value
-
-    return remap(fused, visit=replace_obi)

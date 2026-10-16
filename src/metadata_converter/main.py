@@ -4,18 +4,20 @@ from metadata_converter.api_fetching.run import fetch_api_data, load_api_data
 from metadata_converter.biosamples.run import (
     fetch_biosamples,
     load_biosamples,
-    uplift_biosamples,
+    uplift_record_biosamples,
 )
 from metadata_converter.config import (
     ApiFetchingConfig,
     BiosamplesConfig,
-    BiosamplesUpliftConfig,
+    BiosamplesUpliftRecordConfig,
     FlatDataConfig,
     GenericUpliftConfig,
 )
 from metadata_converter.flat_data.run import load_flat_data
 from metadata_converter.parse import parse_cli
 from metadata_converter.uplift import run_uplift
+from metadata_converter.uplift.config import UpliftMergeConfig
+from metadata_converter.uplift.run import run_uplift_merge
 from metadata_converter.utils.log_setup import setup_logging
 
 logger = logging.getLogger(__name__)
@@ -36,10 +38,12 @@ def main():
             load_biosamples(config)
         case ("load", ApiFetchingConfig()):
             load_api_data(config)
-        case ("uplift", BiosamplesUpliftConfig()):
-            uplift_biosamples(config)
+        case ("uplift_record", BiosamplesUpliftRecordConfig()):
+            uplift_record_biosamples(config)
         case ("uplift", GenericUpliftConfig()):
             run_uplift(config)
+        case ("uplift_merge", UpliftMergeConfig()):
+            run_uplift_merge(config)
         case _:
             source = getattr(config, "source_type", "uplift")
             logger.error(

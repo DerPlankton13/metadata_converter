@@ -2,7 +2,7 @@
 
 A CLI tool that converts source-specific metadata into schema.org JSON-LD files,
 driven by a TOML config. It supports three ingest workflows and a separate
-uplift/linking step.
+uplift step.
 
 ## Intent and scope
 
@@ -22,7 +22,7 @@ points are listed in
 with suggested directions for making them config-driven. The intent is to keep
 the door open: a future contributor with the resources could lift the
 project-specific logic into a template (similar to how `flat_data` uplift is
-already declarative via `LinkRule`), at which point the package would become
+already declarative via its uplift rules), at which point the package would become
 genuinely reusable. See [TODO.md](TODO.md) for the planned cleanup notes.
 
 ## Installation

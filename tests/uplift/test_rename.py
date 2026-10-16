@@ -121,6 +121,7 @@ def test_rename_and_addition_on_same_target_does_not_raise(tmp_path):
     GenericUpliftConfig(
         input_dir=tmp_path / "in",
         output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
         additions=[
             AdditionRule(
                 on_type="Person",

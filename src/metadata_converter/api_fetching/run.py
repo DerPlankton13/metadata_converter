@@ -12,10 +12,9 @@ from metadata_converter.api_fetching.fixers import FIXERS
 from metadata_converter.load import load_to_jsonld
 from metadata_converter.utils.io import write_json
 from metadata_converter.utils.jsonld import (
-    find_schema_namespace,
-    remove_base_namespace,
-    standardise_context,
+    inline_context_prefixes,
     standardise_id,
+    strip_schema_org_namespace,
 )
 from metadata_converter.utils.log_setup import log_validation_error
 from metadata_converter.utils.provenance_writer import write_provenance_file
@@ -41,16 +40,15 @@ def fetch_api_data(config: ApiFetchingConfig) -> None:
         logger.debug("Writing fetched JSON-LD to %s", fetched_file)
         write_json(jsonld, fetched_file)
 
-        if config.provenance_dir is not None:
-            if config.fetcher.fetch_strategy == "export_endpoint":
-                source_url = config.fetcher.export_url_template.format(
-                    record_id=record.source_id
-                )
-            else:
-                source_url = record.url
-            write_provenance_file(
-                fetched_file.name, config.provenance_dir, source_url, "fetch"
+        if config.fetcher.fetch_strategy == "export_endpoint":
+            source_url = config.fetcher.export_url_template.format(
+                record_id=record.source_id
             )
+        else:
+            source_url = record.url
+        write_provenance_file(
+            fetched_file.name, config.provenance_dir, source_url, "fetch"
+        )
 
     logger.info("API fetch complete. Output: %s", fetched_path)
 
@@ -75,13 +73,12 @@ def load_api_data(config: ApiFetchingConfig) -> None:
 
         # fix schema.id now, so it reflects the real final id for provenance
         jsonld = standardise_id(jsonld)
-        # removing the base namespace strips any schema.org prefixes
-        # so pydantic's type discrimination works
-        namespace = find_schema_namespace(jsonld.get("@context"))
-        if namespace is not None:
-            jsonld = remove_base_namespace(jsonld, namespace)
-        # also standardise the context, so we fulfill the load contract
-        jsonld = standardise_context(jsonld)
+
+        # resolve any CURIE's and use the standard context, to fulfill the load contract
+        jsonld = inline_context_prefixes(jsonld)
+        # remove the schema.org prefix from any value to ensure that the type entries
+        # are clean so the type discrimination works
+        jsonld = strip_schema_org_namespace(jsonld)
 
         try:
             schema = get_schema(jsonld.get("@type"))(**jsonld)
@@ -99,14 +96,14 @@ def load_api_data(config: ApiFetchingConfig) -> None:
 
         load_to_jsonld(schema, output_dir=config.output_dir)
 
-        if config.provenance_dir is not None:
-            write_provenance_file(
-                schema.id, config.provenance_dir, fetched_file.name, "load"
-            )
+        write_provenance_file(
+            schema.id, config.provenance_dir, fetched_file.name, "load"
+        )
 
     if failures:
-        raise RuntimeError(
-            f"{failures} of {len(fetched_files)} record(s) failed to load — "
-            "check the log for details"
+        logger.warning(
+            "%d of %d record(s) failed to load — check the log for details",
+            failures,
+            len(fetched_files),
         )
-    logger.info("API load complete. Output: %s", config.output_dir)
+    logger.info("API load finished. Output: %s", config.output_dir)

@@ -1,0 +1,31 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "DigitalDocument",
+  "@id": "Provenance_uplift_Product_I3LXwzb5ExzeeO2y91rN2j.jsonld",
+  "about": {
+    "@type": "Thing",
+    "@id": "Product_I3LXwzb5ExzeeO2y91rN2j.jsonld"
+  },
+  "isBasedOn": [
+    {
+      "@type": "CreativeWork",
+      "@id": "Action_B41mGtUFQp3FTskkVZ1k8Q.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "@id": "Action_ZwCMF-8WhKFk2jZwKUcadl.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "@id": "Dataset_Gz1Z1KpHln6b_SzRQSKqDI.jsonld"
+    },
+    {
+      "@type": "CreativeWork",
+      "@id": "Dataset_mJqkxqEjVs1OTCehLjpAd0.jsonld"
+    }
+  ],
+  "description": "stage: uplift",
+  "dateCreated": "2026-07-01T12:00:00Z"
+}

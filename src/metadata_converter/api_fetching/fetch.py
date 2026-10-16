@@ -62,12 +62,6 @@ Examples
     # Fetch JSON-LD for each discovered record
     for record in records:
         jsonld = fetch_jsonld(record, config)
-
-Requirements
-------------
-::
-
-    pip install requests beautifulsoup4 pydantic
 """
 
 import functools
@@ -166,9 +160,7 @@ def post(
     return session.post(url, **kwargs)
 
 
-def check_response_size(
-    response: requests.Response, config: ApiFetcherConfig
-) -> None:
+def check_response_size(response: requests.Response, config: ApiFetcherConfig) -> None:
     """Raise `ValueError` if the response body exceeds ``max_response_mb``."""
     max_bytes = int(config.max_response_mb * 1024 * 1024)
     # Check Content-Length header first (not always present, but cheap)
@@ -219,9 +211,7 @@ def to_es_query(query: Query) -> str:
 # ---------------------------------------------------------------------------
 
 
-def query_zenodo(
-    config: ApiFetcherConfig, session: requests.Session
-) -> list[Record]:
+def query_zenodo(config: ApiFetcherConfig, session: requests.Session) -> list[Record]:
     """Query handler for the Zenodo REST API."""
     params: dict = {
         "q": to_es_query(config.query),
@@ -261,9 +251,7 @@ def query_zenodo(
     return records
 
 
-def query_datacite(
-    config: ApiFetcherConfig, session: requests.Session
-) -> list[Record]:
+def query_datacite(config: ApiFetcherConfig, session: requests.Session) -> list[Record]:
     """Query handler for the DataCite REST API."""
     params: dict = {
         "query": to_es_query(config.query),
@@ -302,9 +290,7 @@ def query_datacite(
     return records
 
 
-def query_seanoe(
-    config: ApiFetcherConfig, session: requests.Session
-) -> list[Record]:
+def query_seanoe(config: ApiFetcherConfig, session: requests.Session) -> list[Record]:
     """
     Query handler for the SEANOE internal search API.
 
@@ -392,9 +378,7 @@ def query_seanoe(
     return records
 
 
-def query_figshare(
-    config: ApiFetcherConfig, session: requests.Session
-) -> list[Record]:
+def query_figshare(config: ApiFetcherConfig, session: requests.Session) -> list[Record]:
     """
     Query handler for Figshare and Figshare-based repositories.
 

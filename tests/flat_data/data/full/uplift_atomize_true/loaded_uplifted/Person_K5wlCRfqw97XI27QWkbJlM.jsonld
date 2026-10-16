@@ -1,0 +1,27 @@
+{
+  "@context": {
+    "@vocab": "https://schema.org/"
+  },
+  "@type": "Person",
+  "@id": "Person_K5wlCRfqw97XI27QWkbJlM.jsonld",
+  "name": "Peter Lustig",
+  "identifier": {
+    "@type": "PropertyValue",
+    "@id": "PropertyValue_CckzGEQ6ZlXpLdnVU8RR32.jsonld"
+  },
+  "givenName": "Peter",
+  "email": "p.lustig@institude.com",
+  "familyName": "Lustig",
+  "affiliation": {
+    "@type": "Organization",
+    "@id": "Organization_2LGRtbuTJhxb2A5DBrOC6A.jsonld"
+  },
+  "funding": {
+    "@type": "MonetaryGrant",
+    "@id": "https://example.com/super-funding-agency.jsonld"
+  },
+  "memberOf": {
+    "@type": "Project",
+    "@id": "https://example.com/super-funded-project.jsonld"
+  }
+}

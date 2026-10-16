@@ -2,7 +2,7 @@
 
 The authoritative description of the internal architecture — package layout,
 the schema.org models, the flat-data load pipeline (extract → transform →
-schema-build), the uplift stage (link / enrich / add / remove), serialization,
+schema-build), the uplift stage (enrich / add / rename / atomize), serialization,
 and the `@id`/IRI conventions — lives in the **Architecture** section of
 [`CLAUDE.md`](../CLAUDE.md) and is kept in sync with the code. Refer to it for
 how the pipeline is structured.

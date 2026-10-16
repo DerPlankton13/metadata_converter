@@ -9,15 +9,14 @@ def to_lookup_key(value: Any) -> str | None:
     the same normalization on both sides makes matches type-independent.
 
     - ``None`` → ``None`` (caller skips these).
-    - ``bool`` → ``"true"`` / ``"false"`` so that ``match_literal = "true"`` matches them.
+    - ``bool`` → ``"true"`` / ``"false"`` so that a filter value of ``"true"`` matches them.
     - ``float`` with an integer value (e.g. ``1.0``) → equivalent int string.
       Pydantic's smart-mode union resolution coerces ``int 1`` to ``float 1.0``
       when the target field's union prefers ``float``; this collapse lets
-      ``match_literal = "1"`` still match such a value.
+      a filter value of ``"1"`` still match such a value.
     - everything else → ``str(value).strip().lower()``.
 
-    Used by ``flat_data.transform.id_refs_broadcasting`` for inline broadcast
-    filtering and by ``uplift.link.LinkApplier`` for cross-file link matching.
+    Used by ``flat_data.transform.id_refs_broadcasting`` for inline broadcast filtering.
     """
     if value is None:
         return None

@@ -1,25 +1,25 @@
 """
 Generate Pydantic v2 models from schema.org JSON-LD.
 
-Run once to produce a static `schemaorg_models.py` file with no runtime cost.
+Run once to produce a static ``schemaorg_models.py`` file with no runtime cost.
 
 Usage
 -----
 Generate all schema.org types::
 
-    python schemaorg_codegen.py
+    python -m metadata_converter.schema_org_models.schema_org_model_generator
 
 Enforce exact field types (no str fallback for typed fields)::
 
-    python schemaorg_codegen.py --strict
+    python -m metadata_converter.schema_org_models.schema_org_model_generator --strict
 
 Write to a custom path::
 
-    python schemaorg_codegen.py --out my_models.py
+    python -m metadata_converter.schema_org_models.schema_org_model_generator --out my_models.py
 
 Then in your application::
 
-    from schemaorg_models import Person
+    from metadata_converter.schema_org_models.schemaorg_models import Person
 
     person = Person(name="Ada Lovelace", email="ada@example.com")
 """
@@ -39,12 +39,20 @@ from collections import defaultdict
 from datetime import date, datetime, time, timedelta
 from keyword import iskeyword
 from pathlib import Path
+from types import UnionType
 from typing import Any, TypedDict, Union, get_args, get_origin
 
 from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator
 from pydantic.fields import FieldInfo
 
-SCHEMA_URL = "https://schema.org/version/latest/schemaorg-current-https.jsonld"
+# Pinned rather than "latest" so regeneration is reproducible. schema.org's own site
+# only ever serves the current release at /version/<n>/ (older versions 404 there),
+# so pinned releases are fetched from the schemaorg GitHub repo, which archives all of them.
+SCHEMA_VERSION = "30.0"
+SCHEMA_URL = (
+    "https://raw.githubusercontent.com/schemaorg/schemaorg/main/data/releases/"
+    f"{SCHEMA_VERSION}/schemaorg-current-https.jsonld"
+)
 SCHEMA_PREFIX = "https://schema.org/"
 DEFAULT_OUTPUT_PATH = Path(__file__).parent / "schemaorg_models.py"
 
@@ -53,7 +61,9 @@ PRIMITIVE_TYPE_MAP: dict[str, Any] = {
     "Text": str,
     "URL": AnyUrl,
     "Boolean": bool,
-    "Number": float,
+    # schema.org's "Number" doesn't distinguish whole numbers from decimals —
+    # accept both int and float so whole numbers aren't forced into float
+    "Number": (int, float),
     "Integer": int,
     "Float": float,
     "Date": date,
@@ -71,6 +81,7 @@ PRIMITIVE_SOURCE: dict[Any, str] = {
     bool: "bool",
     float: "float",
     int: "int",
+    (int, float): "int | float",
     date: "date",
     datetime: "datetime",
     time: "time",
@@ -101,14 +112,32 @@ _SCHEMA_TYPE_REGISTRY: dict[str, type] = {}
 
 class SchemaOrgBase(BaseModel):
     """
-    Base class for all schema.org Pydantic models.
+    Base class for all schema.org based Pydantic models.
 
-    Provides the two fields common to all JSON-LD nodes and configures
-    Pydantic to accept both Python attribute names and JSON-LD @-prefixed
-    aliases interchangeably.
-    Defers build until first model validation to massively reduce run
-    time as most models are not used and ensures that each new
-    assignment is also validated.
+    Provides the fields common to all JSON-LD nodes (``@context``, ``@type``,
+    ``@id``, ``additionalProperty``) and registers every subclass in
+    ``_SCHEMA_TYPE_REGISTRY`` as it is built (see ``__init_subclass__``). That
+    registration also covers project-specific ``PropertyValue`` subtypes such as
+    ``Orcid`` and ``DOI`` in ``custom_models.py``.
+
+    Notes
+    -----
+    Each ``model_config`` setting serves a distinct purpose:
+
+    - ``extra="allow"`` lets unknown fields through instead of rejecting them, so
+      source properties outside the schema.org definition survive — they are
+      folded into ``additionalProperty`` rather than left in ``model_extra``.
+    - ``populate_by_name`` accepts both Python attribute names and the JSON-LD
+      ``@``-prefixed aliases interchangeably.
+    - ``defer_build`` postpones schema build until first validation, massively
+      reducing run time since most models are never used.
+    - ``validate_assignment`` re-validates each attribute on assignment.
+    - ``polymorphic_serialization`` is required because a field typed as a bare
+      schema.org class (e.g. ``Thing``) holding a subtype instance (e.g.
+      ``Product``, resolved by ``discriminate_typed_fields``) would otherwise
+      serialize using the declared class's fields only, silently dropping
+      subtype-only fields like ``category`` — see
+      ``tests/schema/test_polymorphic_serialization.py``.
     """
 
     model_config = ConfigDict(
@@ -116,6 +145,7 @@ class SchemaOrgBase(BaseModel):
         populate_by_name=True,
         defer_build=True,
         validate_assignment=True,
+        polymorphic_serialization=True,
     )
 
     # these are all not schema.org properties, but they are needed for jsonld
@@ -124,33 +154,144 @@ class SchemaOrgBase(BaseModel):
     type: str = Field(alias="@type")
     id: str | None = Field(default=None, alias="@id")
 
-    # this is our modification of schema.org, saying, that we always allow additionalProperty
+    # this is our modification of schema.org: always allowing additionalProperty
     additionalProperty: PropertyValue | str | list[str | PropertyValue] | None = Field(
         default=None
     )
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
-        """Register every subclass in ``_SCHEMA_TYPE_REGISTRY`` as it is defined.
+        """Register every subclass in ``_SCHEMA_TYPE_REGISTRY`` as it is built.
 
-        This is a plain Python hook that is also used by Pydantic, so we do the
-        ``super()`` call to not interfere with pydantic. This covers subclasses
-        defined after this module too (e.g. ``custom_models.py``'s ``Orcid``/``DOI``).
+        This hook is called by Python at class-creation time (i.e. the instantiation of
+        the metaclass for classes).
+        As soon as a SchemaOrgBase subclass is built (e.g. during an import), this hook
+        is called and each subclass is registering itself, independent of where it is
+        defined. In this manner, the subclasses defined outside of this module (e.g.
+        ``custom_models.py``'s ``Orcid``/``DOI``) are registered as well after importing
+        these modules.
         """
+        # Always call super() in __init_subclass__, so any other hook further along
+        # the MRO still runs.
         super().__init_subclass__(**kwargs)
         _SCHEMA_TYPE_REGISTRY[cls.__name__] = cls
+
+    @classmethod
+    @functools.cache
+    def declared_names(cls) -> frozenset[str]:
+        """Return every name a declared property can be addressed by.
+
+        Both the Python field name and its JSON-LD alias count, since
+        ``populate_by_name`` accepts either spelling (``id`` and ``@id`` name the same
+        property). Cached per class: the fields are fixed once the class is built, and
+        ``__setattr__`` consults this on every single assignment.
+
+        Returns
+        -------
+        frozenset[str]
+            The declared field names together with the aliases of those that have one.
+        """
+        return frozenset(
+            {
+                *cls.model_fields.keys(),
+                *(
+                    field_info.alias
+                    for field_info in cls.model_fields.values()
+                    if field_info.alias
+                ),
+            }
+        )
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        """Route assignment of an undeclared property into ``additionalProperty``.
+
+        Construction and assignment must leave the same model: ``Person(bogus="x")``
+        and ``person.bogus = "x"`` have to agree. Construction is covered by the
+        ``convert_extra_props_to_additional_property`` validator below, but that
+        validator cannot cover assignment: Pydantic picks the destination from ``name``
+        before any validator runs, so an undeclared name lands in ``model_extra``, and
+        no return value can retract it — the same data would sit in two places.
+        Intercepting the name here, before Pydantic sees it, is the only point at which
+        the two can be made to agree.
+
+        Parameters
+        ----------
+        name : str
+            Attribute being assigned. Declared properties (by field name or alias) and
+            private attributes are passed straight through to Pydantic.
+        value : Any
+            The value to assign. For an undeclared property it is converted by
+            ``_build_extra_property_value`` and merged into ``additionalProperty``;
+            a value that cannot be converted is dropped, with a logged error.
+        """
+        # a private attribute is machinery, not data, so it must never be published as
+        # a property — it is excluded here rather than left to fall through as an extra
+        if name in type(self).declared_names() or name.startswith("_"):
+            super().__setattr__(name, value)
+            return
+
+        # an undeclared property has no field to clear, so there is nothing to record
+        if value is None:
+            return
+
+        owner = f"{type(self).__name__} {self.id}" if self.id else type(self).__name__
+        built = _build_extra_property_value(name, value, owner)
+        if built is None:
+            return
+
+        # written through Pydantic, so the merged value is validated like any other
+        super().__setattr__(
+            "additionalProperty",
+            _merge_additional_property(self.additionalProperty, [built]),
+        )
 
     @model_validator(mode="before")
     @classmethod
     def discriminate_typed_fields(cls, data: Any) -> Any:
-        """
-        Resolve ``@type``-tagged dict fields to their declared subtype before parsing.
+        """Discriminate Pydantic model fields by the @type/type values from input data.
 
-        A field typed as a bare schema.org class (e.g. ``Thing``) otherwise accepts
-        any dict regardless of its ``@type``. For each field whose annotation names a
-        schema.org class, looks the value's ``@type``/``type`` up in
-        ``_SCHEMA_TYPE_REGISTRY`` and parses it as that subtype instead; raises if
-        ``@type`` is unregistered or not actually a subtype of the field's declared
-        class.
+        This method looks into Pydantic input data (e.g. a dictionary containing
+        key-value pairs that map to the properties and values of a schema.org object)
+        and attempts to discover if any keys in that dictionary map to values that are,
+        themselves, dictionaries that contain a type (@type/type) key. Both spellings
+        are supported. When found, this nested dictionary is converted into an instance
+        of a Pydantic class corresponding to the name of the type (e.g. ``Product``).
+        Thus, the key in the top level dictionary (e.g. instrument) no longer maps to a
+        nested dictionary as a value, but to an instance of a Pydantic class. Since
+        Pydantic does not re-validate already built models, this substitutes for
+        Pydantic's discriminated-union support, which schema.org's hierarchy cannot use
+        directly (its ``type`` field is a plain ``str``, not a ``Literal``-tagged
+        discriminator). This is necessary since Pydantic fails to correctly discriminate
+        child types for complex type annotations containing unions, as it is the case
+        with the schema.org models. In this manner we can ensure that e.g. in the
+        ``Action`` model the instrument property (which is annotated as ``Thing``) is
+        built correctly as ``Product`` (which is a subclass of ``Thing``) if so declared
+        in the input. Otherwise, the instrument would be built as an instance of
+        ``Thing`` with additional properties and a value of ``Product`` for type.
+
+        Parameters
+        ----------
+        cls : type[SchemaOrgBase]
+            The model subclass being validated (e.g. ``Action``); provides
+            ``model_fields`` used to look up each field's annotation.
+        data : Any
+            Raw input which is often a dict[str, Any] but could also be an instance of
+            the model itself or anything else since you can pass arbitrary objects into
+            model_validate.
+
+        Returns
+        -------
+        data : Any
+            The possibly modified input from which the Pydantic model will be built.
+
+        Raises
+        ------
+        pydantic.ValidationError
+            Raised when a nested value's ``@type``/``type`` names a class absent
+            from ``_SCHEMA_TYPE_REGISTRY``, or a registered class that is not a
+            subtype of the field's own annotation. ``_discriminate_value`` raises
+            a plain ``ValueError`` in both cases; Pydantic catches it inside this
+            ``model_validator(mode="before")`` and re-raises it as
+            ``pydantic.ValidationError``.
         """
         if not isinstance(data, dict):
             return data
@@ -162,113 +303,373 @@ class SchemaOrgBase(BaseModel):
                 key = field_info.alias
             else:
                 continue
-            base_classes = _referenced_subtypes(field_info.annotation)
-            if base_classes:
-                data[key] = _discriminate_value(
-                    data[key], base_classes, _SCHEMA_TYPE_REGISTRY
-                )
+            data[key] = _discriminate_value(data[key], field_info.annotation)
+        return data
+
+    @model_validator(mode="before")
+    @classmethod
+    def convert_extra_props_to_additional_property(cls, data: Any) -> Any:
+        """Move input keys that aren't declared properties into ``additionalProperty``.
+
+        Because ``model_config`` sets ``extra="allow"``, keys absent from
+        ``cls.model_fields`` (corresponding to the official schema.org definition) would
+        otherwise be kept unvalidated in ``model_extra``. This validator instead pops
+        every such key, converts each of its values to a ``PropertyValue`` via
+        ``_build_extra_property_value`` (dropping values that cannot be represented,
+        with a logged warning/error), and appends the results to any
+        ``additionalProperty`` already present in the input data. The final list is
+        collapsed to a scalar when it holds exactly one item. Input carrying no extras
+        is left alone, so an ``additionalProperty`` given explicitly keeps its shape.
+
+        Parameters
+        ----------
+        cls : type[SchemaOrgBase]
+            The model subclass being validated; provides ``model_fields`` used to
+            distinguish declared properties (and their aliases) from extras.
+        data : Any
+            Raw input, typically a ``dict[str, Any]`` but possibly any other object
+            passed to ``model_validate``.
+
+        Returns
+        -------
+        data : Any
+            The input with extra keys removed and folded into
+            ``additionalProperty``. Non-dict input is returned unchanged.
+        """
+        if not isinstance(data, dict):
+            return data
+        data = dict(data)
+
+        # identify not specified properties, in the order the document lists them.
+        # in this manner we keep the order deterministic ensuring exact reproducibility
+        # of the results
+        extra_props = [name for name in data if name not in cls.declared_names()]
+
+        # names the entity in log messages about converted or dropped values, so a
+        # user can tell which record a complaint refers to and judge whether it matters
+        entity_id = data.get("@id") or data.get("id")
+        owner = f"{cls.__name__} {entity_id}" if entity_id else cls.__name__
+
+        converted = []
+        for prop in extra_props:
+            value = data.pop(prop)
+            if not isinstance(value, list):
+                value = [value]
+            for item in value:
+                built = _build_extra_property_value(prop, item, owner)
+                if built is not None:
+                    converted.append(built)
+
+        # avoid accidentally modifying a present additionalProperty if nothing converted
+        if converted:
+            data["additionalProperty"] = _merge_additional_property(
+                data.get("additionalProperty"), converted
+            )
         return data
 
 
-@functools.lru_cache(maxsize=None)
-def _referenced_subtypes(annotation: Any) -> set[type]:
-    """
-    Return the ``SchemaOrgBase`` subclasses referenced in a field annotation.
+def _merge_additional_property(existing: Any, new_props: list[PropertyValue]) -> Any:
+    """Merge freshly built ``PropertyValue``s into an existing ``additionalProperty``.
 
-    Recurses through ``Union``/``X | Y`` and ``list``/``set``/``tuple`` wrappers.
-    Memoized: the same annotation object is checked once per validated instance of
-    every class carrying that field.
+    The property holds either a single value or a list of them, so the existing value is
+    normalised to a list, extended, and collapsed back to a scalar if only one item
+    remains.
 
     Parameters
     ----------
-    annotation : Any
-        A resolved (non-string) field type annotation.
-
-    Returns
-    -------
-    set[type]
-        The schema.org classes referenced in ``annotation``, possibly empty.
-    """
-    origin = get_origin(annotation)
-    bases: set[type] = set()
-    if _is_union(origin) or origin in (list, set, tuple):
-        for arg in get_args(annotation):
-            bases |= _referenced_subtypes(arg)
-    elif isinstance(annotation, type) and issubclass(annotation, SchemaOrgBase):
-        bases.add(annotation)
-    return bases
-
-
-def _is_union(origin: Any) -> bool:
-    """Return whether a ``get_origin()`` result is a union — either ``Union[X, Y]`` or ``X | Y``.
-
-    The two spellings produce different origins (``typing.Union`` vs. ``types.UnionType``),
-    so both must be checked.
-    """
-    return origin is Union or getattr(origin, "__name__", "") == "UnionType"
-
-
-def _discriminate_value(
-    value: Any, base_classes: set[type], registry: dict[str, type]
-) -> Any:
-    """
-    Resolve a raw field value's ``@type``-tagged dict(s) to a registered subtype.
-
-    Parameters
-    ----------
-    value : Any
-        The raw value assigned to a field — a dict, a list, or anything else.
-    base_classes : set[type]
-        The schema.org classes declared for this field (from ``_referenced_subtypes``).
-    registry : dict[str, type]
-        Maps schema.org type names to their Pydantic model classes.
+    existing : Any
+        The current ``additionalProperty``: ``None``, a single item, or a list. Never
+        modified in place, since it may still be referenced by the caller's input.
+    new_props : list[PropertyValue]
+        The values to append. Expected to be non-empty — an empty list would collapse a
+        single existing item out of its list, changing shape for no reason.
 
     Returns
     -------
     Any
-        ``value`` with any resolvable dict(s) replaced by parsed subtype instances.
-        Non-dict values, and dicts with no ``@type``/``type`` key, pass through
+        The merged value: a list, or the item itself when exactly one remains.
+    """
+    if existing is None:
+        merged = []
+    elif isinstance(existing, list):
+        merged = list(existing)
+    else:
+        merged = [existing]
+
+    merged.extend(new_props)
+    return merged if len(merged) > 1 else merged[0]
+
+
+def _build_extra_property_value(
+    prop: str, item: Any, owner: str
+) -> PropertyValue | None:
+    """Build a ``PropertyValue`` for one extra-property item, or drop it.
+
+    Date/time/URL values are stringified first, since ``PropertyValue.value`` does not
+    accept those types directly. A plain ``PropertyValue`` is then built directly
+    when possible. If that fails and ``item`` is a dict or an already-built model, it is
+    retried as a ``valueReference`` carrying the object's ``name`` as the ``value`` —
+    the schema.org-sanctioned way to point a property value at a controlled-vocabulary
+    term. Otherwise, the item is dropped, with a logged error.
+
+    Parameters
+    ----------
+    prop : str
+        The property name ``item`` was found under; carried as ``name`` on the
+        returned ``PropertyValue``.
+    item : Any
+        One value of the extra property; a plain scalar, or a nested schema.org object
+        given either as a dict or as an already-built model.
+    owner : str
+        The entity ``item`` was found on — its ``@type``, plus its ``@id`` when it has
+        one. Only used to identify the record in log messages, so that a conversion
+        that deviated from schema.org or dropped data can be traced back to it.
+
+    Returns
+    -------
+    PropertyValue or None
+        A ``PropertyValue`` wrapping ``item`` (or an object built from it), or
+        ``None`` if ``item`` could not be converted and was dropped.
+
+    Raises
+    ------
+    NotImplementedError
+        If ``item`` is an instance of a class listed in
+        ``_unsupported_nested_value_types`` — a type that could only be represented
+        by widening ``PropertyValue.value`` past the schema.org definition. How to
+        handle those is undecided, so the case is surfaced rather than guessed at.
+    """
+    # except anything that can easily be converted to a string and do not notify about it
+    if isinstance(item, (date, datetime, time, timedelta, AnyUrl)):
+        item = str(item)
+    try:
+        return PropertyValue(name=prop, value=item)
+    except ValidationError:
+        logger.debug(
+            "%s: could not directly build a PropertyValue for %s from %s",
+            owner,
+            prop,
+            item,
+        )
+
+    # normalise item to be a dict, so an already-built model takes the same path as a
+    # freshly constructed one
+    if isinstance(item, SchemaOrgBase):
+        item = item.model_dump(by_alias=True, exclude_none=True)
+
+    if isinstance(item, dict):
+        type_name = item.get("@type") or item.get("type")
+        # a list-valued or absent name has no single literal to represent the term,
+        # so value stays unset; valueReference still carries the whole object
+        name = item.get("name")
+        try:
+            return PropertyValue(
+                name=prop,
+                value=name if isinstance(name, str) else None,
+                valueReference=item,
+            )
+        except ValidationError:
+            logger.debug(
+                "%s: could not use %s as a valueReference for %s",
+                owner,
+                type_name,
+                prop,
+            )
+
+        resolved = _SCHEMA_TYPE_REGISTRY.get(type_name)
+        if resolved is not None and issubclass(
+            resolved, _additional_property_extra_types()
+        ):
+            raise NotImplementedError(
+                f"{owner}: {prop}={item} can only be represented by widening "
+                f"PropertyValue.value beyond the schema.org definition to admit "
+                f"{type_name}. Such a value cannot be read back by normal "
+                f"validation, so it is not written. Decide whether {type_name} "
+                f"should become readable or be dropped, then handle it explicitly."
+            )
+            # unreachable while the decision above is open; kept as the widening
+            # implementation to restore once it is made
+            try:
+                built = resolved(**item)
+            except ValidationError:
+                logger.error("Could not build %s for %s from %s", type_name, prop, item)
+                return None
+            logger.info(
+                "Created a PropertyValue using a value of type %s which "
+                "is outside of the schema.org definition.",
+                type_name,
+            )
+            return PropertyValue.model_construct(name=prop, value=built)
+
+    logger.error(
+        "%s: could not add %s to additionalProperty since %s could not be "
+        "converted to a PropertyValue. Dropping %s from the data now.",
+        owner,
+        prop,
+        item,
+        prop,
+    )
+    return None
+
+
+@functools.cache
+def _additional_property_extra_types() -> tuple[type, ...]:
+    """Return the schema.org classes allowed as a nested ``PropertyValue.value``.
+
+    This is the extension point for widening what ``_build_extra_property_value``
+    accepts as a nested value inside ``additionalProperty``: add a class name here
+    (resolved via ``_SCHEMA_TYPE_REGISTRY``) to permit instances of it, beyond
+    the primitive value types ``PropertyValue.value`` already accepts. Cached since
+    the registry is stable once all modules have been imported.
+
+    Widening is currently not implemented: reaching a listed class raises
+    ``NotImplementedError``, because such a value can be written but not read back
+    by normal validation, which makes load and uplift disagree about the same file.
+    ``DefinedTerm`` is deliberately absent — it is expressible as a
+    ``valueReference``, so a ``DefinedTerm`` reaching the fallback is a malformed
+    instance (a data problem) rather than an unrepresentable type (a design
+    decision), and is dropped with a logged error like any other unconvertible item.
+
+    Returns
+    -------
+    tuple[type, ...]
+        The classes (currently only ``PropertyValueSpecification``) that would need
+        a widened ``PropertyValue.value`` to be carried inside an
+        ``additionalProperty`` entry.
+    """
+    return tuple(
+        _SCHEMA_TYPE_REGISTRY[name] for name in ("PropertyValueSpecification",)
+    )
+
+
+def _discriminate_value(raw_input: Any, annotation: Any) -> Any:
+    """
+    Resolve ``raw_input``'s concrete type from its ``@type``/``type`` key, if present.
+
+    If the input specifies its own model type via its ``@type/type`` key, it is checked
+    that this specified model is a) a registered schema model (i.e. a member of
+    ``_SCHEMA_TYPE_REGISTRY``) and b) a child class of one of the model types specified
+    in the corresponding field annotation (``annotation``). If this is the case, it
+    builds a validated model of the specified type and returns it. In this manner,
+    Pydantic will skip validation for this property of the owning model.
+    Resolution reaches arbitrarily nested structures, not just the top level: list
+    items are resolved directly by this function, and a resolved dict's own nested
+    fields are resolved in turn as its subtype is validated.
+
+    Parameters
+    ----------
+    raw_input : Any
+        The raw, unvalidated data assigned to a field — a dict, a list, or anything
+        else.
+    annotation : Any
+        The field's resolved (non-string) type annotation, passed to
+        ``_collect_annotated_schema_types`` to determine the candidate subtypes.
+
+    Returns
+    -------
+    Any
+        A dict with a resolvable ``@type``/``type`` is replaced by a parsed subtype
+        instance. A list is replaced by a new list with each item resolved the same
+        way. Any other input, and dicts with no ``@type``/``type`` key, pass through
         unchanged.
 
     Raises
     ------
     ValueError
-        If ``@type``/``type`` names something not in ``registry``, or a registered
-        type that is not a subtype of any of ``base_classes``.
+        If ``@type``/``type`` names a type not in ``_SCHEMA_TYPE_REGISTRY``, or a
+        registered type that is not a subtype of any of the types referenced by
+        ``annotation``.
     """
-    if isinstance(value, list):
-        return [_discriminate_value(item, base_classes, registry) for item in value]
-    if isinstance(value, dict) and base_classes:
-        type_name = value.get("@type") or value.get("type")
+    # this inline call makes this function call part of the recursion, but since this
+    # function is cached, this should be cheap
+    annotated_schema_types = _collect_annotated_schema_types(annotation)
+    if isinstance(raw_input, list):
+        return [_discriminate_value(item, annotation) for item in raw_input]
+    # just return the raw input for non-dict (str, float, class) values and no
+    # annotated model
+    if isinstance(raw_input, dict) and annotated_schema_types:
+        type_name = raw_input.get("@type") or raw_input.get("type")
         if type_name is not None:
-            cls = registry.get(type_name)
-            if cls is None or not any(issubclass(cls, base) for base in base_classes):
-                declared = ", ".join(sorted(base.__name__ for base in base_classes))
+            cls = _SCHEMA_TYPE_REGISTRY.get(type_name)
+            if cls is None or not any(
+                issubclass(cls, schema_type) for schema_type in annotated_schema_types
+            ):
+                declared = ", ".join(
+                    sorted(
+                        schema_type.__name__ for schema_type in annotated_schema_types
+                    )
+                )
                 raise ValueError(f"{type_name!r} is not a known subtype of {declared}")
-            return cls.model_validate(value)
-    return value
+            return cls.model_validate(raw_input)
+    return raw_input
 
 
-def validate_strict(model) -> None:
-    """Raise if a parsed model — or any nested model — has fields not in the schema.
+@functools.lru_cache(maxsize=None)
+def _collect_annotated_schema_types(type_annotation: Any) -> set[type]:
+    """Collect all ``SchemaOrgBase`` subclasses contained in the type annotation.
 
-    Models parse with ``extra="allow"``, which keeps unknown fields in ``model_extra``
-    instead of rejecting them. This walks the parsed object and raises on the first
-    offender, at any depth.
+    If the type annotation is a ``Union``/``X | Y`` or ``list``/``set``/``tuple`` it
+    recursively searches for the SchemaOrgBase subclasses. Note that any class
+    subclassing from SchemaOrgBase is accepted, independent of the fact, whether it is
+    an actual representation of a schema.org type or a custom addition.
+
+    This function is cached (memoized) because it is called many times with exactly the
+    same input and thus caching saves a lot of redundant computation. The schema.org
+    models share many same type annotations, which would have to be recomputed during
+    each instantiation of a model.
+
+    Parameters
+    ----------
+    type_annotation : Any
+        A resolved (non-string) type annotation for a single Pydantic model field —
+        e.g. a class, a ``list``/``set``/``tuple`` generic alias, or a union.
+
+    Returns
+    -------
+    set[type]
+        The SchemaOrgBase child classes referenced in ``type_annotation``,
+        possibly empty.
+
+    Notes
+    -----
+    ``lru_cache`` returns the same ``set`` object on every call and not a copy,
+    so callers must not mutate the returned set.
     """
-    if isinstance(model, list):
-        for item in model:
-            validate_strict(item)
-        return
-    if not isinstance(model, BaseModel):
-        return
-    if model.model_extra:
-        raise ValueError(
-            f"{type(model).__name__} has fields outside the schema.org model: "
-            f"{sorted(model.model_extra)}"
-        )
-    for field_name in type(model).model_fields:
-        validate_strict(getattr(model, field_name))
+    annotated_schema_types: set[type] = set()
+    if _is_wrapped(type_annotation):
+        for arg in get_args(type_annotation):
+            annotated_schema_types |= _collect_annotated_schema_types(arg)
+    # we need to check that type_annotation is a class to safely call issubclass
+    elif isinstance(type_annotation, type) and issubclass(
+        type_annotation, SchemaOrgBase
+    ):
+        annotated_schema_types.add(type_annotation)
+    return annotated_schema_types
+
+
+def _is_wrapped(type_annotation: Any) -> bool:
+    """Return whether ``type_annotation`` is a union or a ``list``/``set``/``tuple``.
+
+    Both wrap other types in their ``get_args()`` rather than being a class
+    themselves, so the caller must unwrap them first to access the types.
+
+    Parameters
+    ----------
+    type_annotation : Any
+        A resolved (non-string) type annotation for a single Pydantic model field —
+        e.g. a class, a ``list``/``set``/``tuple`` generic alias, or a union.
+
+    Returns
+    -------
+    bool
+        ``True`` if ``type_annotation`` is a union or a ``list``/``set``/``tuple``,
+        ``False`` otherwise.
+    """
+    type_origin = get_origin(type_annotation)
+    # Union is looked for twice, since it has two spellings with different origins
+    # (``typing.Union`` and ``types.UnionType``).
+    is_union = type_origin is Union or type_origin is UnionType
+    return is_union or type_origin in (list, set, tuple)
 
 
 def local(iri: str) -> str:
@@ -366,11 +767,12 @@ def schema_ids(node: dict, key: str) -> list[str]:
     val = node.get(key, [])
     if isinstance(val, dict):
         val = [val]
-    return [
+    # Sorted so callers get a deterministic order
+    return sorted(
         safe_name(local(item["@id"]))
         for item in val
         if isinstance(item, dict) and item.get("@id", "").startswith("schema:")
-    ]
+    )
 
 
 def parse_schema(data: dict) -> tuple[dict[str, ClassDef], dict[str, list[FieldDef]]]:
@@ -470,12 +872,18 @@ def resolve_type(allowed_types: list[str], strict: bool) -> str:
         # No rangeIncludes declared in schema.org — type is unknown.
         return "Any | None"
 
+    # sorted so union member order is deterministic
     source_names: list[str] = []
-    for type_name in allowed_types:
+    for type_name in sorted(allowed_types):
         if type_name in PRIMITIVE_TYPE_MAP:
             source_names.append(PRIMITIVE_SOURCE[PRIMITIVE_TYPE_MAP[type_name]])
         else:
             source_names.append(type_name)
+
+    # composite entries (e.g. "int | float" for "Number") need to be split
+    # before deduping
+    source_names = [t for name in source_names for t in name.split(" | ")]
+    source_names = list(dict.fromkeys(source_names))
 
     if not strict and "str" not in source_names:
         source_names.append("str")
@@ -504,6 +912,14 @@ def build_models(
     -------
     dict[str, dict]
         Metadata for each class, keyed by Python-safe name.
+
+    Notes
+    -----
+    Fields are sorted alphabetically by name rather than kept in the order
+    ``class_fields`` lists them. That order otherwise follows wherever a property
+    happens to sit in the source JSON-LD's ``@graph`` list, which schema.org's own
+    site (but not every mirror of a pinned release) happens to pre-sort
+    alphabetically — sorting explicitly here keeps output stable across sources.
     """
     return {
         class_name: {
@@ -520,7 +936,9 @@ def build_models(
                         else None,
                     ),
                 )
-                for field in class_fields.get(class_name, [])
+                for field in sorted(
+                    class_fields.get(class_name, []), key=lambda f: f["name"]
+                )
             },
         }
         for class_name, class_def in classes.items()
@@ -583,24 +1001,37 @@ def render_module(models: dict[str, dict], strict: bool) -> str:
         "from __future__ import annotations",
         "",
         "import functools",
+        "import logging",
         "from datetime import date, datetime, time, timedelta",
+        "from types import UnionType",
         "from typing import Any, Union, get_args, get_origin",
         "",
-        "from pydantic import AnyUrl, BaseModel, ConfigDict, Field, model_validator",
-        "",
+        "from pydantic import (",
+        "    AnyUrl,",
+        "    BaseModel,",
+        "    ConfigDict,",
+        "    Field,",
+        "    ValidationError,",
+        "    model_validator,",
+        ")",
         "",
         "_SCHEMA_TYPE_REGISTRY: dict[str, type] = {}",
+        "logger = logging.getLogger(__name__)",
         "",
         "",
         inspect.getsource(SchemaOrgBase),
         "",
-        inspect.getsource(validate_strict),
+        inspect.getsource(_merge_additional_property),
         "",
-        inspect.getsource(_is_union),
+        inspect.getsource(_build_extra_property_value),
         "",
-        inspect.getsource(_referenced_subtypes),
+        inspect.getsource(_additional_property_extra_types),
         "",
         inspect.getsource(_discriminate_value),
+        "",
+        inspect.getsource(_collect_annotated_schema_types),
+        "",
+        inspect.getsource(_is_wrapped),
         "",
     ]
 

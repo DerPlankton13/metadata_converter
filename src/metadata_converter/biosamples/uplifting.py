@@ -2,7 +2,7 @@ import logging
 import re
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Literal
+from typing import Any
 
 from metadata_converter.biosamples.schemas import (
     SRA,
@@ -13,9 +13,33 @@ from metadata_converter.biosamples.schemas import (
 logger = logging.getLogger(__name__)
 
 
-def get_property(sample_record: dict, prop_name: str) -> dict | None:
-    props = sample_record["mainEntity"]["additionalProperty"]
+def to_number(value: str) -> int | float | str:
+    """Convert string to int or float if feasible.
 
+    Ensures that ints are not converted to floats
+    and that e.g. identifiers with leading zeros
+    are not modified by ensuring that the string
+    representation of the results corresponds to
+    the input.
+    """
+    try:
+        as_int = int(value)
+        if str(as_int) == value:
+            return as_int
+    except (ValueError, TypeError):
+        pass
+    try:
+        as_float = float(value)
+        if str(as_float) == value:
+            return as_float
+    except (ValueError, TypeError):
+        pass
+    return str(value)
+
+
+def get_property(sample_record: dict, prop_name: str) -> dict | None:
+    """Fetch one of the additionalProperty entries from the sample record."""
+    props = sample_record["mainEntity"]["additionalProperty"]
     results = [p for p in props if p.get("name") == prop_name]
 
     if len(results) == 0:
@@ -34,13 +58,14 @@ def get_property(sample_record: dict, prop_name: str) -> dict | None:
 
 
 def get_value(sample_record: dict, prop_name: str) -> str | None:
-    """
-    Safely extract a property value from the data without raising exceptions.
+    """Safely extract the value of an additionalProperty from sample_record.
+
+    Exceptions are logged instead of raised.
     Returns None if the property is not found.
     """
     if prop := get_property(sample_record, prop_name):
         try:
-            return prop["value"]
+            return to_number(prop["value"])
         except KeyError:
             logger.debug("Property '%s' has no 'value' key: %s", prop_name, prop)
         except Exception as e:
@@ -50,9 +75,10 @@ def get_value(sample_record: dict, prop_name: str) -> str | None:
 
 def get_value_with_unit(
     sample_record: dict, prop_name: str
-) -> tuple[str | None, str | Literal["Unit unknown"]]:
-    """
-    Safely extract a property value and its unit from the data without raising exceptions.
+) -> tuple[str | None, str | None]:
+    """Safely extract the value and unit of an additionalProperty from sample_record.
+
+    Exceptions are logged instead of raised.
     Returns the default values if the property is not found.
 
     Returns
@@ -60,10 +86,10 @@ def get_value_with_unit(
     tuple[Any, Any]
         (value, unit) tuple
     """
-    value, unit = None, "Unit unknown"
+    value, unit = None, None
     if prop := get_property(sample_record, prop_name):
         try:
-            value = prop["value"]
+            value = to_number(prop["value"])
             unit = prop["unitText"]
         except KeyError:
             logger.debug(
@@ -181,6 +207,22 @@ class Term:
         )
 
 
+def handle_dates(value: Any) -> str | None:
+    """Ensures dates are handled correctly by converting them to strings
+
+    Since converting all values to numbers, if possible, e.g. entries
+    containing only a year value, will be parsed by Pydantic to date(2018)
+    if the property can have a date type. Then the int 2018 is read
+    as unix epoch timestamp, resulting in invalid data.
+    As a simple fix, the dates and times are converted to strings, if they
+    have a meaningful string representation. Otherwise, they are converted
+    to None, indicating not value.
+    """
+    if not value:
+        return None
+    return str(value)
+
+
 def build_subject_of(term: Term) -> dict:
     """Build a subjectOf CreativeWork dict from a Term."""
     subject_of: dict = {
@@ -190,7 +232,7 @@ def build_subject_of(term: Term) -> dict:
         "name": term.name,
     }
     if term.defined_termset:
-        subject_of["partOf"] = term.defined_termset
+        subject_of["isPartOf"] = term.defined_termset
     return subject_of
 
 
@@ -235,6 +277,61 @@ def build_defined_term(value: str) -> dict[str, str] | None:
     return defined_term_dict
 
 
+def single_or_list(items: list, multi: bool):
+    """Return items unwrapped to a single element unless the property is multi-valued."""
+    return items if multi else items[0]
+
+
+def convert_to_https(link: str) -> str:
+    return link.replace("http://", "https://")
+
+
+def clean_value_reference(
+    existing: dict | list[dict], multi: bool, prop_name: str
+) -> dict | list[dict] | None:
+    """Normalize an existing valueReference: drop entries with no real info, fix http links.
+
+    Returns None if nothing meaningful remains.
+    """
+    entries = existing if isinstance(existing, list) else [existing]
+    if not multi and len(entries) > 1:
+        raise ValueError(
+            f"Expected valueReference to be a dict or single-element list for a "
+            f"single value, got list of length {len(entries)} ({entries}) for "
+            f"property '{prop_name}'"
+        )
+    entries = [e for e in entries if any(v for k, v in e.items() if k != "@type")]
+    entries = [{k: convert_to_https(v) for k, v in e.items()} for e in entries]
+    return single_or_list(entries, multi) if entries else None
+
+
+def split_value(prop_name: str, value) -> list[str]:
+    """Split a raw property value into its stripped parts.
+
+    Multiple values are normally joined with "|", e.g.
+    ``"marine biome (ENVO:00000447)|estuarine biome (ENVO:01000020)"``, and
+    the caller then builds one valueReference per part. A few relationship-style
+    properties (currently "is control of") join identifiers with "," instead.
+    Comma is only used for those, because it can also occur inside ordinary
+    free-text values.
+
+    Parameters
+    ----------
+    prop_name : str
+        Name of the property; selects the separator.
+    value
+        Raw value; converted with ``str`` before splitting.
+
+    Returns
+    -------
+    list[str]
+        The stripped parts; a single-element list if there is nothing to split.
+    """
+    whitelist_comma_separated = {"is control of"}
+    separator = "," if prop_name in whitelist_comma_separated else "|"
+    return [p.strip() for p in str(value).split(separator)]
+
+
 def build_property(
     sample_record: dict, prop_name: str, prop_id: str | None = None
 ) -> dict | None:
@@ -245,37 +342,26 @@ def build_property(
     if prop_id:
         prop["propertyID"] = prop_id
 
-    parts = [p.strip() for p in str(prop.get("value", "")).split("|")]
+    parts = split_value(prop_name, prop.get("value", ""))
     multi = len(parts) > 1
     if multi:
-        prop["value"] = parts
+        prop["value"] = [to_number(part) for part in parts]
+    else:
+        prop["value"] = to_number(parts[0])
 
     # try to build value references from the value parts and overwrite any existing ones
     defined_terms = [dt for p in parts if (dt := build_defined_term(p)) is not None]
     if defined_terms:
-        prop["valueReference"] = defined_terms if multi else defined_terms[0]
+        prop["valueReference"] = single_or_list(defined_terms, multi)
     # otherwise check if there is an existing value reference and clean it up if needed
     elif existing := prop.get("valueReference"):
-        entries = existing if isinstance(existing, list) else [existing]
-        if not multi and len(entries) > 1:
-            raise ValueError(
-                f"Expected valueReference to be a dict or single-element list for a single value, "
-                f"got list of length {len(entries)} ({entries}) for property '{prop_name}'"
-            )
-        # remove entries that contain no information beyond @type
-        entries = [e for e in entries if any(v for k, v in e.items() if k != "@type")]
-        # fix http links
-        entries = [{k: convert_to_https(v) for k, v in e.items()} for e in entries]
-        if entries:
-            prop["valueReference"] = entries if multi else entries[0]
-        else:
+        cleaned = clean_value_reference(existing, multi, prop_name)
+        if cleaned is None:
             prop.pop("valueReference")
+        else:
+            prop["valueReference"] = cleaned
 
     return prop
-
-
-def convert_to_https(link: str) -> str:
-    return link.replace("http://", "https://")
 
 
 class SampleRecord:
@@ -394,19 +480,6 @@ class ProductBuilder(BaseBuilder):
             )
         return self.unwrap_single(identifier_list)
 
-    def build_manufacturer(self) -> list[dict] | dict:
-        manufacturer = [
-            {
-                "@type": "ResearchProject",
-                "@id": "https://github.com/DerPlankton13/B5D/blob/main/GeneralSchemas/project_b5d.jsonld",
-            }
-        ]
-        if project_name := self.record["project name"]:
-            # do not add the B5D project a second time
-            if project_name.lower() not in ["BIOcean5D".lower(), "b5d"]:
-                manufacturer.append({"@type": "ResearchProject", "name": project_name})
-        return self.unwrap_single(manufacturer)
-
     def build_keywords(self) -> list[dict] | None:
         keywords = []
         desired_properties = [
@@ -422,19 +495,27 @@ class ProductBuilder(BaseBuilder):
                     keywords.append(prop)
         return keywords if len(keywords) > 0 else None
 
+    def build_additional_type(self):
+        additional_type = [
+            convert_to_https(t) for t in self.record.base_value("additionalType")
+        ]
+        if "Sample" in additional_type:
+            additional_type[additional_type.index("Sample")] = (
+                "https://bioschemas.org/Sample"
+            )
+        return additional_type if len(additional_type) > 1 else additional_type[0]
+
     def build(self) -> dict:
         return {
             "@context": {"@vocab": "https://schema.org/"},
             "@type": "Product",
-            "additionalType": [
-                convert_to_https(t) for t in self.record.base_value("@type")
-            ],
+            "additionalType": self.build_additional_type(),
             "@id": f"Product_{self.record.sample_id}.jsonld",
             "identifier": self.build_identifiers(),
             "name": self.record.base_value("name"),
             "description": self.record["sample description"],
             "url": convert_to_https(self.record.base_value("sameAs")),
-            "productionDate": self.record["collection date"],
+            "productionDate": handle_dates(self.record["collection date"]),
             "material": self.record["environmental medium"],
             "countryOfOrigin": self.record["geographic location (country and/or sea)"],
             "funding": {
@@ -458,14 +539,22 @@ class ActionBuilder(BaseBuilder):
         loc_name = ", ".join(filter(None, [region, country]))
 
         # adds geo Property to location as type GeoCoordinates if values are provided
-        geo_fields = {
-            "latitude": self.record.with_unit("geographic location (latitude)"),
-            "longitude": self.record.with_unit("geographic location (longitude)"),
-            "elevation": self.record.with_unit("elevation"),
-        }
+        elevation, elevation_unit = self.record.with_unit("elevation")
+        if (
+            elevation is not None
+            and elevation_unit is not None
+            and elevation_unit != "m"
+        ):
+            elevation = f"{elevation} {elevation_unit}"
+            logger.warning(
+                f"Elevation contained a unit that does not correspond to 'm': {elevation_unit}"
+            )
         geo = {
-            key: f"{value} {unit}" for key, (value, unit) in geo_fields.items() if value
+            "latitude": self.record["geographic location (latitude)"],
+            "longitude": self.record["geographic location (longitude)"],
+            "elevation": elevation,
         }
+        geo = {k: v for k, v in geo.items() if v is not None}
 
         # We can add additionalProperty to location
         additional_property = []
@@ -622,7 +711,7 @@ class ActionBuilder(BaseBuilder):
                 "@type": "Product",
                 "@id": f"Product_{self.record.sample_id}.jsonld",
             },
-            "startTime": self.record["collection date"],
+            "startTime": handle_dates(self.record["collection date"]),
             "location": self.build_location(),
             "instrument": self.build_instrument(),
             "object": self.build_object(),

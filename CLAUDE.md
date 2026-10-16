@@ -79,8 +79,11 @@ Do not jump straight to implementation on a multi-part task.
 Docstrings use NumPy style. Simple functions get a single-line docstring; only use the full NumPy sections (Parameters,
 Returns, etc.) when the function is non-trivial.
 
-For Pydantic models, document fields with `Field(description=...)` instead of a class-level NumPy Parameters section —
-the fields already express type and default declaratively, so a class docstring should be at most one line.
+For Pydantic models, document individual fields with `Field(description=...)` instead of a class-level NumPy Parameters
+section — the fields already express type and default declaratively, so per-field documentation belongs on the field,
+not in the class docstring. This does not cap the class docstring at one line: legitimate class-level rationale (design
+decisions, why a `model_config` setting is set the way it is, cross-references to related code or tests) still belongs
+in the class docstring and may use the full NumPy sections.
 
 A leading underscore on a function, method, or variable name is a strong cultural signal in Python: "do not import or
 reference this from outside the module/class." Plain names are the default — even for module-internal helpers. Reserve
@@ -178,9 +181,9 @@ There are three source types plus a separate uplift config:
 - **`api`** — queries external APIs (currently Zenodo) and fetches JSON-LD records via either an export
   endpoint or HTML scraping.
 - **uplift config** — no `source_type`; used with `converter uplift` to post-process already-loaded JSON-LD via
-  declarative rules. Operations: **link** (resolve cross-references), **enrich** (wrap a scalar in a custom
-  PropertyValue subclass), **add** (set a fixed value), **rename** (move a property's value to a different name), and
-  **remove** (filter scaffolding items out of a list). See the generic uplift subsection below.
+  declarative rules. Operations: **enrich** (wrap a scalar in a custom PropertyValue subclass), **add** (set a fixed
+  value), **rename** (move a property's value to a different name), and **atomize** (extract blank nodes into their own
+  entities). See the generic uplift subsection below.
 
 ### Where each transformation belongs
 
@@ -204,13 +207,18 @@ nature:
   biosamples only does so one stage later, at uplift (`Product`/`Action` construction). See
   [`TODO.md`](TODO.md#load_biosamples-skips-the-repairvalidation-that-load-does-elsewhere) — this needs a decision
   before being treated as either a bug or a documented permanent asymmetry.
-- **Uplift (entity space)** — declarative post-processing that must be written into the artifact: resolving
-  cross-references by naming convention (relative-IRI assignment), enriching scalars, scrubbing scaffolding.
+- **Uplift (entity space)** — declarative post-processing that must be written into the artifact: enriching
+  scalars, adding fixed values, renaming properties, and atomizing blank nodes into their own entities.
 - **Graph space (downstream `paper` repo, in SPARQL)** — true inferences/derivations (transitive closure, cross-source
   harmonisation). A SPARQL engine is intentionally *not* a converter dependency yet; defer such features to the graph.
 
-Corollary: linking scaffolding (markers needed only to resolve a reference) should ride as `additionalProperty` entries
-and be removed at uplift — never become first-class stub entities that merely duplicate another entity's identity.
+**Prefer the adequate tool over the existing code structure.** When a transformation's nature points at a different
+tool than the one currently doing the job — e.g. entity resolution and cross-source matching are what a SPARQL engine
+is *for*, in a way that file-by-file Python transforms in the converter are not — move the logic to that tool rather
+than accreting more matching machinery around a boundary that no longer fits, even if that means a bigger structural
+leap during a rework than the smallest patch would need. This project is still early enough, and both repos are
+controlled by us, that the cost of such a leap is cheap and the cost of staying stuck in the original structure
+compounds. Don't let "we already built X here" be the reason X keeps growing where it is.
 
 ### Schema.org models (`src/metadata_converter/schema_org_models/`)
 
@@ -293,6 +301,13 @@ must have a `type` key (schema.org class name) and then property-to-column mappi
 instance per value; a literal-only mapping emits a constant; output lists are collapsed to scalars where possible
 (one value → not a list).
 
+Fan-out applies to any multi-value column in a nested block, so the config author must decide whether a given column
+*identifies* the nested node or merely *describes* it. `agent.identifier` should fan out — two ORCIDs are two people —
+whereas fanning a descriptor like `keywords` over a block identified by `name` produces near-duplicate nodes and
+defeats the content-hash deduplication in `uplift/atomize.py`. Descriptive multi-value columns belong on the parent
+entity; when the parent class does not declare the property, it is folded into `additionalProperty` as one
+`PropertyValue` per value. See "Splitting multi-value cells" in [`docs/usage.md`](docs/usage.md).
+
 Cleaning plugins subclass `Plugin` (`transform/cleaning_plugin.py`) and implement `run(data: dict[str, DataFrame]) ->
 dict[str, DataFrame]` — they receive the whole dataset (so they can read one sheet and write another) and run before
 the built-in cleaning steps. They are discovered dynamically from a `plugin_dir`. After cleaning, sheets with no
@@ -302,32 +317,27 @@ the built-in cleaning steps. They are discovered dynamically from a `plugin_dir`
 
 A **project-agnostic** post-processing stage over already-loaded JSON-LD — it knows nothing about specific @types or
 properties; the rules in `GenericUpliftConfig` drive everything. Already lives in its own top-level package (moved out
-of `flat_data`); `link.py` now imports `to_lookup_key` from `utils/lookup_key.py`, not `flat_data.transform` — no
-remaining coupling to `flat_data`. Do not confuse this with biosamples `uplifting.py`, which is project-*specific* data
+of `flat_data`) with no coupling to it. Do not confuse this with biosamples `uplifting.py`, which is project-*specific* data
 transformation, not generic graph post-processing — the shared name is historical.
 
 `run_uplift` loads every `*.jsonld` from `input_dir` into an `EntityStore` (indexed by `@type`), applies each operation
 in a fixed order, then writes every entity to `output_dir`:
 
-1. **`LinkApplier`** (`link.py`) — `LinkRule`: resolve cross-references; set a property to a ref (or list of refs) to
-   matched candidates, optionally via a `ref_id_template`.
-2. **`EnrichmentApplier`** (`enrichment.py`) — `EnrichmentRule`: wrap a scalar in a custom PropertyValue subclass
+1. **`EnrichmentApplier`** (`enrichment.py`) — `EnrichmentRule`: wrap a scalar in a custom PropertyValue subclass
    (`enrich_as`, e.g. `Orcid`); the class's validators fill the enriched fields. One value per entity (a multi-value
    list raises — an entity carries at most one identifier of a given type).
-3. **`AddApplier`** (`add.py`) — `AdditionRule`: set a property to a fixed constant value (a literal, or a node built
+2. **`AddApplier`** (`add.py`) — `AdditionRule`: set a property to a fixed constant value (a literal, or a node built
    recursively from a `type`-tagged mapping) on every entity of a type, overwriting any existing value.
-4. **`RenameApplier`** (`rename.py`) — `RenameRule`: move a property's value from `source_property` to
+3. **`RenameApplier`** (`rename.py`) — `RenameRule`: move a property's value from `source_property` to
    `target_property` on every entity of a type (overwriting any existing value there), clearing `source_property`;
    entities with no value at `source_property` are left untouched.
-5. **`RemoveApplier`** (`remove.py`) — `RemovalRule`: filter items out of a list-valued property by a `where` predicate
-   (`equals`/`contains` on a possibly nested subproperty, string-form, case-sensitive); runs last to scrub linking
-   scaffolding.
+4. **`AtomizeApplier`** (`atomize.py`) — if `config.atomize` (default on): extract every blank node into its own
+   content-hashed entity and leave a bare reference (`@type` + `@id` only) behind.
 
-`select.py` holds the shared `select_values` dot-selector (auto-unwraps PropertyValue `.value`) and `render_ref_id`.
-A config validator rejects two rules across links/enrichments/additions targeting the same `(on_type, target_property)`;
-renames and removals are exempt (renames move a value elsewhere rather than duplicating a target, and removals
-legitimately refine other rules' output). Output convention throughout: collapse to the shortest shape — 0 → `None`,
-1 → scalar, ≥2 → list.
+A config validator rejects two rules across enrichments/additions targeting the same `(on_type, target_property)`;
+renames are exempt (they move a value elsewhere rather than duplicating a target). Cross-reference linking is not done
+here: it happens in graph space (`uplift_merge`, and SPARQL in `paper`). Output convention throughout: collapse to the
+shortest shape — 0 → `None`, 1 → scalar, ≥2 → list.
 
 ### Metadata-collector workflow (`src/metadata_converter/api_fetching/`)
 
@@ -346,15 +356,20 @@ relative filenames (e.g. `Person_abc123.jsonld`, `Product_SAMEA001.jsonld`) are 
 resolve to real URLs once a stable base IRI is established at publish time — **without any changes to the data files**,
 as long as the base IRI is applied consistently across all files and cross-references.
 
-Consequence: `ref_id_template` on a `LinkRule` must produce the same relative IRI that the target entity's file carries,
-so cross-references remain valid when both are resolved against the same base IRI.
+Consequence: a cross-reference must carry the same relative IRI as the target entity's file, so it stays valid when both
+are resolved against the same base IRI.
 
 ### Serialization
 
 `load_to_jsonld` takes any `SchemaOrgBase` instance, serializes it with `model_dump(by_alias=True, exclude_none=True)`,
-prepends `@context` (no `@base` — relative IRI resolution is left to the graph-build step), and writes to
-`<output_path>/<@id>.jsonld`. The output filename is the last path component of `@id`; this keeps filenames stable and
-means the relative `@id` value doubles as the filename.
+and writes to `<output_path>/<@id>.jsonld` (no `@base` — relative IRI resolution is left to the graph-build step). It
+does **not** inject `@context` itself — it just dumps whatever the model's own `context` field already holds, and
+`exclude_none=True` drops the key entirely when that field is `None`. A nested/blank node legitimately has no
+`context` while embedded, but whoever promotes a model to a standalone top-level entity must set
+`context=SCHEMA_ORG_DEFAULT_CONTEXT` explicitly at that point, or the written file silently loses its `@context`.
+Current promotion points that do this: `flat_data`'s `build_root`, `provenance_writer.write_provenance_file`, and
+`atomize.py`'s `_atomize_node` (a blank node gaining its own `@id`). The output filename is the last path component
+of `@id`; this keeps filenames stable and means the relative `@id` value doubles as the filename.
 
 ### BioSamples test data
 

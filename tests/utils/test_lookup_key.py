@@ -1,5 +1,5 @@
 """Tests for to_lookup_key, the canonical-string normalisation shared by the
-flat_data broadcast @id pipeline and the uplift LinkApplier."""
+flat_data broadcast @id pipeline."""
 
 import pytest
 

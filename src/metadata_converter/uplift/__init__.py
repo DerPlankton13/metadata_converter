@@ -1,4 +1,4 @@
-"""Generic, source-independent uplift stage: cross-reference linking and value enrichments."""
+"""Generic, source-independent uplift stage: declarative value enrichments."""
 
 from metadata_converter.uplift.run import run_uplift
 

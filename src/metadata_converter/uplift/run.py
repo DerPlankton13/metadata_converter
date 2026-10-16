@@ -7,11 +7,11 @@ order, write entities.
 import logging
 
 from metadata_converter.uplift.add import AddApplier
-from metadata_converter.uplift.config import GenericUpliftConfig
+from metadata_converter.uplift.atomize import AtomizeApplier
+from metadata_converter.uplift.config import GenericUpliftConfig, UpliftMergeConfig
 from metadata_converter.uplift.enrichment import EnrichmentApplier
 from metadata_converter.uplift.entity_store import EntityStore
-from metadata_converter.uplift.link import LinkApplier
-from metadata_converter.uplift.remove import RemoveApplier
+from metadata_converter.uplift.merge import merge_entities_by_identifier
 from metadata_converter.uplift.rename import RenameApplier
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
@@ -19,34 +19,64 @@ logger = logging.getLogger(__name__)
 
 
 def run_uplift(config: GenericUpliftConfig) -> None:
-    """Resolve cross-references in loaded JSON-LD.
+    """Enrich loaded JSON-LD with declarative rules.
 
     Phases, in order:
 
     1. **Load** — read every ``*.jsonld`` file from ``config.input_dir`` and
        group entities by ``@type`` into an ``EntityStore``.
-    2. **Link** — apply every ``LinkRule`` in ``config.links``.
-    3. **Enrich** — apply every ``EnrichmentRule`` in ``config.enrichments``.
-    4. **Add** — apply every ``AdditionRule`` in ``config.additions``.
-    5. **Rename** — apply every ``RenameRule`` in ``config.renames``.
-    6. **Remove** — apply every ``RemovalRule`` in ``config.removals`` (scrubs
-       linking scaffolding now that links have been resolved).
-    7. **Write** — export every entity to ``config.output_dir``.
+    2. **Enrich** — apply every ``EnrichmentRule`` in ``config.enrichments``.
+    3. **Add** — apply every ``AdditionRule`` in ``config.additions``.
+    4. **Rename** — apply every ``RenameRule`` in ``config.renames``.
+    5. **Atomize** — if ``config.atomize``, extract every blank node into its own
+       standalone entity (must run last among the transforms above: it reads each
+       entity's full nested content, which the earlier stages may have changed).
+    6. **Write** — export every entity to ``config.output_dir``.
+
+    Provenance is written for every entity in the output. An entity present before
+    atomize is based on the loaded entity of the same ``@id``. An atomized entity has no
+    *single* origin, so it records all of them: the
+    top-level entities it was extracted from, as collected in ``AtomizeApplier.origins``.
+    That keeps the chain walkable — an atom points at the entities containing it, each of
+    which points at what it was loaded from.
     """
     logger.info("Starting uplift from %s", config.input_dir)
     store = EntityStore.load(config.input_dir)
-    LinkApplier(store).apply_all(config.links)
     EnrichmentApplier(store).apply_all(config.enrichments)
     AddApplier(store).apply_all(config.additions)
     RenameApplier(store).apply_all(config.renames)
-    RemoveApplier(store).apply_all(config.removals)
+    provenance_ids = [entity.id for entity in store.all_entities()]
+    atom_origins: dict[str, list[str]] = {}
+    if config.atomize:
+        atomizer = AtomizeApplier(store)
+        atomizer.apply()
+        atom_origins = atomizer.origins
     store.write(config.output_dir)
-    if config.provenance_dir is not None:
-        for models in store.by_type.values():
-            for model in models:
-                # uplift refines an entity in place, so it is based on the loaded
-                # entity of the same @id; the stage in the filename distinguishes them.
-                write_provenance_file(
-                    model.id, config.provenance_dir, model.id, "uplift"
-                )
+    for entity_id in provenance_ids:
+        # uplift refines an entity in place, so it is based on the loaded
+        # entity of the same @id; the stage in the filename distinguishes them.
+        write_provenance_file(entity_id, config.provenance_dir, entity_id, "uplift")
+    already_recorded = set(provenance_ids)
+    for atom_id, origins in atom_origins.items():
+        # an atom can dedupe onto an entity that was already loaded under that @id;
+        # that entity is already attributed, and overwriting would swap its record's
+        # isBasedOn from the loaded entity to the atom's origins
+        if atom_id in already_recorded:
+            continue
+        write_provenance_file(atom_id, config.provenance_dir, origins, "uplift")
     logger.info("Uplift complete. Output: %s", config.output_dir)
+
+
+def run_uplift_merge(config: UpliftMergeConfig) -> None:
+    """Merge entities"""
+    logger.info("------------- uplift merge -------------")
+    logger.info("Start merging entities by identifier on: %s", config.graph_input_path)
+    merge_entities_by_identifier(
+        config.graph_input_path,
+        config.graph_output_path,
+        config.provenance_dir,
+    )
+    logger.info(
+        "Merged entities by identifiers. The resulting graph has been written to: %s",
+        config.graph_output_path,
+    )

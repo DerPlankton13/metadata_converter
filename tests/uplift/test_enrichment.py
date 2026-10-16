@@ -7,11 +7,15 @@ metadata fields (url, name, propertyID, etc.).
 
 import pytest
 
-from metadata_converter.uplift.config import EnrichmentRule, GenericUpliftConfig, LinkRule
+from metadata_converter.uplift.config import EnrichmentRule, GenericUpliftConfig
 from metadata_converter.uplift.enrichment import EnrichmentApplier
 from metadata_converter.uplift.entity_store import EntityStore
-from metadata_converter.schema_org_models.custom_models import Orcid
-from metadata_converter.schema_org_models.schemaorg_models import Person
+from metadata_converter.schema_org_models.custom_models import DOI, Orcid
+from metadata_converter.schema_org_models.schemaorg_models import (
+    Dataset,
+    Person,
+    PropertyValue,
+)
 
 VALID_ORCID_A = "0000-0001-1111-1111"
 VALID_ORCID_B = "0000-0002-2222-2222"
@@ -73,6 +77,59 @@ def test_enrichment_skips_already_wrapped_value():
 
     [person] = store.of_type("Person")
     assert person.identifier is prewrapped
+
+
+def test_enrichment_plain_property_value_becomes_doi_with_clean_value():
+    """The scalar inside a plain PropertyValue is wrapped, not the model's repr, which
+    would leave a stray quote on the DOI value and url."""
+    store = EntityStore()
+    store.by_type["Dataset"] = [
+        Dataset(
+            id="Dataset_a.jsonld",
+            name="Survey",
+            identifier=PropertyValue(value="10.1234/abc.def"),
+        )
+    ]
+
+    EnrichmentApplier(store).apply(
+        EnrichmentRule(
+            on_type="Dataset", target_property="identifier", enrich_as="DOI"
+        )
+    )
+
+    [dataset] = store.of_type("Dataset")
+    assert isinstance(dataset.identifier, DOI)
+    assert dataset.identifier.type == "PropertyValue"
+    assert dataset.identifier.value == "10.1234/abc.def"
+    assert str(dataset.identifier.url) == "https://doi.org/10.1234/abc.def"
+    assert dataset.identifier.alternateName == "DOI"
+    assert dataset.identifier.name == "Digital Object Identifier"
+    assert (
+        str(dataset.identifier.propertyID)
+        == "https://registry.identifiers.org/registry/doi"
+    )
+    assert dataset.id == "Dataset_a.jsonld"
+    assert dataset.name == "Survey"
+
+
+def test_enrichment_plain_property_value_with_invalid_value_keeps_original(caplog):
+    original = PropertyValue(value="not a doi")
+    store = EntityStore()
+    store.by_type["Dataset"] = [
+        Dataset(id="Dataset_a.jsonld", name="Survey", identifier=original)
+    ]
+
+    EnrichmentApplier(store).apply(
+        EnrichmentRule(
+            on_type="Dataset", target_property="identifier", enrich_as="DOI"
+        )
+    )
+
+    [dataset] = store.of_type("Dataset")
+    assert dataset.identifier is original
+    assert dataset.id == "Dataset_a.jsonld"
+    assert dataset.name == "Survey"
+    assert "Invalid DOI: not a doi" in caplog.text
 
 
 def test_enrichment_skips_missing_property():
@@ -147,36 +204,13 @@ def test_two_enrichments_on_same_target_raise_at_config_load(tmp_path):
         GenericUpliftConfig(
             input_dir=tmp_path / "in",
             output_dir=tmp_path / "out",
+            provenance_dir=tmp_path / "provenance",
             enrichments=[
                 EnrichmentRule(
                     on_type="Person", target_property="identifier", enrich_as="Orcid"
                 ),
                 EnrichmentRule(
                     on_type="Person", target_property="identifier", enrich_as="DOI"
-                ),
-            ],
-        )
-
-
-def test_link_and_enrichment_on_same_target_raise_at_config_load(tmp_path):
-    with pytest.raises(
-        ValueError, match=r"Person\.identifier.*'link'.*'enrichment'"
-    ):
-        GenericUpliftConfig(
-            input_dir=tmp_path / "in",
-            output_dir=tmp_path / "out",
-            links=[
-                LinkRule(
-                    on_type="Person",
-                    target_property="identifier",
-                    match_literal="x",
-                    in_type="Orcid",
-                    in_property="value",
-                ),
-            ],
-            enrichments=[
-                EnrichmentRule(
-                    on_type="Person", target_property="identifier", enrich_as="Orcid"
                 ),
             ],
         )

@@ -2,10 +2,9 @@
 
 An addition sets ``target_property`` on every entity of ``on_type`` to a fixed
 constant. The constant is either a *literal* (a scalar DataType value) or a *node*
-(a typed mapping that builds a schema.org object, recursively). Models are built in
-non-strict mode; an unknown field is kept but logged as a warning, while an unknown
-``type`` cannot be built and raises. An addition overwrites any existing value and
-logs when it does.
+(a typed mapping that builds a schema.org object, recursively). An unknown ``type``
+cannot be built and raises. An addition overwrites any existing value and logs when
+it does.
 """
 import logging
 
@@ -14,11 +13,15 @@ import pytest
 from metadata_converter.uplift.add import AddApplier
 from metadata_converter.uplift.config import (
     AdditionRule,
+    EnrichmentRule,
     GenericUpliftConfig,
-    LinkRule,
 )
 from metadata_converter.uplift.entity_store import EntityStore
-from metadata_converter.schema_org_models.schemaorg_models import Person, Project
+from metadata_converter.schema_org_models.schemaorg_models import (
+    Person,
+    Project,
+    PropertyValue,
+)
 
 # ---------------------------------------------------------------------------
 # AddApplier.apply — setting literal and node values
@@ -178,29 +181,34 @@ def test_add_unknown_type_raises():
         )
 
 
-def test_add_unknown_field_warns(caplog):
+def test_add_unknown_field_becomes_additional_property():
+    """A key the built type does not declare is kept, not dropped or left unvalidated.
+
+    ``notarealfield`` is no field on ``Project``, so it is folded into
+    ``additionalProperty`` — the same place construction puts any undeclared property.
+    """
     store = EntityStore()
     store.by_type["Person"] = [Person(id="Person_alice.jsonld", name="Alice")]
 
-    with caplog.at_level(logging.WARNING):
-        AddApplier(store).apply(
-            AdditionRule(
-                on_type="Person",
-                target_property="memberOf",
-                value={
-                    "type": "Project",
-                    "id": "https://example.com/project.jsonld",
-                    "notarealfield": "x",
-                },
-            )
+    AddApplier(store).apply(
+        AdditionRule(
+            on_type="Person",
+            target_property="memberOf",
+            value={
+                "type": "Project",
+                "id": "https://example.com/project.jsonld",
+                "notarealfield": "x",
+            },
         )
+    )
 
     [person] = store.of_type("Person")
     assert person.id == "Person_alice.jsonld"
     assert person.name == "Alice"
     assert person.memberOf.id == "https://example.com/project.jsonld"
-    assert person.memberOf.notarealfield == "x"
-    assert "notarealfield" in caplog.text
+    assert person.memberOf.additionalProperty == PropertyValue(
+        name="notarealfield", value="x"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -208,18 +216,17 @@ def test_add_unknown_field_warns(caplog):
 # ---------------------------------------------------------------------------
 
 
-def test_link_and_add_on_same_target_raises(tmp_path):
-    with pytest.raises(ValueError, match="Person.memberOf is targeted by multiple"):
+def test_enrichment_and_add_on_same_target_raises(tmp_path):
+    with pytest.raises(
+        ValueError, match=r"Person\.memberOf.*'enrichment'.*'addition'"
+    ):
         GenericUpliftConfig(
             input_dir=tmp_path / "in",
             output_dir=tmp_path / "out",
-            links=[
-                LinkRule(
-                    on_type="Person",
-                    target_property="memberOf",
-                    match_literal="1",
-                    in_type="Project",
-                    in_property="identifier",
+            provenance_dir=tmp_path / "provenance",
+            enrichments=[
+                EnrichmentRule(
+                    on_type="Person", target_property="memberOf", enrich_as="Orcid"
                 ),
             ],
             additions=[
