@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any
 
+from deepdiff import DeepDiff
+
 from metadata_converter.biosamples.schemas import (
     SRA,
     BioSample,
@@ -46,13 +48,23 @@ def get_property(sample_record: dict, prop_name: str) -> dict | None:
         logger.debug("Property '%s' not found in sample record", prop_name)
         return None
     if len(results) > 1:
+        if any(DeepDiff(results[0], p) for p in results[1:]):
+            logger.warning(
+                "The property '%s' is contained %d times. The entries are not identical "
+                "and they are not used. The following entries were found: %s",
+                prop_name,
+                len(results),
+                results,
+            )
+            logger.debug("The searched sample_record was: %s", sample_record)
+            return None
+
         logger.warning(
-            "Ambiguous property '%s': found %d matches, expected 1",
+            "The property '%s' is contained %d times. This has no effect since the "
+            "entries are identical and only the first entry is used.",
             prop_name,
             len(results),
         )
-        logger.debug("The searched sample_record was: %s", sample_record)
-        return None
 
     return results[0].copy()
 
