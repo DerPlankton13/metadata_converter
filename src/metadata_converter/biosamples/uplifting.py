@@ -426,7 +426,9 @@ class SampleRecord:
                 and prop.get("value") not in excluded_values
             ):
                 prop = self.as_property(prop.get("name"))
-                remaining_props.append(prop)
+                # do not append None from e.g. conflicting duplicates
+                if prop is not None:
+                    remaining_props.append(prop)
         return remaining_props
 
 
