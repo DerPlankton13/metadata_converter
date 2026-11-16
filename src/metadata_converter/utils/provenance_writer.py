@@ -16,16 +16,28 @@ def write_provenance_file(
     based_on: str | list[str],
     stage: str,
 ) -> None:
-    """Write a per-record provenance file linking a metadata file to its source(s).
+    """Write a provenance file linking an entity to the source(s) it was produced from.
 
-    ``about`` (the described file) and ``isBasedOn`` (the source(s) it was produced
-    from — an ``@id`` for an entity source, a URL for a fetched one) are built as
-    node references so they serialize as ``@id`` IRIs rather than literal strings.
-    A file merged from several sources (e.g. a biosample fused from two endpoints)
-    records all of them; a single source collapses to one node. ``stage`` records
-    which pipeline step produced the file and is part of the provenance file's
-    name, so one entity's load- and uplift-stage provenance files can coexist in
-    a shared folder.
+    ``about`` and ``isBasedOn`` are built as node references, so they serialize as
+    ``@id`` IRIs rather than literal strings. An entity produced from several sources
+    (e.g. a biosample fused from two endpoints, or a golden node merged from its
+    cluster) records all of them; a single source collapses to one node. The stage is
+    part of the provenance file's name, so the provenance files of one entity from
+    different stages can coexist in a shared folder.
+
+    Parameters
+    ----------
+    about_file_id : str
+        ``@id`` of the entity or file the provenance describes. Its last ``/``
+        segment is used in the provenance file's name.
+    provenance_path : Path
+        Directory the provenance file is written to.
+    based_on : str or list of str
+        ``@id`` (entity source) or URL (fetched source) of what the entity was produced
+        from; one value or several.
+    stage : str
+        Pipeline step that produced the entity (e.g. ``"load"``, ``"uplift"``). It is
+        stored in the description and in the file's name.
     """
     provenance_id = f"Provenance_{stage}_" + about_file_id.split("/")[-1]
     sources = [based_on] if isinstance(based_on, str) else based_on
