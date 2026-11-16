@@ -22,7 +22,7 @@ from metadata_converter.schema_org_models.schemaorg_models import (
     PropertyValue,
     SchemaOrgBase,
 )
-from metadata_converter.uplift.config import EnrichmentRule
+from metadata_converter.uplift.config import Condition, EnrichmentRule
 from metadata_converter.uplift.entity_store import EntityStore
 
 logger = logging.getLogger(__name__)
@@ -78,6 +78,7 @@ class EnrichmentApplier:
        - Singleton list → unwrap to its element, then proceed.
        - List with more than one entry → raise.
        - Already an instance of the target class → skip (identity preserved).
+       - A ``condition`` that the current value does not meet → skip (left as loaded).
        - A plain ``PropertyValue`` → take its ``value`` (its other fields are not kept).
        - Otherwise → wrap as ``cls(value=current)`` and reassign.
     """
@@ -105,6 +106,7 @@ class EnrichmentApplier:
         wrapped_count = 0
         skipped_no_value = 0
         skipped_already_wrapped = 0
+        skipped_condition = 0
         for entity, owner_id in self.nodes_of_type(rule.on_type):
             where = entity.id or f"a blank {rule.on_type} inside {owner_id}"
             prop = getattr(entity, rule.target_property, None)
@@ -127,6 +129,19 @@ class EnrichmentApplier:
                     rule.target_property,
                     rule.enrich_as,
                     where,
+                )
+                continue
+            if rule.condition and not self.matches_condition(rule.condition, value):
+                skipped_condition += 1
+                logger.debug(
+                    "Enrichment %s.%s → %s: %s has %s=%r, condition needs %r; skipping.",
+                    rule.on_type,
+                    rule.target_property,
+                    rule.enrich_as,
+                    where,
+                    rule.condition.if_property,
+                    getattr(value, rule.condition.if_property, None),
+                    rule.condition.equals,
                 )
                 continue
             if isinstance(value, PropertyValue):
@@ -161,13 +176,14 @@ class EnrichmentApplier:
         log = logger.warning if wrapped_count == 0 else logger.info
         log(
             "Enrichment %s.%s → %s: wrapped %d (skipped %d with no value, "
-            "%d already wrapped).",
+            "%d already wrapped, %d not meeting the condition).",
             rule.on_type,
             rule.target_property,
             rule.enrich_as,
             wrapped_count,
             skipped_no_value,
             skipped_already_wrapped,
+            skipped_condition,
         )
 
     @staticmethod
@@ -210,3 +226,13 @@ class EnrichmentApplier:
                 return None
             return value[0]
         return value
+
+    @staticmethod
+    def matches_condition(condition: Condition, value: Any) -> bool:
+        """Return whether ``value`` has ``condition.if_property`` equal to ``condition.equals``.
+
+        The property is compared as text. A value without that property, such as a plain
+        string, never matches.
+        """
+        actual = getattr(value, condition.if_property, None)
+        return actual is not None and str(actual) == condition.equals
