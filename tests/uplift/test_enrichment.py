@@ -17,7 +17,7 @@ from metadata_converter.uplift.config import (
 )
 from metadata_converter.uplift.enrichment import EnrichmentApplier
 from metadata_converter.uplift.entity_store import EntityStore
-from metadata_converter.schema_org_models.custom_models import DOI, Orcid
+from metadata_converter.schema_org_models.custom_models import DOI, ISBN, ISSN, Orcid
 from metadata_converter.schema_org_models.schemaorg_models import (
     Dataset,
     Person,
@@ -365,3 +365,60 @@ def test_conditional_enrichment_and_addition_on_same_target_raise(tmp_path):
                 )
             ],
         )
+
+
+def test_doi_enrichment_falls_back_to_url_when_value_is_empty():
+    store = EntityStore()
+    store.by_type["Dataset"] = [
+        Dataset(
+            id="Dataset_a.jsonld",
+            identifier=PropertyValue(
+                propertyID="DOI", url="https://doi.org/10.1234/abc.def"
+            ),
+        )
+    ]
+
+    EnrichmentApplier(store).apply(doi_rule())
+
+    [dataset] = store.of_type("Dataset")
+    assert isinstance(dataset.identifier, DOI)
+    assert dataset.identifier.value == "10.1234/abc.def"
+
+
+def test_doi_accepts_a_full_url_as_value():
+    assert DOI(value="https://doi.org/10.1234/abc.def").value == "10.1234/abc.def"
+
+
+def test_doi_without_value_or_usable_url_keeps_original(caplog):
+    original = PropertyValue(propertyID="DOI")
+    store = EntityStore()
+    store.by_type["Dataset"] = [Dataset(id="Dataset_a.jsonld", identifier=original)]
+
+    EnrichmentApplier(store).apply(doi_rule())
+
+    assert store.of_type("Dataset")[0].identifier is original
+    assert "Invalid DOI: None" in caplog.text
+
+
+@pytest.mark.parametrize(
+    "cls, kwargs",
+    [
+        pytest.param(DOI, {}, id="DOI"),
+        pytest.param(Orcid, {}, id="Orcid"),
+        pytest.param(ISSN, {}, id="ISSN"),
+        pytest.param(ISBN, {"name": "x"}, id="ISBN"),
+    ],
+)
+def test_identifier_classes_require_a_value(cls, kwargs):
+    with pytest.raises(ValueError, match="Invalid"):
+        cls(**kwargs)
+
+
+def test_identifier_classes_overwrite_submitted_labels():
+    doi = DOI(
+        value="10.1234/abc.def", propertyID="https://other.org", name="mine"
+    )
+    assert str(doi.propertyID) == "https://registry.identifiers.org/registry/doi"
+    assert doi.name == "Digital Object Identifier"
+    orcid = Orcid(value=VALID_ORCID_A, propertyID="ORCID")
+    assert str(orcid.propertyID) == "https://registry.identifiers.org/registry/orcid"
