@@ -4,7 +4,7 @@ from pathlib import Path
 
 import networkx as nx
 import pandas as pd
-from rdflib import RDF, SDO, Graph, URIRef
+from rdflib import RDF, SDO, BNode, Graph, URIRef
 
 from metadata_converter.utils.graph_helpers import (
     convert_result_to_pd,
@@ -28,6 +28,10 @@ def merge_entities_by_identifier(
     golden node (see `merge_into_golden_node`), all links to the other nodes of the
     cluster are redirected to the golden node, and the other nodes are deleted.
 
+    Every named node (IRI) of the resulting graph gets one provenance file for this
+    stage. A golden node is based on all nodes of its cluster; a node that was not
+    merged is based on itself.
+
     Parameters
     ----------
     graph_input_path : Path
@@ -35,7 +39,8 @@ def merge_entities_by_identifier(
     graph_output_path : Path
         Turtle file the deduplicated graph is written to.
     provenance_dir : Path
-        Directory receiving one provenance file per golden node.
+        Directory receiving one provenance file per non-blank node of the output
+        graph.
     """
     g = load_graph(graph_input_path)
     ids = get_identifiers(g)
@@ -52,8 +57,15 @@ def merge_entities_by_identifier(
         "Number of duplicates to remove from the graph: %d", node_count - len(clusters)
     )
 
+    golden_nodes: list[URIRef] = []
     for cluster in clusters:
-        merge_into_golden_node(cluster, provenance_dir, g)
+        golden_node = merge_into_golden_node(cluster, provenance_dir, g)
+        golden_nodes.append(golden_node)
+
+    # write provenance for the remaining nodes in the graph
+    for node in set(g.subjects(RDF.type)) - set(golden_nodes):
+        if not isinstance(node, BNode):
+            write_provenance_file(str(node), provenance_dir, str(node), "uplift_merge")
 
     g.serialize(graph_output_path, format="ox-ttl")
 
@@ -154,7 +166,7 @@ def get_types(node: URIRef, g: Graph) -> frozenset[URIRef]:
 
 def merge_into_golden_node(
     node_cluster: Iterable[URIRef], provenance_dir: Path, g: Graph
-) -> None:
+) -> URIRef:
     """Merge all nodes of a cluster into a single golden node, modifying `g` in place.
 
     The richest node (most triples, ties broken by IRI) becomes the golden node. The
@@ -171,6 +183,11 @@ def merge_into_golden_node(
         Directory the provenance file of the golden node is written to.
     g : Graph
         Graph containing the nodes.
+
+    Returns
+    -------
+    URIRef
+        The reference for the created golden node.
     """
     # dedup, or a repeated golden node would be removed as its own donor
     ordered_nodes = sorted(
@@ -199,6 +216,8 @@ def merge_into_golden_node(
         [str(golden_node), *[str(donor) for donor in donors]],
         "uplift_merge",
     )
+
+    return golden_node
 
 
 def calculate_node_richness(node: URIRef, g: Graph) -> int:
