@@ -229,7 +229,8 @@ compounds. Don't let "we already built X here" be the reason X keeps growing whe
   aliases are what `model_dump(by_alias=True)` emits. Because field names work, building from the `type`/`id` mapping
   grammar needs no alias remap (see `schema_builder.instantiate` and `uplift/add.py`).
 - **`custom_models.py`** — project-specific `PropertyValue` subclasses (e.g. `Orcid`, `DOI`, `ISSN`, `ISBN`,
-  `UrlIdentifier`) with validation logic. Also exposes `get_schema(type_name)` for dynamic type lookup by string name.
+  `UrlIdentifier`) with validation logic. `Orcid`/`DOI`/`ISSN`/`ISBN` are strict (no valid `value`, no
+  instance, except atomize's reference stubs built with `model_construct`) and overwrite `name`/`alternateName`/`propertyID`. Also exposes `get_schema(type_name)` for dynamic type lookup by string name.
 - **`schemaorg_models.py` (end)** — `make_strict()` creates a strict variant of any model; `rebuild_all_models()` forces
   Pydantic to resolve all forward references.
 - **Subtype discrimination** — a field typed as a bare schema.org class (e.g. `Action.instrument: Thing`) must accept
@@ -324,7 +325,8 @@ transformation, not generic graph post-processing — the shared name is histori
 in a fixed order, then writes every entity to `output_dir`:
 
 1. **`EnrichmentApplier`** (`enrichment.py`) — `EnrichmentRule`: wrap a scalar in a custom PropertyValue subclass
-   (`enrich_as`, e.g. `Orcid`); the class's validators fill the enriched fields. One value per entity (a multi-value
+   (`enrich_as`, e.g. `Orcid`); a plain PropertyValue passes all its fields on, and the class's validators overwrite `name`, `alternateName`, `propertyID`
+   and `url` and raise without a valid `value` (`DOI` falls back to `url`), leaving the original as loaded. One value per entity (a multi-value
    list raises — an entity carries at most one identifier of a given type). An optional `condition` (`if_property` +
    `equals`) restricts it to values whose property matches; a plain string never matches.
 2. **`AddApplier`** (`add.py`) — `AdditionRule`: set a property to a fixed constant value (a literal, or a node built
