@@ -325,13 +325,15 @@ in a fixed order, then writes every entity to `output_dir`:
 
 1. **`EnrichmentApplier`** (`enrichment.py`) — `EnrichmentRule`: wrap a scalar in a custom PropertyValue subclass
    (`enrich_as`, e.g. `Orcid`); the class's validators fill the enriched fields. One value per entity (a multi-value
-   list raises — an entity carries at most one identifier of a given type).
+   list raises — an entity carries at most one identifier of a given type). An optional `condition` (`if_property` +
+   `equals`) restricts it to values whose property matches; a plain string never matches.
 2. **`AddApplier`** (`add.py`) — `AdditionRule`: set a property to a fixed constant value (a literal, or a node built
    recursively from a `type`-tagged mapping) on every entity of a type, overwriting any existing value.
 3. **`AtomizeApplier`** (`atomize.py`) — if `config.atomize` (default on): extract every blank node into its own
    content-hashed entity and leave a bare reference (`@type` + `@id` only) behind.
 
-A config validator rejects two rules across enrichments/additions targeting the same `(on_type, target_property)`.
+A config validator rejects two rules across enrichments/additions targeting the same `(on_type, target_property)`, except enrichments with conditions on the same `if_property` and
+different `equals`.
 Cross-reference linking is not done
 here: it happens in graph space (`uplift_merge`, and SPARQL in `paper`). Output convention throughout: collapse to the
 shortest shape — 0 → `None`, 1 → scalar, ≥2 → list.

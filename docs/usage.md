@@ -359,14 +359,14 @@ copy it into this one's output.
 
 Operations are applied in a fixed order:
 **enrich → add → atomize → write**. A config validator rejects two
-`enrich`/`add` rules that target the same `(on_type, target_property)`. Output
+`enrich`/`add` rules that target the same `(on_type, target_property)`, except enrichments whose conditions test the same `if_property` for different `equals` values. Output
 shape throughout collapses to the shortest form: 0 → omitted, 1 → scalar, ≥2 → list.
 
 ### Rules
 
 | Rule | Key fields | Effect |
 |---|---|---|
-| `enrichments` | `on_type`, `target_property`, `enrich_as` | Wrap the scalar value in a custom `PropertyValue` subclass (e.g. `Orcid`, `DOI`); its validators fill out `url`/`name`/`propertyID`. At most one value per entity. Applies to nested nodes of `on_type` as well as top-level entities. |
+| `enrichments` | `on_type`, `target_property`, `enrich_as` | Wrap the scalar value in a custom `PropertyValue` subclass (e.g. `Orcid`, `DOI`); its validators fill out `url`/`name`/`propertyID`. At most one value per entity. Applies to nested nodes of `on_type` as well as top-level entities. Optional `condition = {if_property = "propertyID", equals = "DOI"}`: only values whose property equals the text are enriched; others stay as loaded (a plain string has no properties, so it never matches). |
 | `additions` | `on_type`, `target_property`, `value` | Set `target_property` to a fixed constant on every entity. `value` is a literal, or a `node` table (`value.type` + `value.id` + fields) built and validated against the schema.org models, or a list. Overwrites any existing value. `target_property` must be a plain property name; a dotted path such as `a.b` is not supported. |
 
 ### Atomizing
