@@ -79,7 +79,8 @@ class EnrichmentApplier:
        - List with more than one entry → raise.
        - Already an instance of the target class → skip (identity preserved).
        - A ``condition`` that the current value does not meet → skip (left as loaded).
-       - A plain ``PropertyValue`` → take its ``value`` (its other fields are not kept).
+       - A plain ``PropertyValue`` → pass all its fields to the class; the class's
+         validators overwrite the ones they define (e.g. name, propertyID, url).
        - Otherwise → wrap as ``cls(value=current)`` and reassign.
     """
 
@@ -144,17 +145,20 @@ class EnrichmentApplier:
                     rule.condition.equals,
                 )
                 continue
-            if isinstance(value, PropertyValue):
-                value = value.value
+            fields = (
+                value.model_dump(exclude_none=True, by_alias=True)
+                if isinstance(value, PropertyValue)
+                else {"value": value}
+            )
             try:
-                wrapped = cls(value=value)
+                wrapped = cls(**fields)
             except ValidationError as e:
                 logger.warning(
                     "Enrichment %s.%s → %s: could not wrap %r on %s — %s",
                     rule.on_type,
                     rule.target_property,
                     rule.enrich_as,
-                    value,
+                    fields,
                     where,
                     e,
                 )
