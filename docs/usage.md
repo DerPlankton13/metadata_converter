@@ -30,7 +30,7 @@ config identifies the data source; the phase selects the step to execute:
 | `fetch` | `biosamples`, `api` | Download raw records from external APIs |
 | `load` | `flat_data`, `biosamples`, `api` | Transform raw/tabular data into schema.org JSON-LD (`loaded_base`) |
 | `uplift_record` | `biosamples` | Per-record uplift of loaded biosamples into `Product` + `Action` JSON-LD pairs |
-| `uplift` | *(uplift config, no source_type)* | Enrich, add, rename, and atomize across loaded JSON-LD |
+| `uplift` | *(uplift config, no source_type)* | Enrich, add, and atomize across loaded JSON-LD |
 | `uplift_merge` | *(uplift merge config)* | Merge entities that share an identifier in the built graph |
 
 Source configs (`flat_data`, `biosamples`, `api`) use `source_type` as their
@@ -329,7 +329,7 @@ value = "biocean5d"
 ## Uplift phase config
 
 Post-processes already-loaded JSON-LD: enriches scalars, adds fixed values,
-renames properties, and extracts blank nodes into their own entities. It runs
+and extracts blank nodes into their own entities. It runs
 *after* all `load` workflows have completed. The uplift config has no
 `source_type`; it is used exclusively with `converter uplift`. Matching entities
 across sources is not done here; it happens in graph space (see `uplift_merge`).
@@ -351,10 +351,6 @@ target_property = "funding"
 value.type      = "MonetaryGrant"
 value.id        = "https://example.org/grant.jsonld"
 
-[[renames]]
-on_type         = "Dataset"
-source_property = "comment"
-target_property = "description"
 ```
 
 `input_dir` is a single directory on purpose: everything in it is written back to
@@ -362,9 +358,8 @@ target_property = "description"
 copy it into this one's output.
 
 Operations are applied in a fixed order:
-**enrich → add → rename → atomize → write**. A config validator rejects two
-`enrich`/`add` rules that target the same `(on_type, target_property)`; `renames`
-are exempt (they move a value elsewhere rather than duplicating a target). Output
+**enrich → add → atomize → write**. A config validator rejects two
+`enrich`/`add` rules that target the same `(on_type, target_property)`. Output
 shape throughout collapses to the shortest form: 0 → omitted, 1 → scalar, ≥2 → list.
 
 ### Rules
@@ -373,7 +368,6 @@ shape throughout collapses to the shortest form: 0 → omitted, 1 → scalar, �
 |---|---|---|
 | `enrichments` | `on_type`, `target_property`, `enrich_as` | Wrap the scalar value in a custom `PropertyValue` subclass (e.g. `Orcid`, `DOI`); its validators fill out `url`/`name`/`propertyID`. At most one value per entity. Applies to nested nodes of `on_type` as well as top-level entities. |
 | `additions` | `on_type`, `target_property`, `value` | Set `target_property` to a fixed constant on every entity. `value` is a literal, or a `node` table (`value.type` + `value.id` + fields) built and validated against the schema.org models, or a list. Overwrites any existing value. `target_property` must be a plain property name; a dotted path such as `a.b` is not supported. |
-| `renames` | `on_type`, `source_property`, `target_property` | Move the value at `source_property` to `target_property` (overwriting any value there) and clear `source_property`. Entities without a value at `source_property` are left untouched. |
 
 ### Atomizing
 

@@ -182,7 +182,7 @@ There are three source types plus a separate uplift config:
   endpoint or HTML scraping.
 - **uplift config** — no `source_type`; used with `converter uplift` to post-process already-loaded JSON-LD via
   declarative rules. Operations: **enrich** (wrap a scalar in a custom PropertyValue subclass), **add** (set a fixed
-  value), **rename** (move a property's value to a different name), and **atomize** (extract blank nodes into their own
+  value), and **atomize** (extract blank nodes into their own
   entities). See the generic uplift subsection below.
 
 ### Where each transformation belongs
@@ -328,14 +328,11 @@ in a fixed order, then writes every entity to `output_dir`:
    list raises — an entity carries at most one identifier of a given type).
 2. **`AddApplier`** (`add.py`) — `AdditionRule`: set a property to a fixed constant value (a literal, or a node built
    recursively from a `type`-tagged mapping) on every entity of a type, overwriting any existing value.
-3. **`RenameApplier`** (`rename.py`) — `RenameRule`: move a property's value from `source_property` to
-   `target_property` on every entity of a type (overwriting any existing value there), clearing `source_property`;
-   entities with no value at `source_property` are left untouched.
-4. **`AtomizeApplier`** (`atomize.py`) — if `config.atomize` (default on): extract every blank node into its own
+3. **`AtomizeApplier`** (`atomize.py`) — if `config.atomize` (default on): extract every blank node into its own
    content-hashed entity and leave a bare reference (`@type` + `@id` only) behind.
 
-A config validator rejects two rules across enrichments/additions targeting the same `(on_type, target_property)`;
-renames are exempt (they move a value elsewhere rather than duplicating a target). Cross-reference linking is not done
+A config validator rejects two rules across enrichments/additions targeting the same `(on_type, target_property)`.
+Cross-reference linking is not done
 here: it happens in graph space (`uplift_merge`, and SPARQL in `paper`). Output convention throughout: collapse to the
 shortest shape — 0 → `None`, 1 → scalar, ≥2 → list.
 

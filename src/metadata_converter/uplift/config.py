@@ -44,20 +44,6 @@ class AdditionRule(BaseModel):
     )
 
 
-class RenameRule(BaseModel):
-    """Move a property's value to a different name at uplift time.
-
-    For each entity of ``on_type``, the value held at ``source_property`` is moved to
-    ``target_property`` (overwriting any existing value there) and ``source_property``
-    is cleared. Entities with no value at ``source_property`` are left untouched.
-    """
-
-    model_config = ConfigDict(extra="forbid")
-    on_type: str = Field(description="@type of entities to modify.")
-    source_property: str = Field(description="Property to read and clear.")
-    target_property: str = Field(description="Property to move the value to.")
-
-
 class GenericUpliftConfig(BaseModel):
     """Source-independent uplift config, driven entirely by declarative rules."""
 
@@ -72,7 +58,6 @@ class GenericUpliftConfig(BaseModel):
     provenance_dir: Path
     enrichments: list[EnrichmentRule] = Field(default_factory=list)
     additions: list[AdditionRule] = Field(default_factory=list)
-    renames: list[RenameRule] = Field(default_factory=list)
     atomize: bool = Field(
         default=True,
         description="Extract every blank node reachable from any entity into its own "
@@ -87,8 +72,7 @@ class GenericUpliftConfig(BaseModel):
         Each ``(on_type, target_property)`` may be touched by at most one rule across
         ``enrichments`` and ``additions`` combined. The pair is the contract for
         what gets written; overlap would mean the last rule silently overwrites the
-        others. ``renames`` are exempt — they legitimately repoint what another rule
-        (or load) produced.
+        others.
         """
         seen: dict[tuple[str, str], str] = {}
         rules_by_kind = (

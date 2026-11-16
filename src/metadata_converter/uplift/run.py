@@ -12,7 +12,6 @@ from metadata_converter.uplift.config import GenericUpliftConfig, UpliftMergeCon
 from metadata_converter.uplift.enrichment import EnrichmentApplier
 from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.uplift.merge import merge_entities_by_identifier
-from metadata_converter.uplift.rename import RenameApplier
 from metadata_converter.utils.provenance_writer import write_provenance_file
 
 logger = logging.getLogger(__name__)
@@ -27,11 +26,10 @@ def run_uplift(config: GenericUpliftConfig) -> None:
        group entities by ``@type`` into an ``EntityStore``.
     2. **Enrich** — apply every ``EnrichmentRule`` in ``config.enrichments``.
     3. **Add** — apply every ``AdditionRule`` in ``config.additions``.
-    4. **Rename** — apply every ``RenameRule`` in ``config.renames``.
-    5. **Atomize** — if ``config.atomize``, extract every blank node into its own
+    4. **Atomize** — if ``config.atomize``, extract every blank node into its own
        standalone entity (must run last among the transforms above: it reads each
        entity's full nested content, which the earlier stages may have changed).
-    6. **Write** — export every entity to ``config.output_dir``.
+    5. **Write** — export every entity to ``config.output_dir``.
 
     Provenance is written for every entity in the output. An entity present before
     atomize is based on the loaded entity of the same ``@id``. An atomized entity has no
@@ -44,7 +42,6 @@ def run_uplift(config: GenericUpliftConfig) -> None:
     store = EntityStore.load(config.input_dir)
     EnrichmentApplier(store).apply_all(config.enrichments)
     AddApplier(store).apply_all(config.additions)
-    RenameApplier(store).apply_all(config.renames)
     provenance_ids = [entity.id for entity in store.all_entities()]
     atom_origins: dict[str, list[str]] = {}
     if config.atomize:
