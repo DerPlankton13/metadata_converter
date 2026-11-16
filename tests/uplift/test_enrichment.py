@@ -5,9 +5,16 @@ subclass (Orcid, DOI, …). The class's Pydantic validators auto-populate the
 metadata fields (url, name, propertyID, etc.).
 """
 
+import logging
+
 import pytest
 
-from metadata_converter.uplift.config import EnrichmentRule, GenericUpliftConfig
+from metadata_converter.uplift.config import (
+    AdditionRule,
+    Condition,
+    EnrichmentRule,
+    GenericUpliftConfig,
+)
 from metadata_converter.uplift.enrichment import EnrichmentApplier
 from metadata_converter.uplift.entity_store import EntityStore
 from metadata_converter.schema_org_models.custom_models import DOI, Orcid
@@ -212,5 +219,149 @@ def test_two_enrichments_on_same_target_raise_at_config_load(tmp_path):
                 EnrichmentRule(
                     on_type="Person", target_property="identifier", enrich_as="DOI"
                 ),
+            ],
+        )
+
+
+# ---------------------------------------------------------------------------
+# Conditional enrichment
+# ---------------------------------------------------------------------------
+
+DOI_CONDITION = Condition(if_property="propertyID", equals="DOI")
+
+
+def doi_rule(condition=DOI_CONDITION):
+    return EnrichmentRule(
+        on_type="Dataset",
+        target_property="identifier",
+        enrich_as="DOI",
+        condition=condition,
+    )
+
+
+def test_conditional_enrichment_wraps_only_values_meeting_the_condition(caplog):
+    caplog.set_level(logging.DEBUG)
+    labelled_doi = PropertyValue(value="10.1234/abc.def", propertyID="DOI")
+    labelled_uri = PropertyValue(value="10.1234/xyz", propertyID="URI")
+    store = EntityStore()
+    store.by_type["Dataset"] = [
+        Dataset(id="Dataset_a.jsonld", identifier=labelled_doi),
+        Dataset(id="Dataset_b.jsonld", identifier=labelled_uri),
+    ]
+
+    EnrichmentApplier(store).apply(doi_rule())
+
+    a, b = store.of_type("Dataset")
+    assert isinstance(a.identifier, DOI)
+    assert b.identifier is labelled_uri
+    assert "Dataset_b.jsonld has propertyID='URI', condition needs 'DOI'" in caplog.text
+    assert "wrapped 1 (skipped 0 with no value, 0 already wrapped, 1 not meeting" in (
+        caplog.text
+    )
+
+
+def test_conditional_enrichment_never_matches_a_plain_string():
+    store = EntityStore()
+    store.by_type["Person"] = [
+        Person(id="Person_alice.jsonld", identifier=VALID_ORCID_A)
+    ]
+
+    EnrichmentApplier(store).apply(
+        EnrichmentRule(
+            on_type="Person",
+            target_property="identifier",
+            enrich_as="Orcid",
+            condition=Condition(if_property="propertyID", equals="ORCID"),
+        )
+    )
+
+    [person] = store.of_type("Person")
+    assert person.identifier == VALID_ORCID_A
+
+
+def test_conditional_rules_on_one_property_each_wrap_their_own_values():
+    doi = PropertyValue(value="10.1234/abc.def", propertyID="DOI")
+    issn = PropertyValue(value="1234-5678", propertyID="ISSN")
+    store = EntityStore()
+    store.by_type["Dataset"] = [
+        Dataset(id="Dataset_a.jsonld", identifier=doi),
+        Dataset(id="Dataset_b.jsonld", identifier=issn),
+    ]
+
+    EnrichmentApplier(store).apply_all(
+        [
+            doi_rule(),
+            EnrichmentRule(
+                on_type="Dataset",
+                target_property="identifier",
+                enrich_as="ISSN",
+                condition=Condition(if_property="propertyID", equals="ISSN"),
+            ),
+        ]
+    )
+
+    a, b = store.of_type("Dataset")
+    assert a.identifier.alternateName == "DOI"
+    assert b.identifier.alternateName == "ISSN"
+
+
+def test_condition_requires_both_keys_and_rejects_unknown_ones():
+    with pytest.raises(ValueError, match="equals"):
+        Condition(if_property="propertyID")
+    with pytest.raises(ValueError, match="extra"):
+        Condition(if_property="propertyID", equals="DOI", value="DOI")
+
+
+# ---------------------------------------------------------------------------
+# Overlap validator with conditions
+# ---------------------------------------------------------------------------
+
+
+def make_config(tmp_path, enrichments=(), additions=()):
+    return GenericUpliftConfig(
+        input_dir=tmp_path / "in",
+        output_dir=tmp_path / "out",
+        provenance_dir=tmp_path / "provenance",
+        enrichments=list(enrichments),
+        additions=list(additions),
+    )
+
+
+def test_conditions_on_same_property_with_different_values_are_allowed(tmp_path):
+    make_config(
+        tmp_path,
+        enrichments=[
+            doi_rule(),
+            doi_rule(Condition(if_property="propertyID", equals="ISSN")),
+        ],
+    )
+
+
+@pytest.mark.parametrize(
+    "other",
+    [
+        pytest.param(doi_rule(), id="identical-condition"),
+        pytest.param(doi_rule(None), id="unconditional-enrichment"),
+        pytest.param(
+            doi_rule(Condition(if_property="url", equals="x")),
+            id="condition-on-different-property",
+        ),
+    ],
+)
+def test_conditional_rule_overlapping_another_raises(tmp_path, other):
+    for rules in ([doi_rule(), other], [other, doi_rule()]):
+        with pytest.raises(ValueError, match="targeted by multiple uplift rules"):
+            make_config(tmp_path, enrichments=rules)
+
+
+def test_conditional_enrichment_and_addition_on_same_target_raise(tmp_path):
+    with pytest.raises(ValueError, match="targeted by multiple uplift rules"):
+        make_config(
+            tmp_path,
+            enrichments=[doi_rule()],
+            additions=[
+                AdditionRule(
+                    on_type="Dataset", target_property="identifier", value="fixed"
+                )
             ],
         )
