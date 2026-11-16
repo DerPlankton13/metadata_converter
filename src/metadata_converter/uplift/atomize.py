@@ -160,9 +160,9 @@ def _atomize_node(
         update={"id": node_id, "context": dict(SCHEMA_ORG_DEFAULT_CONTEXT)}
     )
     atomized.setdefault(node_id, resolved)
-    # we need to build from the defined type, as enriched classes such as an ORCID
-    # would otherwise add defaults, as opposed to the previous type(resolved)
-    return get_schema(node.type)(id=node_id)
+    # we construct a stub model from the defined type, as custom class would fail with
+    # their validation or add undesired defaults.
+    return get_schema(node.type).model_construct(id=node_id)
 
 
 class AtomizeApplier:

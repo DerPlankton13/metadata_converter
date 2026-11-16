@@ -31,6 +31,16 @@ def search_pattern(value: str, pattern: re.Pattern[str], type: str) -> str:
     return match.group(0)
 
 
+def pin_class_fields(cls: type[PropertyValue], data: dict) -> None:
+    """Overwrite ``name``, ``alternateName`` and ``propertyID`` with the class defaults.
+
+    A submitted label such as ``propertyID="DOI"`` would otherwise beat the default or
+    fail URL validation.
+    """
+    for field in ("name", "alternateName", "propertyID"):
+        data[field] = cls.model_fields[field].default
+
+
 class Orcid(PropertyValue):
     name: str = "Open Researcher and Contributor ID"
     alternateName: str = "ORCID"
@@ -39,18 +49,14 @@ class Orcid(PropertyValue):
     @model_validator(mode="before")
     @classmethod
     def clean_id(cls, data):
-        if "value" in data:
-            raw = str(data["value"]).strip()
-
-            match = ORCID_EXTRACT_PATTERN.search(raw)
-            if not match:
-                raise ValueError(f"Invalid ORCID input: {raw}")
-
-            orcid_id = match.group(1)
-
-            data["value"] = orcid_id
-            data["url"] = f"https://orcid.org/{orcid_id}"
-
+        raw = str(data.get("value")).strip()
+        match = ORCID_EXTRACT_PATTERN.search(raw)
+        if not match:
+            raise ValueError(f"Invalid ORCID input: {raw}")
+        orcid_id = match.group(1)
+        pin_class_fields(cls, data)
+        data["value"] = orcid_id
+        data["url"] = f"https://orcid.org/{orcid_id}"
         return data
 
 
@@ -62,9 +68,9 @@ class ISSN(PropertyValue):
     @model_validator(mode="before")
     @classmethod
     def clean_issn(cls, data):
-        if "value" in data:
-            issn = check_pattern(str(data["value"]), ISSN_PATTERN, "ISSN")
-            data["url"] = f"https://portal.issn.org/resource/ISSN/{issn}"
+        issn = check_pattern(str(data.get("value")), ISSN_PATTERN, "ISSN")
+        pin_class_fields(cls, data)
+        data["url"] = f"https://portal.issn.org/resource/ISSN/{issn}"
         return data
 
 
@@ -76,9 +82,9 @@ class ISBN(PropertyValue):
     @model_validator(mode="before")
     @classmethod
     def clean_isbn(cls, data):
-        if "value" in data:
-            isbn = check_pattern(str(data["value"]), ISBN_PATTERN, "ISBN")
-            data["url"] = f"https://isbnsearch.org/isbn/{isbn}"
+        isbn = check_pattern(str(data.get("value")), ISBN_PATTERN, "ISBN")
+        pin_class_fields(cls, data)
+        data["url"] = f"https://isbnsearch.org/isbn/{isbn}"
         return data
 
 
@@ -90,10 +96,12 @@ class DOI(PropertyValue):
     @model_validator(mode="before")
     @classmethod
     def clean_doi(cls, data):
-        if "value" in data:
-            doi = search_pattern(str(data["value"]), DOI_PATTERN, "DOI")
-            data["value"] = doi
-            data["url"] = f"https://doi.org/{doi}"
+        # a submitter may give only the DOI link, so the url is the fallback source
+        raw = data.get("value") or data.get("url")
+        doi = search_pattern(str(raw), DOI_PATTERN, "DOI")
+        pin_class_fields(cls, data)
+        data["value"] = doi
+        data["url"] = f"https://doi.org/{doi}"
         return data
 
 
